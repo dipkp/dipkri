@@ -2585,7 +2585,7 @@ export class App extends React.Component<AppProps, AppState> {
                           type="button"
                           className={`${styles.sourceCardBtn} ${styles.sourceCardFile}`}
                           disabled={!this.haveLock()}
-                          onClick={() => this.startFileShare(false, { convert: isClientTranscodeSupported() })}
+                          onClick={() => this.setState({ isFileShareModalOpen: true })}
                           title="Share local video or audio file"
                         >
                           <div className={styles.sourceCardIcon}>
@@ -2860,7 +2860,7 @@ export class App extends React.Component<AppProps, AppState> {
                             className={styles.shareButton}
                             color="violet"
                             disabled={!this.haveLock()}
-                            onClick={() => this.startFileShare(false, { convert: isClientTranscodeSupported() })}
+                            onClick={() => this.setState({ isFileShareModalOpen: true })}
                             leftSection={<WPIconFile size={18} />}
                           >
                             File

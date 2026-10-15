@@ -62,8 +62,13 @@ export const FileShareModal = (props: {
         </div>
 
         <div style={{ textAlign: "center", padding: "8px 0" }}>
-          <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: "1.6", margin: "0 0 20px 0" }}>
+          <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: "1.6", margin: "0 0 8px 0" }}>
             Select any video or audio file on your device to stream synchronously with everyone in the room.
+          </p>
+          <p style={{ color: "#64748b", fontSize: "12px", lineHeight: "1.5", margin: "0 0 20px 0" }}>
+            <strong style={{ color: "#a5b4fc" }}>Direct play:</strong> MP4 (H.264), WebM, OGG, MP3, WAV
+            <br />
+            <strong style={{ color: "#c084fc" }}>Needs Transcode ON:</strong> MKV, AVI, MOV, HEVC/H.265, AC-3 audio
           </p>
           <Button
             size="md"
