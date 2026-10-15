@@ -48,6 +48,7 @@ interface ChatMessage extends ChatMessageBase {
 
 interface Settings {
   disableChatSound?: boolean;
+  webcamBubbleSize?: "small" | "medium" | "large";
 }
 
 interface PlaylistVideo {

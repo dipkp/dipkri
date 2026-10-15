@@ -32,6 +32,7 @@ import { Chat } from "../Chat/Chat";
 import { TopBar } from "../TopBar/TopBar";
 import { VBrowser } from "../VBrowser/VBrowser";
 import { VideoChat } from "../VideoChat/VideoChat";
+import { FloatingWebcamBubbles } from "../VideoChat/FloatingWebcamBubbles";
 import { getCurrentSettings } from "../Settings/LocalSettings";
 import { MultiStreamModal } from "../Modal/MultiStreamModal";
 import { ComboBox } from "../ComboBox/ComboBox";
@@ -289,6 +290,7 @@ export class App extends React.Component<AppProps, AppState> {
     incomingReaction: null,
   };
   socket: Socket = null!;
+  videoChatRef = React.createRef<VideoChat>();
   mediasoupPubSocket: Socket | null = null;
   mediasoupSubSocket: Socket | null = null;
   ytDebounce = true;
@@ -2371,6 +2373,20 @@ export class App extends React.Component<AppProps, AppState> {
             }}
           />
         )}
+        {this.state.state === "connected" && (
+          <FloatingWebcamBubbles
+            participants={this.state.participants}
+            nameMap={this.state.nameMap}
+            pictureMap={this.state.pictureMap}
+            socket={this.socket}
+            onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+            onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+            onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+            onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+            isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+            isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+          />
+        )}
         {this.state.roomMedia && controls}
       </div>
     );
@@ -3086,6 +3102,7 @@ export class App extends React.Component<AppProps, AppState> {
                   }}
                 >
                   <VideoChat
+                    ref={this.videoChatRef}
                     socket={this.socket}
                     participants={this.state.participants}
                     nameMap={this.state.nameMap}

@@ -10,6 +10,7 @@ import {
   Switch,
   Loader,
   Divider,
+  SegmentedControl,
 } from "@mantine/core";
 import { getCurrentSettings, updateSettings } from "./LocalSettings";
 import { serverPath } from "../../utils/utils";
@@ -207,6 +208,44 @@ export const SettingsModal = ({
               );
               setUpdateTS(Date.now());
             }}
+          />
+
+          <SettingRow
+            disabled={false}
+            content={
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", padding: "4px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
+                      Webcam Bubble Size
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                      Adjust the size of the floating circular video bubbles over the player.
+                    </div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getCurrentSettings().webcamBubbleSize || localStorage.getItem("dipkri-webcam-size") || "medium"}
+                    onChange={(val) => {
+                      const newSize = val as "small" | "medium" | "large";
+                      localStorage.setItem("dipkri-webcam-size", newSize);
+                      updateSettings(
+                        JSON.stringify({
+                          ...getCurrentSettings(),
+                          webcamBubbleSize: newSize,
+                        }),
+                      );
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "Small (60px)", value: "small" },
+                      { label: "Medium (90px)", value: "medium" },
+                      { label: "Large (130px)", value: "large" },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
           />
 
           <Divider my="md" />
