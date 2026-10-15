@@ -199,8 +199,25 @@ interface AppState {
 const checkIsMobileDevice = () => {
   if (typeof window === "undefined") return false;
   try {
-    const isLandscapePhone = window.matchMedia("(max-width: 950px) and (max-height: 520px)").matches;
-    return window.innerWidth <= 768 || isLandscapePhone || isMobile();
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("view") === "mobile") return true;
+    if (urlParams.get("view") === "desktop") return false;
+
+    const isMobileUA =
+      typeof navigator !== "undefined" &&
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+        navigator.userAgent,
+      );
+    const isLandscapePhone = window.matchMedia(
+      "(max-width: 950px) and (max-height: 520px)",
+    ).matches;
+    return (
+      window.innerWidth <= 768 ||
+      (typeof window.screen !== "undefined" && window.screen.width <= 768) ||
+      isLandscapePhone ||
+      isMobile() ||
+      Boolean(isMobileUA)
+    );
   } catch {
     return window.innerWidth <= 768 || isMobile();
   }
@@ -317,6 +334,7 @@ export class App extends React.Component<AppProps, AppState> {
     document.onfullscreenchange = this.onFullScreenChange;
     document.onkeydown = this.onKeydown;
     window.addEventListener("resize", this.handleResize);
+    window.addEventListener("orientationchange", this.handleResize);
 
     // Send heartbeat to the server
     this.heartbeat = window.setInterval(
@@ -344,6 +362,7 @@ export class App extends React.Component<AppProps, AppState> {
     document.removeEventListener("fullscreenchange", this.onFullScreenChange);
     document.removeEventListener("keydown", this.onKeydown);
     window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("orientationchange", this.handleResize);
     window.clearInterval(this.heartbeat);
   }
 

@@ -176,7 +176,19 @@ export const getDefaultPicture = (name: string, background = "a0a0a0") => {
 };
 
 export const isMobile = () => {
-  return window.screen.width <= 600;
+  if (typeof window === "undefined") return false;
+  const isMobileUA =
+    typeof navigator !== "undefined" &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+      navigator.userAgent,
+    );
+  const isSmallScreen =
+    window.innerWidth <= 768 ||
+    (typeof window.screen !== "undefined" && window.screen.width <= 768);
+  const isLandscapePhone =
+    typeof window.matchMedia !== "undefined" &&
+    window.matchMedia("(max-width: 950px) and (max-height: 520px)").matches;
+  return isSmallScreen || isLandscapePhone || Boolean(isMobileUA);
 };
 
 export function shuffle(array: any[]) {
