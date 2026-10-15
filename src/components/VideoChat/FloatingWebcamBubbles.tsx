@@ -132,6 +132,16 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     () => getWebcamSettings().visible,
   );
 
+  // Local track state for instant UI responsiveness
+  const [selfAudioMuted, setSelfAudioMuted] = useState(Boolean(isAudioMuted));
+  const [selfVideoMuted, setSelfVideoMuted] = useState(Boolean(isVideoMuted));
+
+  // State: Show self quick controls (activated by tap, long-press, or desktop hover)
+  const [showSelfControls, setShowSelfControls] = useState(false);
+  const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
+
   // Pinned user state (single friend pin)
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
 
@@ -143,7 +153,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
         return JSON.parse(saved);
       }
     } catch {}
-    return { x: 20, y: 70 };
+    return { x: 16, y: 70 };
   });
 
   const isDraggingRef = useRef(false);
@@ -159,7 +169,20 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     startY: 0,
   });
 
-  // Listen for real-time setting updates dispatched from SettingsModal or Controls
+  // Sync track state if props change
+  useEffect(() => {
+    if (typeof isAudioMuted === "boolean") {
+      setSelfAudioMuted(isAudioMuted);
+    }
+  }, [isAudioMuted]);
+
+  useEffect(() => {
+    if (typeof isVideoMuted === "boolean") {
+      setSelfVideoMuted(isVideoMuted);
+    }
+  }, [isVideoMuted]);
+
+  // Listen for real-time setting updates
   useEffect(() => {
     const handleSettingsChange = (e: any) => {
       if (e?.detail) {
@@ -194,9 +217,8 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
 
   // Filter video chat users
   const videoUsers = participants.filter((p) => p.isVideoChat);
-  const isSelfInVideo = Boolean(videoUsers.find((p) => p.id === selfId));
 
-  // Drag handlers
+  // Drag handlers with full viewport bounds
   const handleDragStart = (clientX: number, clientY: number) => {
     if (!isDragUnlocked) return;
     isDraggingRef.current = true;
@@ -213,8 +235,12 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     const deltaX = clientX - dragStartRef.current.mouseX;
     const deltaY = clientY - dragStartRef.current.mouseY;
 
-    const newX = Math.max(10, dragStartRef.current.startX - deltaX);
-    const newY = Math.max(10, dragStartRef.current.startY + deltaY);
+    // Constrain within screen bounds so bubbles float anywhere
+    const maxRight = typeof window !== "undefined" ? window.innerWidth - 65 : 400;
+    const maxTop = typeof window !== "undefined" ? window.innerHeight - 85 : 800;
+
+    const newX = Math.max(8, Math.min(maxRight, dragStartRef.current.startX - deltaX));
+    const newY = Math.max(8, Math.min(maxTop, dragStartRef.current.startY + deltaY));
 
     setPosition({ x: newX, y: newY });
   }, []);
@@ -255,6 +281,87 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   const handleLockPosition = () => {
     setIsDragUnlocked(false);
     setWebcamSettings({ dragUnlocked: false });
+  };
+
+  // Direct WebRTC Track Operations (Guaranteed to work regardless of component mount status)
+  const handleToggleAudio = () => {
+    const ourStream = window.watchparty?.ourStream;
+    let newMuted = !selfAudioMuted;
+    if (ourStream && ourStream.getAudioTracks()[0]) {
+      const track = ourStream.getAudioTracks()[0];
+      track.enabled = !track.enabled;
+      newMuted = !track.enabled;
+    }
+    setSelfAudioMuted(newMuted);
+    socket?.emit("CMD:userMute", { isMuted: newMuted });
+
+    if (onToggleAudio) {
+      try {
+        onToggleAudio();
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+  };
+
+  const handleToggleVideo = () => {
+    const ourStream = window.watchparty?.ourStream;
+    let newMuted = !selfVideoMuted;
+    if (ourStream && ourStream.getVideoTracks()[0]) {
+      const track = ourStream.getVideoTracks()[0];
+      track.enabled = !track.enabled;
+      newMuted = !track.enabled;
+    }
+    setSelfVideoMuted(newMuted);
+
+    if (onToggleVideo) {
+      try {
+        onToggleVideo();
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+  };
+
+  const handleLeaveVideo = () => {
+    const ourStream = window.watchparty?.ourStream;
+    const videoPCs = window.watchparty?.videoPCs;
+    if (ourStream) {
+      ourStream.getTracks().forEach((track) => track.stop());
+      window.watchparty.ourStream = undefined;
+    }
+    if (videoPCs) {
+      Object.keys(videoPCs).forEach((k) => {
+        try {
+          videoPCs[k].close();
+        } catch {}
+        delete videoPCs[k];
+      });
+    }
+    socket?.emit("CMD:leaveVideo");
+
+    if (onLeaveVideo) {
+      try {
+        onLeaveVideo();
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    setShowSelfControls(false);
+  };
+
+  // Helper to open self controls and auto-hide after 5s of inactivity
+  const triggerSelfControls = () => {
+    setShowSelfControls((prev) => {
+      const next = !prev;
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+      if (next) {
+        controlsTimerRef.current = setTimeout(() => {
+          setShowSelfControls(false);
+        }, 5000);
+      }
+      return next;
+    });
   };
 
   // If user disabled floating bubbles in settings or no one is in video chat
@@ -313,7 +420,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
           <div className={styles.dragHandleIcon}>
             <IconArrowsMove size={13} />
           </div>
-          <span>Drag to Move</span>
+          <span>Drag Anywhere</span>
           <button
             type="button"
             className={styles.lockBtn}
@@ -347,7 +454,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
           const avatar =
             pictureMap[user.id] ||
             getDefaultPicture(displayName, getColorForStringHex(user.id));
-          const isMuted = user.isMuted;
+          const isMuted = isSelf ? selfAudioMuted : user.isMuted;
           const bubbleWidth = isPinned ? diameter * 1.25 : diameter;
 
           return (
@@ -359,12 +466,32 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                 height: `${bubbleWidth}px`,
               }}
               onClick={() => {
-                // If dragging is unlocked, avoid accidental pin toggle on drag
                 if (isDragUnlocked) return;
-                // Pin / unpin on click
-                setPinnedUserId(isPinned ? null : user.id);
+                if (isSelf) {
+                  triggerSelfControls();
+                } else {
+                  setPinnedUserId(isPinned ? null : user.id);
+                }
               }}
-              title={`${displayName}${isPinned ? " (Pinned)" : " - Click to pin"}`}
+              onTouchStart={() => {
+                if (isSelf) {
+                  isLongPressRef.current = false;
+                  longPressTimerRef.current = setTimeout(() => {
+                    isLongPressRef.current = true;
+                    triggerSelfControls();
+                  }, 300);
+                }
+              }}
+              onTouchEnd={() => {
+                if (longPressTimerRef.current) {
+                  clearTimeout(longPressTimerRef.current);
+                }
+              }}
+              title={
+                isSelf
+                  ? "You (Tap or hold for Mic/Video/Leave options)"
+                  : `${displayName}${isPinned ? " (Pinned)" : " - Click to pin"}`
+              }
             >
               <div
                 className={`${styles.videoCircle} ${
@@ -402,51 +529,79 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                 {displayName} {isPinned ? "(Pinned)" : ""}
               </div>
 
-              {/* In-Bubble Quick Controls for Self - Only visible on hover */}
+              {/* In-Bubble Quick Controls for Self (Working on Click, Tap, & Long-Press) */}
               {isSelf && (
                 <div
-                  className={styles.selfOverlay}
+                  className={`${styles.selfOverlay} ${
+                    showSelfControls ? styles.selfOverlayActive : ""
+                  }`}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {onToggleAudio && (
-                    <button
-                      type="button"
-                      className={styles.quickActionBtn}
-                      onClick={onToggleAudio}
-                      title={isAudioMuted ? "Unmute Mic" : "Mute Mic"}
-                    >
-                      {isAudioMuted ? (
-                        <IconMicrophoneOff size={12} />
-                      ) : (
-                        <IconMicrophone size={12} />
-                      )}
-                    </button>
-                  )}
-                  {onToggleVideo && (
-                    <button
-                      type="button"
-                      className={styles.quickActionBtn}
-                      onClick={onToggleVideo}
-                      title={isVideoMuted ? "Start Camera" : "Stop Camera"}
-                    >
-                      {isVideoMuted ? (
-                        <IconVideoOff size={12} />
-                      ) : (
-                        <IconVideo size={12} />
-                      )}
-                    </button>
-                  )}
-                  {onLeaveVideo && (
-                    <button
-                      type="button"
-                      className={styles.quickActionBtn}
-                      onClick={onLeaveVideo}
-                      style={{ background: "rgba(239, 68, 68, 0.9)" }}
-                      title="Leave Video Call"
-                    >
-                      <WPIconClose size={12} />
-                    </button>
-                  )}
+                  {/* 1. Mute / Unmute Mic Button */}
+                  <button
+                    type="button"
+                    className={`${styles.quickActionBtn} ${
+                      selfAudioMuted ? styles.actionMuted : styles.actionActive
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleAudio();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleToggleAudio();
+                    }}
+                    title={selfAudioMuted ? "Unmute Mic" : "Mute Mic"}
+                  >
+                    {selfAudioMuted ? (
+                      <IconMicrophoneOff size={13} />
+                    ) : (
+                      <IconMicrophone size={13} />
+                    )}
+                  </button>
+
+                  {/* 2. Video Camera On / Off Button */}
+                  <button
+                    type="button"
+                    className={`${styles.quickActionBtn} ${
+                      selfVideoMuted ? styles.actionMuted : styles.actionActive
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleVideo();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleToggleVideo();
+                    }}
+                    title={selfVideoMuted ? "Start Camera" : "Stop Camera"}
+                  >
+                    {selfVideoMuted ? (
+                      <IconVideoOff size={13} />
+                    ) : (
+                      <IconVideo size={13} />
+                    )}
+                  </button>
+
+                  {/* 3. Leave Video Call Button */}
+                  <button
+                    type="button"
+                    className={`${styles.quickActionBtn} ${styles.actionDanger}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLeaveVideo();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleLeaveVideo();
+                    }}
+                    title="Leave Video Call"
+                  >
+                    <WPIconClose size={13} />
+                  </button>
                 </div>
               )}
             </div>

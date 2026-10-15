@@ -255,192 +255,218 @@ export class VideoChat extends React.Component<VideoChatProps> {
       this.props;
     const ourStream = window.watchparty.ourStream;
     const videoRefs = window.watchparty.videoRefs;
-    const videoChatSize = participants.length > 2 ? 180 : 250;
-    const videoChatContentStyle: React.CSSProperties = {
-      height: videoChatSize,
-      width: videoChatSize,
-      objectFit: "cover",
-      position: "relative",
-    };
     const selfId = getOrCreateClientId();
     return (
       <div
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "center",
-          gap: "4px",
-          padding: "4px",
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: "10px",
+          padding: "8px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         {participants.map((p) => {
+          const isSelf = p.id === selfId;
+          const isUserInVideo = p.isVideoChat;
           return (
-            <div key={p.id}>
+            <div
+              key={p.id}
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "1 / 1",
+                borderRadius: "14px",
+                overflow: "hidden",
+                background: "#090a0f",
+                border: isSelf
+                  ? "2px solid rgba(99, 102, 241, 0.45)"
+                  : "1px solid rgba(255, 255, 255, 0.1)",
+                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+              }}
+            >
+              {/* Top-Right User Admin Menu */}
+              <UserMenu
+                displayName={nameMap[p.id] || p.id}
+                disabled={!Boolean(owner && owner === this.context.user?.uid)}
+                socket={socket}
+                userToManage={p.id}
+                trigger={
+                  <IconDotsVertical
+                    style={{
+                      position: "absolute",
+                      right: 6,
+                      top: 6,
+                      cursor: "pointer",
+                      zIndex: 3,
+                      color: softWhite,
+                      visibility: Boolean(
+                        owner && owner === this.context.user?.uid,
+                      )
+                        ? "visible"
+                        : "hidden",
+                    }}
+                  />
+                }
+              />
+
+              {/* Action Buttons / Track Status Badges */}
               <div
                 style={{
-                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  zIndex: 3,
                 }}
               >
-                <div>
-                  <UserMenu
-                    displayName={nameMap[p.id] || p.id}
-                    disabled={
-                      !Boolean(owner && owner === this.context.user?.uid)
-                    }
-                    socket={socket}
-                    userToManage={p.id}
-                    trigger={
-                      <IconDotsVertical
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          top: 0,
-                          cursor: "pointer",
-                          zIndex: 1,
-                          visibility: Boolean(
-                            owner && owner === this.context.user?.uid,
-                          )
-                            ? "visible"
-                            : "hidden",
-                        }}
-                      />
-                    }
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      gap: "4px",
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      zIndex: 1,
-                    }}
+                {!ourStream && isSelf && (
+                  <Button
+                    size="compact-xs"
+                    color="indigo"
+                    radius="xl"
+                    onClick={this.setupWebRTC}
+                    leftSection={<IconVideo size={13} />}
                   >
-                    {!ourStream && p.id === selfId && (
-                      <Button
-                        size="xs"
-                        color={"purple"}
-                        onClick={this.setupWebRTC}
-                        leftSection={<IconVideo />}
-                      >
-                        Join
-                      </Button>
-                    )}
-                    {ourStream && p.id === selfId && (
-                      <Button
-                        size="xs"
-                        color={"red"}
-                        onClick={this.stopWebRTC}
-                        leftSection={<IconX />}
-                      >
-                        Leave
-                      </Button>
-                    )}
-                    {ourStream && p.id === selfId && (
-                      <>
-                        <ActionIcon
-                          color={this.getVideoWebRTC() ? "green" : "red"}
-                          onClick={this.toggleVideoWebRTC}
-                        >
-                          <IconVideo />
-                        </ActionIcon>
-                        <ActionIcon
-                          color={this.getAudioWebRTC() ? "green" : "red"}
-                          onClick={this.toggleAudioWebRTC}
-                        >
-                          <IconMicrophone />
-                        </ActionIcon>
-                      </>
-                    )}
-                    {p.id !== selfId && (
-                      <>
-                        {p.isVideoChat && <IconVideo color={softWhite} />}
-                        {p.isVideoChat && (
-                          <IconMicrophone
-                            color={p.isMuted ? "red" : softWhite}
-                          />
-                        )}
-                      </>
-                    )}
-                    {p.isScreenShare && <IconScreenShare color={softWhite} />}
-                  </div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: "4px",
-                      left: "0px",
-                      width: "100%",
-                      backgroundColor: "rgba(0,0,0,0)",
-                      color: softWhite,
-                      borderRadius: "4px",
-                      fontSize: "10px",
-                      fontWeight: 700,
-                      display: "flex",
-                      zIndex: 1,
-                    }}
+                    Join
+                  </Button>
+                )}
+                {ourStream && isSelf && (
+                  <Button
+                    size="compact-xs"
+                    color="red"
+                    radius="xl"
+                    onClick={this.stopWebRTC}
+                    leftSection={<IconX size={13} />}
                   >
-                    <div
-                      title={nameMap[p.id] || p.id}
-                      style={{
-                        backdropFilter: "brightness(80%)",
-                        padding: "4px",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        display: "inline-block",
-                      }}
-                    >
-                      {nameMap[p.id] || p.id}
-                    </div>
-                    <div
-                      style={{
-                        backdropFilter: "brightness(60%)",
-                        padding: "4px",
-                        flexGrow: 1,
-                        display: "flex",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {formatTimestamp(tsMap[p.id] || 0)}{" "}
-                      {/* {this.context.beta &&
-                          `(${(
-                            (tsMap[p.id] - this.props.getLeaderTime()) *
-                            1000
-                          ).toFixed(0)}ms)`} */}
-                    </div>
-                  </div>
-                  {ourStream && p.isVideoChat ? (
-                    <video
-                      ref={(el) => {
-                        if (el) {
-                          videoRefs[p.id] = el;
-                        }
-                      }}
-                      style={{
-                        ...videoChatContentStyle,
-                        // mirror the video if it's our stream. this style mimics Zoom where your
-                        // video is mirrored only for you)
-                        transform: `scaleX(${p.id === selfId ? "-1" : "1"})`,
-                      }}
-                      autoPlay
-                      muted={p.id === selfId}
-                      data-id={p.id}
-                    />
-                  ) : (
-                    <img
-                      style={videoChatContentStyle}
-                      src={
-                        pictureMap[p.id] ||
-                        getDefaultPicture(
-                          nameMap[p.id],
-                          getColorForStringHex(p.id),
-                        )
+                    Leave
+                  </Button>
+                )}
+                {ourStream && isSelf && (
+                  <>
+                    <ActionIcon
+                      size="sm"
+                      radius="xl"
+                      color={this.getVideoWebRTC() ? "green" : "red"}
+                      variant="filled"
+                      onClick={this.toggleVideoWebRTC}
+                      title={
+                        this.getVideoWebRTC()
+                          ? "Turn Video Off"
+                          : "Turn Video On"
                       }
-                    />
-                  )}
+                    >
+                      <IconVideo size={13} />
+                    </ActionIcon>
+                    <ActionIcon
+                      size="sm"
+                      radius="xl"
+                      color={this.getAudioWebRTC() ? "green" : "red"}
+                      variant="filled"
+                      onClick={this.toggleAudioWebRTC}
+                      title={this.getAudioWebRTC() ? "Mute Mic" : "Unmute Mic"}
+                    >
+                      <IconMicrophone size={13} />
+                    </ActionIcon>
+                  </>
+                )}
+                {!isSelf && (
+                  <>
+                    {isUserInVideo && <IconVideo size={15} color={softWhite} />}
+                    {isUserInVideo && (
+                      <IconMicrophone
+                        size={15}
+                        color={p.isMuted ? "#ef4444" : "#10b981"}
+                      />
+                    )}
+                  </>
+                )}
+                {p.isScreenShare && (
+                  <IconScreenShare size={15} color="#06b6d4" />
+                )}
+              </div>
+
+              {/* Bottom Name & Timestamp Overlay */}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  width: "100%",
+                  background:
+                    "linear-gradient(to top, rgba(9, 10, 15, 0.95), transparent)",
+                  padding: "16px 8px 6px",
+                  color: softWhite,
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  zIndex: 2,
+                }}
+              >
+                <div
+                  title={nameMap[p.id] || p.id}
+                  style={{
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    maxWidth: "70%",
+                  }}
+                >
+                  {nameMap[p.id] || p.id} {isSelf ? "(You)" : ""}
+                </div>
+                <div
+                  style={{
+                    color: "rgba(255, 255, 255, 0.6)",
+                    fontSize: "10px",
+                  }}
+                >
+                  {formatTimestamp(tsMap[p.id] || 0)}
                 </div>
               </div>
+
+              {/* Live Video Element or Avatar Picture */}
+              {ourStream && isUserInVideo ? (
+                <video
+                  ref={(el) => {
+                    if (el) {
+                      videoRefs[p.id] = el;
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                    transform: isSelf ? "scaleX(-1)" : undefined,
+                  }}
+                  autoPlay
+                  playsInline
+                  muted={isSelf}
+                  data-id={p.id}
+                />
+              ) : (
+                <img
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                  src={
+                    pictureMap[p.id] ||
+                    getDefaultPicture(
+                      nameMap[p.id],
+                      getColorForStringHex(p.id),
+                    )
+                  }
+                  alt={nameMap[p.id] || "User"}
+                />
+              )}
             </div>
           );
         })}

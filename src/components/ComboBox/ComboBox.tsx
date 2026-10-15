@@ -43,7 +43,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     const value = this.state.inputMedia;
     this.setState({ loading: true });
     const query: string = value || "";
-    let items = examples;
+    let items: SearchResult[] = [];
     if (
       query === "" ||
       // Anything that doesn't pass this check we pass to YouTube as a search query

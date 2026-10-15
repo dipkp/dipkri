@@ -2373,7 +2373,7 @@ export class App extends React.Component<AppProps, AppState> {
             }}
           />
         )}
-        {this.state.state === "connected" && (
+        {!isMobileLayout && this.state.state === "connected" && (
           <FloatingWebcamBubbles
             participants={this.state.participants}
             nameMap={this.state.nameMap}
@@ -2510,6 +2510,22 @@ export class App extends React.Component<AppProps, AppState> {
                 </span>
               </div>
             </header>
+
+            {/* Floating Webcam Bubbles in Vertical Mode: can float all around the screen! */}
+            {this.state.state === "connected" && (
+              <FloatingWebcamBubbles
+                participants={this.state.participants}
+                nameMap={this.state.nameMap}
+                pictureMap={this.state.pictureMap}
+                socket={this.socket}
+                onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+                onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+                onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+                onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+                isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+                isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+              />
+            )}
 
             {/* Fixed 16:9 Video Player (Top pinned, zero scroll with on-video controls) */}
             <div className={styles.mobileVideoWrapper}>
@@ -2660,51 +2676,55 @@ export class App extends React.Component<AppProps, AppState> {
               )}
 
               {/* TAB 3: PEOPLE & VOICE */}
-              {this.state.currentTab === "people" && (
-                <div className={styles.mobileScrollPanel}>
-                  {/* Card 1: Your Profile */}
+              <div
+                className={styles.mobileScrollPanel}
+                style={{
+                  display: this.state.currentTab === "people" ? "flex" : "none",
+                  flexDirection: "column",
+                }}
+              >
+                {/* Card 1: Your Profile */}
+                <div className={styles.mobileCard}>
+                  <div className={styles.panelSectionTitle}>
+                    <span>Your Nickname</span>
+                  </div>
+                  <TextInput
+                    value={this.state.myName}
+                    onChange={(e) => this.updateName(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+
+                {/* Card 2: Video & Audio Chat */}
+                {this.state.state === "connected" && (
                   <div className={styles.mobileCard}>
                     <div className={styles.panelSectionTitle}>
-                      <span>Your Nickname</span>
+                      <span>
+                        Voice & Webcams ({this.state.participants.length})
+                      </span>
                     </div>
-                    <TextInput
-                      value={this.state.myName}
-                      onChange={(e) => this.updateName(e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      leftSection={<WPIconUser size={16} />}
+                    <VideoChat
+                      ref={this.videoChatRef}
+                      socket={this.socket}
+                      participants={this.state.participants}
+                      nameMap={this.state.nameMap}
+                      pictureMap={this.state.pictureMap}
+                      tsMap={this.state.tsMap}
+                      rosterUpdateTS={this.state.rosterUpdateTS}
+                      owner={this.state.owner}
+                      getLeaderTime={this.getLeaderTime}
                     />
                   </div>
+                )}
 
-                  {/* Card 2: Video & Audio Chat */}
-                  {this.state.state === "connected" && (
-                    <div className={styles.mobileCard}>
-                      <div className={styles.panelSectionTitle}>
-                        <span>
-                          Voice & Webcams ({this.state.participants.length})
-                        </span>
-                      </div>
-                      <VideoChat
-                        socket={this.socket}
-                        participants={this.state.participants}
-                        nameMap={this.state.nameMap}
-                        pictureMap={this.state.pictureMap}
-                        tsMap={this.state.tsMap}
-                        rosterUpdateTS={this.state.rosterUpdateTS}
-                        owner={this.state.owner}
-                        getLeaderTime={this.getLeaderTime}
-                      />
-                    </div>
-                  )}
-
-                  {/* Card 3: Invite & Share Room */}
-                  <div className={styles.mobileCard}>
-                    <div className={styles.panelSectionTitle}>
-                      <span>Invite Friends</span>
-                    </div>
-                    <InviteButton fullWidth label="Share Room Link" />
+                {/* Card 3: Invite & Share Room */}
+                <div className={styles.mobileCard}>
+                  <div className={styles.panelSectionTitle}>
+                    <span>Invite Friends</span>
                   </div>
+                  <InviteButton fullWidth label="Share Room Link" />
                 </div>
-              )}
+              </div>
 
               {/* TAB 4: SETTINGS (INLINE TAB - NO OVERLAY) */}
               {this.state.currentTab === "settings" && (
@@ -3038,7 +3058,6 @@ export class App extends React.Component<AppProps, AppState> {
                     this.updateName(e.target.value);
                   }}
                   onFocus={(e) => e.target.select()}
-                  leftSection={<WPIconUser size={16} />}
                 />
                 <InviteButton />
               </div>
