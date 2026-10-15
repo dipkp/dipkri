@@ -1,8 +1,14 @@
 {
-  "short_name": "dipkri",
-  "name": "dipkri - Real-Time Watch Party",
+  "short_name": "🍿 dipkri",
+  "name": "🍿 dipkri - Real-Time Watch Party",
   "description": "Watch videos, share screens, stream local files, and chat together in real time.",
   "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    },
     {
       "src": "/logo192.png",
       "type": "image/png",

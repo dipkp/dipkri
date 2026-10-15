@@ -1171,45 +1171,37 @@ export const WPIconClipboard = React.forwardRef<SVGSVGElement, WPIconProps>(
 );
 WPIconClipboard.displayName = "WPIconClipboard";
 
-// 57. DipkriLogo - Official Dipkri Brand Mark
+// 57. DipkriLogo - Official Dipkri Popcorn Brand Mark
 export const DipkriLogo = React.forwardRef<
   SVGSVGElement,
   { size?: number | string; className?: string; style?: React.CSSProperties }
->(({ size = 32, className = "", style }, ref) => {
-  const gradId = useId();
+>(({ size = 28, className = "", style }, ref) => {
   return (
     <svg
       ref={ref}
       viewBox="0 0 32 32"
       width={size}
       height={size}
-      fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
-      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }}
+      style={{
+        display: "inline-block",
+        verticalAlign: "middle",
+        overflow: "visible",
+        flexShrink: 0,
+        filter: "drop-shadow(0 2px 8px rgba(245, 158, 11, 0.45))",
+        ...style,
+      }}
     >
-      <defs>
-        <linearGradient id={gradId} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="50%" stopColor="#8b5cf6" />
-          <stop offset="100%" stopColor="#06b6d4" />
-        </linearGradient>
-      </defs>
-      <rect x="3" y="3" width="26" height="26" rx="8" fill="rgba(99, 102, 241, 0.12)" stroke={`url(#${gradId})`} strokeWidth="1.8" />
-      <path
-        d="M11 8v16M11 14a5.5 5.5 0 1 1 0 7.5"
-        stroke={`url(#${gradId})`}
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="16.5" cy="17.7" r="2" fill="#06b6d4" />
-      <path
-        d="M21.5 10.5a6.5 6.5 0 0 1 1.5 4"
-        stroke="#38bdf8"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      <text
+        x="50%"
+        y="50%"
+        dominantBaseline="central"
+        textAnchor="middle"
+        fontSize="24"
+      >
+        🍿
+      </text>
     </svg>
   );
 });
