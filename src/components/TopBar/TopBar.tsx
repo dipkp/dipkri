@@ -319,8 +319,6 @@ export const TopBar = (props: {
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           {!props.hideNewRoom && <JoinRoomButton size="sm" />}
           {!props.hideNewRoom && <NewRoomButton size="sm" />}
-          {!props.hideMyRooms && <ListRoomsButton />}
-          {!props.hideSignin && <SignInButton />}
         </div>
       </div>
     </React.Fragment>

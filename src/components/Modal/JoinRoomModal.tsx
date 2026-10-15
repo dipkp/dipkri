@@ -29,6 +29,11 @@ export const JoinRoomModal = ({
     // Remove any trailing query parameters or slashes
     code = code.split("?")[0].replace(/\/+$/, "");
 
+    // If it's a numeric code with spaces or hyphens (e.g. "748 291" or "748-291"), normalize to digits
+    if (/^\d[\d\s-]+\d$/.test(code)) {
+      code = code.replace(/[\s-]+/g, "");
+    }
+
     if (code) {
       window.location.assign(`/watch/${code}`);
     }
@@ -44,10 +49,10 @@ export const JoinRoomModal = ({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <p style={{ color: "#94a3b8", fontSize: "14px", margin: 0 }}>
-          Enter a room code or link shared by a friend to join their watch party.
+          Enter the 6-digit room code or link shared by a friend to join their watch party.
         </p>
         <TextInput
-          placeholder="e.g. blue-happy-panda or room code"
+          placeholder="e.g. 748291 or room link"
           value={roomCode}
           onChange={(e) => setRoomCode(e.target.value)}
           onKeyDown={(e) => {

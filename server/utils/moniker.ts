@@ -16,18 +16,10 @@ const verbs = fs
 const randomElement = (array: string[]) =>
   array[Math.floor(Math.random() * array.length)];
 
-export function makeRoomName(shard: number | undefined) {
-  let filteredAdjectives = adjectives;
-  if (shard) {
-    // Filter the adjective list by shard
-    filteredAdjectives = adjectives.filter(
-      (adj) => resolveShard(adj) === Number(shard),
-    );
-  }
-  const adjective = randomElement(filteredAdjectives);
-  const noun = randomElement(nouns);
-  const verb = randomElement(verbs);
-  return `${adjective}-${noun}-${verb}`;
+export function makeRoomName(_shard?: number | undefined) {
+  // Generate a clean 6-digit numeric room code (e.g. 748291)
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  return code;
 }
 
 export function makeUserName() {

@@ -37,7 +37,7 @@ export const InviteModal = ({
         {/* Option 1: Private Room Code */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, color: "#94a3b8" }}>
-            Option 1: Share Private Room Code
+            Option 1: Share 6-Digit Room Code
           </div>
           <div
             style={{
@@ -47,16 +47,16 @@ export const InviteModal = ({
               background: "rgba(255, 255, 255, 0.05)",
               border: "1px solid rgba(255, 255, 255, 0.12)",
               borderRadius: "12px",
-              padding: "8px 14px",
+              padding: "10px 16px",
             }}
           >
             <span
               style={{
                 fontFamily: "Space Grotesk, monospace",
-                fontSize: "16px",
+                fontSize: "22px",
                 fontWeight: 700,
                 color: "#67e8f9",
-                letterSpacing: "0.5px",
+                letterSpacing: "3px",
               }}
             >
               {roomCode}
@@ -71,7 +71,7 @@ export const InviteModal = ({
             </Button>
           </div>
           <div style={{ fontSize: "11.5px", color: "#64748b" }}>
-            Friends can enter this code in "Join with Code" on the home page.
+            Friends can enter this 6-digit code in "Join with Code" on the home page.
           </div>
         </div>
 
