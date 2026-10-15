@@ -1,0 +1,218 @@
+:root {
+  --bg-primary: #090a0f;
+  --bg-glass: rgba(255, 255, 255, 0.04);
+  --bg-glass-hover: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.06);
+  --border-glass-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  --accent-glow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 8px 16px;
+  background: rgba(9, 10, 15, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.brandLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.brandLogo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.brandLink:hover .brandLogo {
+  transform: scale(1.05);
+}
+
+.logo {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.roomTitleContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.roomTitle {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+.roomDescription {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.iconGroup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.iconButton {
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.iconButton:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.newRoomButton {
+  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%) !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  border: none !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.35);
+  cursor: pointer;
+}
+
+.newRoomButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.55), 0 0 15px rgba(6, 182, 212, 0.35);
+  filter: brightness(1.05);
+}
+
+.signInButton {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.signInButton:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.myRoomsButton {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.myRoomsButton:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.menuDropdown {
+  background: rgba(15, 17, 26, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+@media only screen and (max-width: 600px) {
+  .topBar {
+    padding: 6px 12px;
+  }
+
+  .logo {
+    font-size: 20px;
+  }
+
+  .brandLogo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .roomTitle {
+    font-size: 18px;
+  }
+
+  .actionGroup {
+    gap: 6px;
+    width: 100%;
+    margin-left: 0;
+  }
+}

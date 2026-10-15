@@ -1,0 +1,316 @@
+/* SubtitleModal.module.css - Search-First Expansive Glassmorphic Subtitle Interface */
+
+.modalContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text-primary, #f0f0f5);
+  font-family: 'Inter', -apple-system, sans-serif;
+  max-height: calc(88vh - 50px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.modalContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modalContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+/* Compact Top Toolbar: Local On/Off Switch & Quick Upload */
+.topToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.switchGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switchLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f0f5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Active Subtitle Notification Pill */
+.activeBanner {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activeInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.activeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+  flex-shrink: 0;
+}
+
+.activeTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #34d399;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search Box Container */
+.searchSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.searchBarRow {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+@media only screen and (max-width: 540px) {
+  .searchBarRow {
+    flex-direction: column;
+  }
+}
+
+.searchActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Language Filter Chips */
+.filterRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-top: 2px;
+  scrollbar-width: none;
+}
+
+.filterRow::-webkit-scrollbar {
+  display: none;
+}
+
+.filterChip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filterChip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filterChipActive {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: #6366f1;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+}
+
+.chipCount {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Expansive Search Results List */
+.resultsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(440px, 52vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  margin-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.resultsContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.resultsContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.resultCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.resultCard:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.resultCardActive {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.resultInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.resultTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.resultMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  flex-wrap: wrap;
+}
+
+.langBadge {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.2));
+  color: #c7d2fe;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.formatBadge {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+  gap: 8px;
+}
+
+/* Secondary Collapsible URL Row */
+.urlToggleRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.urlToggleBtn {
+  font-size: 11.5px;
+  color: #818cf8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.urlToggleBtn:hover {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.urlInputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}

@@ -1,0 +1,374 @@
+/* ==========================================================================
+   Settings Modal - Dark Glassmorphism Theme
+   ========================================================================== */
+
+/* Section headers: Space Grotesk font, gradient text */
+.sectionHeader {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 18px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 70%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionHeader:first-of-type {
+  margin-top: 4px;
+}
+
+/* Glass Modal Styling (.settingsModal and Mantine Modal integration) */
+.settingsModal {
+  background: rgba(15, 17, 24, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-xl, 20px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 25px rgba(99, 102, 241, 0.15);
+  color: var(--text-primary, #f0f0f5);
+  padding: 24px;
+}
+
+:global(.mantine-Modal-content) {
+  background: rgba(15, 17, 24, 0.88) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(99, 102, 241, 0.25) !important;
+  border-radius: var(--radius-xl, 20px) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(99, 102, 241, 0.18) !important;
+  overflow: hidden;
+}
+
+:global(.mantine-Modal-header) {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  padding: 18px 24px !important;
+}
+
+:global(.mantine-Modal-title) {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  background: linear-gradient(135deg, #ffffff 20%, #a5b4fc 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+:global(.mantine-Modal-close) {
+  color: var(--text-secondary, #9ca3af) !important;
+  border-radius: var(--radius-sm, 8px) !important;
+  transition: all 150ms ease !important;
+}
+
+:global(.mantine-Modal-close:hover) {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+:global(.mantine-Modal-body) {
+  padding: 24px !important;
+  background: transparent !important;
+}
+
+/* Setting Rows and Spacing */
+.settingRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  width: 100%;
+  position: relative;
+}
+
+/* All Toggle / Switch Elements: Accent Colored */
+.toggle,
+.switch,
+:global(.mantine-Switch-root) {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+:global(.mantine-Switch-track) {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+:global(.mantine-Switch-track:hover) {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+:global(.mantine-Switch-input:checked + .mantine-Switch-track) {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  border-color: rgba(165, 180, 252, 0.5) !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.5) !important;
+}
+
+:global(.mantine-Switch-thumb) {
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+  transition: transform 150ms ease !important;
+}
+
+:global(.mantine-Switch-label) {
+  color: var(--text-primary, #f0f0f5) !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  cursor: pointer;
+}
+
+:global(.mantine-Switch-description) {
+  color: var(--text-muted, #94a3b8) !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+/* Generic checkbox fallback */
+input[type="checkbox"] {
+  accent-color: var(--accent-primary, #6366f1);
+}
+
+/* Input Fields: Glass Background */
+.inputField,
+:global(.mantine-TextInput-input),
+:global(.mantine-Input-input) {
+  background: rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: var(--radius-md, 12px) !important;
+  color: var(--text-primary, #f0f0f5) !important;
+  padding: 10px 14px !important;
+  font-size: 13.5px !important;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.inputField:hover,
+:global(.mantine-TextInput-input:hover),
+:global(.mantine-Input-input:hover) {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.inputField:focus,
+:global(.mantine-TextInput-input:focus),
+:global(.mantine-Input-input:focus) {
+  border-color: var(--accent-primary, #6366f1) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25), 0 0 16px rgba(99, 102, 241, 0.15) !important;
+  outline: none !important;
+}
+
+:global(.mantine-TextInput-input::placeholder),
+:global(.mantine-Input-input::placeholder) {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+:global(.mantine-TextInput-label),
+:global(.mantine-InputWrapper-label) {
+  color: var(--text-primary, #f0f0f5) !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  margin-bottom: 4px !important;
+}
+
+:global(.mantine-TextInput-description),
+:global(.mantine-InputWrapper-description) {
+  color: var(--text-muted, #94a3b8) !important;
+  font-size: 12px !important;
+  margin-bottom: 8px !important;
+  line-height: 1.4 !important;
+}
+
+:global(.mantine-TextInput-section) {
+  color: var(--text-muted, #94a3b8) !important;
+}
+
+/* Dividers & Alerts */
+:global(.mantine-Divider-root) {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  margin-top: 18px !important;
+  margin-bottom: 18px !important;
+}
+
+:global(.mantine-Alert-root) {
+  background: rgba(245, 159, 0, 0.1) !important;
+  border: 1px solid rgba(245, 159, 0, 0.25) !important;
+  border-radius: var(--radius-md, 12px) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  color: #fbbf24 !important;
+  margin-bottom: 14px !important;
+}
+
+/* Action and Save Buttons */
+.saveButton,
+:global(.mantine-Modal-body .mantine-Button-root) {
+  border-radius: var(--radius-md, 12px) !important;
+  font-weight: 600 !important;
+  font-size: 13.5px !important;
+  letter-spacing: 0.3px !important;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+:global(.mantine-Modal-body .mantine-Button-root:not([disabled])) {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
+}
+
+:global(.mantine-Modal-body .mantine-Button-root:not([disabled]):hover) {
+  background: linear-gradient(135deg, #7175f3 0%, #5b54ea 100%) !important;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+:global(.mantine-Modal-body .mantine-Button-root[disabled]) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Color Picker Popover Dropdown */
+:global(.mantine-Popover-dropdown) {
+  background: rgba(18, 20, 29, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(99, 102, 241, 0.25) !important;
+  border-radius: var(--radius-md, 12px) !important;
+  box-shadow: var(--shadow-glass) !important;
+  color: var(--text-primary, #f0f0f5) !important;
+  padding: 16px !important;
+}
+
+:global(.react-colorful) {
+  border-radius: var(--radius-md, 12px) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  overflow: hidden;
+}
+
+/* Modern Setting Card Containers */
+.settingCard {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.settingCard:hover {
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.settingTextWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settingTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settingDesc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.colorSwatchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  color: #f0f0f5;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.colorSwatchBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.colorDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+.dangerCard {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saveBtnContainer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Inline tab mode styling (no modal overlay) */
+.inlineSettingsContainer {
+  padding: 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inlineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+

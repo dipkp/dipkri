@@ -1,0 +1,169 @@
+/* SourceModal.module.css - Modern Glassmorphism Comparison Cards for ScreenShare, VBrowser & FileShare */
+
+.modalWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--text-primary, #f0f0f5);
+  font-family: 'Inter', -apple-system, sans-serif;
+  max-width: 680px;
+  width: 100%;
+  max-height: calc(85vh - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.modalWrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modalWrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modalHeaderTitle {
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.cardsContainer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media only screen and (max-width: 600px) {
+  .cardsContainer {
+    grid-template-columns: 1fr;
+  }
+}
+
+.planCard {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.planCard:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.planCardPlus {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.03) 100%);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.12);
+}
+
+.planCardPlus:hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.25);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.planTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.planBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.badgeFree {
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.badgePlus {
+  background: linear-gradient(135deg, #f59e0b, #ec4899);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+}
+
+.featureList {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+}
+
+.featureRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.featureRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.featureLabel {
+  color: var(--text-muted, #94a3b8);
+}
+
+.featureValue {
+  color: #f0f0f5;
+  font-weight: 600;
+  text-align: right;
+}
+
+.cardAction {
+  margin-top: auto;
+  width: 100%;
+}
+
+.cardAction button {
+  width: 100%;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+.optionControl {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 14px;
+}

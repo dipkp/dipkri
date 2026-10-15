@@ -1,0 +1,849 @@
+/* Chat.module.css - Authentic WhatsApp Chatting Theme (Dark Mode) */
+
+.whatsappChatWrapper {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0;
+  position: relative;
+  background-color: #06080b;
+  background-image:
+    radial-gradient(ellipse at 50% 0%, var(--chat-ambient-glow, rgba(99, 102, 241, 0.16)) 0%, transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.65) 0%, transparent 100%),
+    radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 20px 20px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chatContainer {
+  flex-grow: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.chatContainer::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chatContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.chatContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* WhatsApp Date Separator Chip */
+.dateSeparator {
+  align-self: center;
+  background-color: #182229;
+  color: #8696a0;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 8px;
+  margin: 6px auto;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.15);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+/* WhatsApp System Event Chip */
+.systemMessage {
+  align-self: center;
+  background-color: #182229;
+  color: #8696a0;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 8px;
+  margin: 5px auto;
+  text-align: center;
+  max-width: 88%;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.15);
+  line-height: 1.45;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.systemAuthor {
+  color: #e9edef;
+  font-weight: 700;
+}
+
+.systemMediaName {
+  color: #53bdeb;
+  font-weight: 600;
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Rich Video Link Card inside WhatsApp Bubble */
+.videoLinkPreviewCard {
+  margin-top: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.videoLinkThumbWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 150px;
+  overflow: hidden;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.videoLinkThumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.videoLinkThumbWrapper:hover .videoLinkThumb {
+  transform: scale(1.04);
+}
+
+.videoLinkPlayBadge {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.92);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: transform 0.18s ease;
+}
+
+.videoLinkThumbWrapper:hover .videoLinkPlayBadge {
+  transform: scale(1.12);
+}
+
+.videoLinkMeta {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.videoLinkTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e9edef;
+  line-height: 1.3;
+}
+
+.videoLinkSub {
+  font-size: 11px;
+  color: #8696a0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoLinkActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.videoLinkBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  background: #00a884;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.videoLinkBtn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.videoLinkBtnSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e9edef;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.videoLinkBtnSecondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+/* WhatsApp Message Row & Bubbles */
+.messageRow {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.messageRow.outgoing {
+  align-items: flex-end;
+}
+
+.messageRow.incoming {
+  align-items: flex-start;
+}
+
+.bubbleWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.messageRow.outgoing .bubbleWrapper {
+  justify-content: flex-end;
+}
+
+.messageRow.incoming .bubbleWrapper {
+  justify-content: flex-start;
+}
+
+/* Sliding Reply Indicator */
+.swipeReplyIndicator {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 168, 132, 0.25);
+  color: #00a884;
+  border: 1px solid rgba(0, 168, 132, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.messageRow.incoming .swipeReplyIndicator {
+  left: 4px;
+}
+
+.messageRow.outgoing .swipeReplyIndicator {
+  right: 4px;
+}
+
+.bubble {
+  position: relative;
+  max-width: 80%;
+  min-width: 75px;
+  padding: 6px 9px 5px 9px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.42;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.18);
+  transition: background 0.15s ease;
+}
+
+@media (max-width: 600px) {
+  .bubble {
+    max-width: 88%;
+  }
+}
+
+/* Outgoing Bubble (Sent by Me - WhatsApp Green) */
+.bubble.outgoing {
+  background-color: #005c4b;
+  color: #e9edef;
+  border-radius: 8px 8px 2px 8px;
+}
+
+/* Incoming Bubble (Sent by Other - WhatsApp Slate Dark) */
+.bubble.incoming {
+  background-color: #202c33;
+  color: #e9edef;
+  border-radius: 8px 8px 8px 2px;
+}
+
+/* Bubble tail indicator */
+.bubble.outgoing::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: -5px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid #005c4b;
+  border-bottom: 6px solid transparent;
+}
+
+.bubble.incoming::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -5px;
+  width: 0;
+  height: 0;
+  border-right: 6px solid #202c33;
+  border-bottom: 6px solid transparent;
+}
+
+/* WhatsApp Sender Name */
+.senderName {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.subscriberBadge {
+  background: linear-gradient(135deg, #f59e0b, #ec4899);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* WhatsApp Reply Quoted Snippet */
+.replyQuote {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
+  padding: 4px 8px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  border-left: 3.5px solid #06cf9c;
+  display: flex;
+  flex-direction: column;
+}
+
+.replyQuote.outgoingQuote {
+  border-left-color: #53bdeb;
+}
+
+.replyQuoteName {
+  font-weight: 700;
+  font-size: 11.5px;
+  color: #06cf9c;
+  margin-bottom: 1px;
+}
+
+.replyQuote.outgoingQuote .replyQuoteName {
+  color: #53bdeb;
+}
+
+.replyQuoteText {
+  color: rgba(233, 237, 239, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+/* WhatsApp Message Body & Emoji */
+.messageText {
+  color: #e9edef;
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.messageText.emojiOnly {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+/* WhatsApp Read More */
+.readMoreLink {
+  color: #53bdeb;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 4px;
+  user-select: none;
+  display: inline-block;
+  transition: all 150ms ease;
+}
+
+.readMoreLink:hover {
+  text-decoration: underline;
+}
+
+/* WhatsApp Meta (Timestamp + Double Ticks) */
+.messageMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  float: right;
+  margin-left: 10px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #8696a0;
+  user-select: none;
+  line-height: 1;
+}
+
+.bubble.outgoing .messageMeta {
+  color: rgba(233, 237, 239, 0.7);
+}
+
+.doubleTick {
+  color: #53bdeb;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 1px;
+}
+
+
+/* WhatsApp Floating Corner Reaction Pill */
+.reactionBadge {
+  position: absolute;
+  bottom: -9px;
+  background: #202c33;
+  border: 1.5px solid #0b141a;
+  border-radius: 9999px;
+  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  user-select: none;
+  z-index: 2;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.bubble.outgoing .reactionBadge {
+  right: 6px;
+}
+
+.bubble.incoming .reactionBadge {
+  left: 6px;
+}
+
+.reactionBadge:hover {
+  transform: scale(1.08);
+  background: #2a3942;
+}
+
+.reactionBadge.highlighted {
+  border-color: #00a884;
+}
+
+.reactionCounter {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e9edef;
+}
+
+/* WhatsApp Composer Bar */
+/* Authentic Dark Theme Message Sending Bar */
+.whatsappComposer {
+  background: rgba(10, 12, 18, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+}
+
+.emojiButton {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.emojiButton:hover {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  transform: scale(1.1);
+}
+
+.emojiButton:active {
+  transform: scale(0.92);
+}
+
+.composerInputWrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #141720;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.composerInputWrapper:focus-within {
+  background: #171b26;
+  border-color: rgba(99, 102, 241, 0.55);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.composerInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 22px;
+  padding: 9px 14px;
+  color: #f0f0f5;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.composerInput::placeholder {
+  color: #64748b;
+}
+
+.sendButton {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+}
+
+.sendButton.sendActive {
+  background: linear-gradient(135deg, #00a884 0%, #06cf9c 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 168, 132, 0.45);
+  cursor: pointer;
+}
+
+.sendButton.sendActive:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 18px rgba(0, 168, 132, 0.65);
+}
+
+.sendButton.sendActive:active {
+  transform: scale(0.92);
+}
+
+.sendButton.sendDisabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: #475569;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* WhatsApp Reply Preview Bar above Composer (Dark Theme) */
+.replyPreviewBar {
+  background-color: #0e1219;
+  border-left: 3.5px solid #00a884;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  animation: slideUpPreview 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpPreview {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.replyPreviewInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.replyPreviewAuthor {
+  color: #06cf9c;
+  font-weight: 700;
+  font-size: 11.5px;
+}
+
+.replyPreviewSnippet {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.replyCloseBtn {
+  background: transparent;
+  border: none;
+  color: #8696a0;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.replyCloseBtn:hover {
+  color: #e9edef;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Floating Jump to Bottom Button (WhatsApp Style) */
+.jumpToBottomBtn {
+  position: sticky;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #202c33;
+  color: #8696a0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.jumpToBottomBtn:hover {
+  color: #ffffff;
+  background-color: #2a3942;
+  transform: translateY(-2px);
+}
+
+/* Tooltip for reactions */
+.replyTooltip {
+  background: #182229;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e9edef;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* Dynamic ambient dark background glow layer according to video colors */
+.ambientGlowLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.85;
+  transition: opacity 0.8s ease;
+  background:
+    radial-gradient(ellipse at 15% 15%, var(--chat-ambient-glow, rgba(99, 102, 241, 0.28)) 0%, transparent 62%),
+    radial-gradient(ellipse at 85% 75%, var(--chat-ambient-glow-secondary, rgba(6, 182, 212, 0.22)) 0%, transparent 62%),
+    radial-gradient(ellipse at 50% 50%, var(--chat-ambient-dark, rgba(6, 8, 11, 0.6)) 0%, transparent 80%),
+    radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 20px 20px;
+}
+
+.ambientGlowLayer.ambientActive {
+  opacity: 1;
+  animation: dynamicDarkGlowFloat 7s infinite ease-in-out alternate;
+}
+
+@keyframes dynamicDarkGlowFloat {
+  0% {
+    transform: scale(1) translate(0, 0);
+    filter: brightness(0.95);
+  }
+  50% {
+    transform: scale(1.05) translate(4px, -6px);
+    filter: brightness(1.12);
+  }
+  100% {
+    transform: scale(0.98) translate(-4px, 5px);
+    filter: brightness(1.02);
+  }
+}
+
+.videoActiveGlow {
+  border-color: var(--chat-ambient-border, rgba(99, 102, 241, 0.32)) !important;
+  box-shadow: inset 0 0 50px var(--chat-ambient-glow, rgba(99, 102, 241, 0.12)), 0 0 25px var(--chat-ambient-glow, rgba(99, 102, 241, 0.18)) !important;
+  transition: border-color 0.8s ease, box-shadow 0.8s ease;
+}
+
+/* Outside click transparent backdrop for Quick Reaction Pill */
+.reactionBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: transparent;
+  cursor: default;
+}
+
+.quickReactionPillContainer {
+  z-index: 1000;
+  animation: reactionPillPop 0.18s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+
+/* Horizontal Quick Reaction Pill Bar (Anchored on Bubble & WhatsApp Style) */
+.bubbleReactionPill,
+.quickReactionPill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(18, 24, 32, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  padding: 4px 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75);
+  animation: reactionPillPop 0.18s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  z-index: 1000;
+}
+
+.bubbleReactionPill {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+}
+
+.messageRow.incoming .bubbleReactionPill {
+  left: 0;
+  right: auto;
+}
+
+@keyframes reactionPillPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.65) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.quickReactionEmoji {
+  font-size: 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 50%;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.quickReactionEmoji:hover {
+  transform: scale(1.35);
+}
+
+.quickReactionEmoji:active {
+  transform: scale(0.9);
+}
+
+.quickReactionMoreBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #8696a0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.quickReactionMoreBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+

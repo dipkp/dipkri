@@ -1,0 +1,468 @@
+/* ==========================================================================
+   WatchParty Global Design System & Dark Glassmorphism Theme
+   ========================================================================== */
+
+:root {
+  /* Surface & Background Tokens */
+  --bg-primary: #090A0F;
+  --bg-secondary: #0F1118;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-glass: rgba(255, 255, 255, 0.06);
+  --bg-glass-hover: rgba(255, 255, 255, 0.1);
+  --bg-glass-active: rgba(255, 255, 255, 0.14);
+
+  /* Border Tokens */
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-hover: rgba(255, 255, 255, 0.16);
+  --border-glass-active: rgba(99, 102, 241, 0.4);
+
+  /* Accent & Brand Colors */
+  --accent-primary: #6366f1;
+  --accent-secondary: #06b6d4;
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+
+  /* Typography Colors */
+  --text-primary: #F0F0F5;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+
+  /* Corner Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Shadows & Glows */
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+  --shadow-glow-cyan: 0 0 20px rgba(6, 182, 212, 0.2);
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Blur Tokens */
+  --glass-blur: 16px;
+  --glass-blur-sm: 8px;
+
+  /* Mantine Theme Variable Overrides */
+  --mantine-color-body: var(--bg-primary);
+  --mantine-color-text: var(--text-primary);
+  --mantine-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mantine-font-family-headings: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ==========================================================================
+   CSS Reset & Box Sizing
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-y: scroll;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media only screen and (max-width: 768px) {
+  html,
+  body {
+    overflow: hidden !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+}
+
+/* Headings font family */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.display-font {
+  font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Interactive & Mobile Responsive Base
+   ========================================================================== */
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent native WebKit/Blink search clear button from overlapping with custom rightSection */
+input::-webkit-search-decoration,
+input::-webkit-search-cancel-button,
+input::-webkit-search-results-button,
+input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  display: none !important;
+}
+
+/* Text Selection */
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #ffffff;
+}
+
+/* Focus Visible */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Links */
+a {
+  color: var(--accent-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast), opacity var(--transition-fast);
+}
+
+a:hover {
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   Custom Scrollbars (Firefox & WebKit)
+   ========================================================================== */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) rgba(255, 255, 255, 0.02);
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ==========================================================================
+   Glassmorphism Utility Classes
+   ========================================================================== */
+
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass);
+  transition: all var(--transition-smooth);
+}
+
+.glass-panel-interactive {
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass);
+  transition: all var(--transition-smooth);
+}
+
+.glass-panel-interactive:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-glass-hover);
+  box-shadow: var(--shadow-glow);
+}
+
+/* ==========================================================================
+   Mantine Component Overrides
+   ========================================================================== */
+
+/* Mantine Buttons */
+.mantine-Button-root {
+  border-radius: var(--radius-md);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  transition: all var(--transition-fast);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.mantine-Button-root:hover {
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.mantine-Button-root:active {
+  transform: translateY(0);
+}
+
+.mantine-Button-inner {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px;
+}
+
+.mantine-Button-section {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+}
+
+.mantine-Button-label {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+/* Mantine Action Icons */
+.mantine-ActionIcon-root {
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  transition: all var(--transition-fast);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.mantine-ActionIcon-root:hover {
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.mantine-ActionIcon-root:active {
+  transform: translateY(0);
+}
+
+.mantine-ActionIcon-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Mantine Inputs with dark glass effect */
+.mantine-TextInput-input,
+.mantine-Select-input,
+.mantine-Textarea-input,
+.mantine-Input-input,
+.mantine-PasswordInput-input {
+  background-color: var(--bg-glass) !important;
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border: 1px solid var(--border-glass) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-md) !important;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+.mantine-TextInput-input:focus,
+.mantine-Select-input:focus,
+.mantine-Textarea-input:focus,
+.mantine-Input-input:focus,
+.mantine-PasswordInput-input:focus,
+.mantine-TextInput-input:focus-within,
+.mantine-Select-input:focus-within,
+.mantine-Textarea-input:focus-within,
+.mantine-Input-input:focus-within,
+.mantine-PasswordInput-input:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Mantine Modals & Dropdowns */
+.mantine-Modal-root {
+  --modal-z-index: 2000 !important;
+  z-index: 2000 !important;
+}
+
+.mantine-Modal-content {
+  background-color: rgba(15, 17, 24, 0.94) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--border-glass) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-glass) !important;
+  z-index: 2000 !important;
+}
+
+.mantine-Modal-body {
+  max-height: calc(88vh - 65px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.mantine-Modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mantine-Modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.mantine-Menu-dropdown {
+  background-color: rgba(15, 17, 24, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--border-glass) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+  z-index: 2000 !important;
+  max-height: min(280px, 75vh) !important;
+  overflow-y: auto !important;
+}
+
+.mantine-Modal-header {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.mantine-Menu-item {
+  border-radius: var(--radius-sm) !important;
+  transition: background-color var(--transition-fast);
+}
+
+.mantine-Menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ==========================================================================
+   Smooth Keyframe Animations
+   ========================================================================== */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.45);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn var(--transition-smooth) ease forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp var(--transition-smooth) ease forwards;
+}
+
+.animate-pulseGlow {
+  animation: pulse-glow 3s infinite ease-in-out;
+}
+
+/* ==========================================================================
+   Accessibility: Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Video Subtitle / Captions (Cue) Styling
+   ========================================================================== */
+video::cue {
+  background-color: rgba(10, 14, 20, 0.85) !important;
+  color: #ffffff !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-size: 1.12rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9) !important;
+  white-space: pre-line !important;
+}
+
