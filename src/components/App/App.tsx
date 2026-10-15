@@ -192,7 +192,7 @@ interface AppState {
   convertProgress: number | undefined;
   convertEnabled: boolean;
   isMobileView: boolean;
-  incomingReaction: { emoji: string; ts: number } | null;
+  incomingReaction: { emoji: string; ts: number; senderId?: string } | null;
 }
 
 const checkIsMobileDevice = () => {
@@ -775,7 +775,7 @@ export class App extends React.Component<AppProps, AppState> {
         scrollTimestamp: Date.now(),
         unreadCount: isChatVisible ? 0 : this.state.unreadCount + 1,
         incomingReaction: isReaction
-          ? { emoji: trimmed, ts: Date.now() }
+          ? { emoji: trimmed, ts: Date.now(), senderId: data.id }
           : this.state.incomingReaction,
       });
     });
@@ -2082,10 +2082,14 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   getLeaderTime = () => {
-    if (this.state.participants.length > 2) {
-      return calculateMedian(Object.values(this.state.tsMap));
+    const values = Object.values(this.state.tsMap).filter(Number.isFinite);
+    if (!values.length) {
+      return 0;
     }
-    return Math.max(...Object.values(this.state.tsMap));
+    if (this.state.participants.length > 2) {
+      return calculateMedian(values);
+    }
+    return Math.max(...values);
   };
 
   onVideoEnded = (url: string) => {

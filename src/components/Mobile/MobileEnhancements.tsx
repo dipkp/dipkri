@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import styles from "./MobileEnhancements.module.css";
+import { getOrCreateClientId } from "../../utils/utils";
 import {
   WPIconChat,
   WPIconPeople,
@@ -28,13 +29,13 @@ export const MobileFloatingReactions = ({
   onSync,
 }: {
   onSendReaction: (emoji: string) => void;
-  incomingReaction?: { emoji: string; ts: number } | null;
+  incomingReaction?: { emoji: string; ts: number; senderId?: string } | null;
   isBehind?: boolean;
   onSync?: () => void;
 }) => {
   const [flyingEmojis, setFlyingEmojis] = useState<FlyingEmoji[]>([]);
   const [activeBtn, setActiveBtn] = useState<string | null>(null);
-  const lastReactionTsRef = useRef<number>(0);
+  const lastIncomingTsRef = useRef<number>(0);
 
   // High-energy multi-emoji burst fountain
   const spawnFountain = useCallback((emoji: string) => {
@@ -64,19 +65,18 @@ export const MobileFloatingReactions = ({
     onSendReaction(emoji);
     setActiveBtn(emoji);
     setTimeout(() => setActiveBtn(null), 350);
-    lastReactionTsRef.current = Date.now();
     spawnFountain(emoji);
   };
 
   // Synchronize reaction bursts across ALL users in the room
   useEffect(() => {
-    if (
-      incomingReaction &&
-      incomingReaction.emoji &&
-      incomingReaction.ts > lastReactionTsRef.current + 250
-    ) {
-      lastReactionTsRef.current = incomingReaction.ts;
-      spawnFountain(incomingReaction.emoji);
+    if (incomingReaction && incomingReaction.emoji && incomingReaction.ts !== lastIncomingTsRef.current) {
+      lastIncomingTsRef.current = incomingReaction.ts;
+      const selfId = getOrCreateClientId();
+      // If the reaction came from another person in the room, burst it immediately!
+      if (!incomingReaction.senderId || incomingReaction.senderId !== selfId) {
+        spawnFountain(incomingReaction.emoji);
+      }
     }
   }, [incomingReaction, spawnFountain]);
 
