@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import styles from "./MobileEnhancements.module.css";
 import {
   WPIconChat,
@@ -23,24 +23,22 @@ const REACTION_EMOJIS = ["🔥", "❤️", "🤣", "🚀", "👏", "🍿"];
 
 export const MobileFloatingReactions = ({
   onSendReaction,
+  incomingReaction,
   isBehind,
   onSync,
 }: {
   onSendReaction: (emoji: string) => void;
+  incomingReaction?: { emoji: string; ts: number } | null;
   isBehind?: boolean;
   onSync?: () => void;
 }) => {
   const [flyingEmojis, setFlyingEmojis] = useState<FlyingEmoji[]>([]);
-
   const [activeBtn, setActiveBtn] = useState<string | null>(null);
+  const lastReactionTsRef = useRef<number>(0);
 
   // High-energy multi-emoji burst fountain
-  const triggerReaction = (emoji: string) => {
-    onSendReaction(emoji);
-    setActiveBtn(emoji);
-    setTimeout(() => setActiveBtn(null), 350);
-
-    const burstCount = 16;
+  const spawnFountain = useCallback((emoji: string) => {
+    const burstCount = 18;
     const newBatch: FlyingEmoji[] = [];
     const baseTime = Date.now();
 
@@ -49,7 +47,7 @@ export const MobileFloatingReactions = ({
       newBatch.push({
         id: baseTime + Math.random() + i,
         emoji,
-        left: 45 + Math.random() * 48,
+        left: 35 + Math.random() * 58,
         size: 24 + Math.random() * 26,
         delayMs: i * 35 + Math.random() * 25,
         duration: 1.8 + Math.random() * 0.8,
@@ -59,7 +57,28 @@ export const MobileFloatingReactions = ({
     }
 
     setFlyingEmojis((prev) => [...prev.slice(-48), ...newBatch]);
+  }, []);
+
+  // Trigger reaction locally for immediate feedback
+  const triggerReaction = (emoji: string) => {
+    onSendReaction(emoji);
+    setActiveBtn(emoji);
+    setTimeout(() => setActiveBtn(null), 350);
+    lastReactionTsRef.current = Date.now();
+    spawnFountain(emoji);
   };
+
+  // Synchronize reaction bursts across ALL users in the room
+  useEffect(() => {
+    if (
+      incomingReaction &&
+      incomingReaction.emoji &&
+      incomingReaction.ts > lastReactionTsRef.current + 250
+    ) {
+      lastReactionTsRef.current = incomingReaction.ts;
+      spawnFountain(incomingReaction.emoji);
+    }
+  }, [incomingReaction, spawnFountain]);
 
   // Clean up expired floating emojis
   useEffect(() => {
@@ -129,12 +148,14 @@ export const MobileTabBar = ({
   onOpenSettings,
   participantCount,
   playlistCount,
+  unreadCount,
 }: {
   activeTab: "chat" | "people" | "playlist";
   onTabChange: (tab: "chat" | "people" | "playlist") => void;
   onOpenSettings?: () => void;
   participantCount: number;
   playlistCount: number;
+  unreadCount?: number;
 }) => {
   return (
     <div className={styles.mobileTabBar}>
@@ -142,7 +163,14 @@ export const MobileTabBar = ({
         className={`${styles.mobileTab} ${activeTab === "chat" ? styles.active : ""}`}
         onClick={() => onTabChange("chat")}
       >
-        <WPIconChat size={16} />
+        <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <WPIconChat size={16} />
+          {Boolean(unreadCount && unreadCount > 0 && activeTab !== "chat") && (
+            <span className={styles.notificationBadge}>
+              {(unreadCount ?? 0) > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </div>
         <span>Chat</span>
       </button>
       <button

@@ -192,6 +192,7 @@ interface AppState {
   convertProgress: number | undefined;
   convertEnabled: boolean;
   isMobileView: boolean;
+  incomingReaction: { emoji: string; ts: number } | null;
 }
 
 const checkIsMobileDevice = () => {
@@ -285,6 +286,7 @@ export class App extends React.Component<AppProps, AppState> {
     settingsModalOpen: false,
     convertProgress: undefined,
     convertEnabled: window.localStorage.getItem("watchparty-convert") === "1",
+    incomingReaction: null,
   };
   socket: Socket = null!;
   mediasoupPubSocket: Socket | null = null;
@@ -407,13 +409,14 @@ export class App extends React.Component<AppProps, AppState> {
       }
     });
     socket.on("connect_error", (err: any) => {
-      console.error(err);
-      if (err.message === "Invalid namespace") {
+      console.warn("Socket connect_error (will retry):", err);
+      if (err?.message === "Invalid namespace") {
         this.setState({ overlayMsg: "Couldn't load this room." });
-      } else if (err.message === "password") {
+      } else if (err?.message === "password") {
         this.setState({ isErrorAuth: true });
       } else {
-        this.setState({ overlayMsg: err?.message ?? "An error occurred" });
+        // Socket.io automatically reconnects; show non-blocking notice rather than blocking modal
+        this.setState({ warningMessage: "Connecting to server..." });
       }
     });
     socket.on("disconnect", (reason) => {
@@ -758,13 +761,22 @@ export class App extends React.Component<AppProps, AppState> {
       if (this.state.chat.length > 100) {
         this.state.chat.shift();
       }
+
+      const REACTION_EMOJIS = ["🔥", "❤️", "🤣", "🚀", "👏", "🍿"];
+      const trimmed = (data.msg || "").trim();
+      const isReaction = REACTION_EMOJIS.includes(trimmed);
+
+      const isChatVisible =
+        this.state.currentTab === "chat" &&
+        (this.state.isMobileView || this.state.showChatColumn);
+
       this.setState({
         chat: this.state.chat,
         scrollTimestamp: Date.now(),
-        unreadCount:
-          this.state.currentTab === "chat"
-            ? this.state.unreadCount
-            : this.state.unreadCount + 1,
+        unreadCount: isChatVisible ? 0 : this.state.unreadCount + 1,
+        incomingReaction: isReaction
+          ? { emoji: trimmed, ts: Date.now() }
+          : this.state.incomingReaction,
       });
     });
     socket.on("REC:addReaction", (data: Reaction) => {
@@ -1209,7 +1221,15 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   startScreenShare = async (useMediaSoup: boolean) => {
-    if (navigator.mediaDevices.getDisplayMedia) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      this.setState({
+        errorMessage:
+          "Screen sharing is supported on desktop browsers. Mobile devices (Android & iOS) do not allow web browsers to record phone screens.",
+      });
+      setTimeout(() => this.setState({ errorMessage: "" }), 5000);
+      return;
+    }
+    try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         //@ts-expect-error
         video: { height: 720, logicalSurface: true },
@@ -1228,6 +1248,15 @@ export class App extends React.Component<AppProps, AppState> {
         file: false,
         mediasoup: useMediaSoup,
       });
+    } catch (err: any) {
+      console.warn("Screen share cancelled or failed:", err);
+      if (err?.name !== "NotAllowedError" && err?.name !== "AbortError") {
+        this.setState({
+          errorMessage:
+            "Screen sharing failed or is unsupported on this mobile browser. For sharing videos on mobile, use File Share or paste video URLs.",
+        });
+        setTimeout(() => this.setState({ errorMessage: "" }), 5000);
+      }
     }
   };
 
@@ -2142,6 +2171,8 @@ export class App extends React.Component<AppProps, AppState> {
         clientId={clientId}
         myName={this.state.myName}
         roomSubtitle={this.state.roomSubtitle}
+        unreadCount={this.state.unreadCount}
+        onClearUnread={() => this.setState({ unreadCount: 0 })}
       />
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (
@@ -2317,10 +2348,14 @@ export class App extends React.Component<AppProps, AppState> {
             onSendReaction={(emoji: string) => {
               this.socket?.emit("CMD:chat", emoji);
             }}
+            incomingReaction={this.state.incomingReaction}
             isBehind={
               !this.state.isLiveStream &&
+              !this.playingScreenShare() &&
+              !this.playingFileShare() &&
               Boolean(this.getLeaderTime()) &&
-              this.getLeaderTime() < Infinity &&
+              Number.isFinite(this.getLeaderTime()) &&
+              this.getLeaderTime() > 0 &&
               this.getLeaderTime() - this.Player().getCurrentTime() > 10
             }
             onSync={() => {
@@ -2617,17 +2652,6 @@ export class App extends React.Component<AppProps, AppState> {
                       onChange={(e) => this.updateName(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       leftSection={<WPIconUser size={16} />}
-                      rightSectionWidth={70}
-                      rightSection={
-                        <Button
-                          size="compact-xs"
-                          onClick={async () =>
-                            this.updateName(await generateName())
-                          }
-                        >
-                          Random
-                        </Button>
-                      }
                     />
                   </div>
 
@@ -2703,10 +2727,15 @@ export class App extends React.Component<AppProps, AppState> {
                 className={`${styles.bottomNavTab} ${
                   this.state.currentTab === "chat" ? styles.activeTab : ""
                 }`}
-                onClick={() => this.setState({ currentTab: "chat" })}
+                onClick={() => this.setState({ currentTab: "chat", unreadCount: 0 })}
               >
                 <div className={styles.tabIconWrapper}>
                   <WPIconChat size={18} />
+                  {this.state.unreadCount > 0 && this.state.currentTab !== "chat" && (
+                    <span className={styles.bottomNavBadge}>
+                      {this.state.unreadCount > 99 ? "99+" : this.state.unreadCount}
+                    </span>
+                  )}
                 </div>
                 <span className={styles.tabLabel}>Chat</span>
               </button>
@@ -2939,6 +2968,7 @@ export class App extends React.Component<AppProps, AppState> {
                         const newVal = !this.state.showChatColumn;
                         this.setState({
                           showChatColumn: newVal,
+                          unreadCount: newVal ? 0 : this.state.unreadCount,
                         });
                         window.localStorage.setItem(
                           "watchparty-showchatcolumn",
@@ -2989,17 +3019,6 @@ export class App extends React.Component<AppProps, AppState> {
                   }}
                   onFocus={(e) => e.target.select()}
                   leftSection={<WPIconUser size={16} />}
-                  rightSectionWidth={70}
-                  rightSection={
-                    <Button
-                      size="compact-xs"
-                      onClick={async () =>
-                        this.updateName(await generateName())
-                      }
-                    >
-                      Random
-                    </Button>
-                  }
                 />
                 <InviteButton />
               </div>
@@ -3009,12 +3028,13 @@ export class App extends React.Component<AppProps, AppState> {
                   if (tab === "people") {
                     this.setState({ showPeopleColumn: true });
                   } else if (tab === "chat") {
-                    this.setState({ showPeopleColumn: false });
+                    this.setState({ showPeopleColumn: false, unreadCount: 0 });
                   }
                 }}
                 participantCount={this.state.participants.length}
                 playlistCount={this.state.playlist.length}
                 onOpenSettings={() => this.setState({ settingsModalOpen: true })}
+                unreadCount={this.state.showPeopleColumn ? this.state.unreadCount : 0}
               />
               <div style={{ display: "flex", gap: "4px" }}>
                 <Button

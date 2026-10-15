@@ -19,6 +19,7 @@ import {
   WPIconGitHub,
   DipkriLogo,
 } from "../Icons/CustomIcons";
+import { JoinRoomModal } from "../Modal/JoinRoomModal";
 import styles from "./TopBar.module.css";
 
 export async function createRoom(
@@ -65,6 +66,25 @@ export const NewRoomButton = (props: {
     >
       New Room
     </Button>
+  );
+};
+
+export const JoinRoomButton = (props: { size?: string }) => {
+  const [opened, setOpened] = React.useState(false);
+  return (
+    <>
+      <Button
+        size={props.size}
+        variant="light"
+        color="cyan"
+        onClick={() => setOpened(true)}
+        leftSection={<WPIconLogin size={18} />}
+        style={{ borderRadius: "12px", fontWeight: 600 }}
+      >
+        Join with Code
+      </Button>
+      <JoinRoomModal opened={opened} onClose={() => setOpened(false)} />
+    </>
   );
 };
 
@@ -296,6 +316,12 @@ export const TopBar = (props: {
           )}
         </div>
         <Announce />
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {!props.hideNewRoom && <JoinRoomButton size="sm" />}
+          {!props.hideNewRoom && <NewRoomButton size="sm" />}
+          {!props.hideMyRooms && <ListRoomsButton />}
+          {!props.hideSignin && <SignInButton />}
+        </div>
       </div>
     </React.Fragment>
   );

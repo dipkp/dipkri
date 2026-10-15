@@ -12,7 +12,7 @@ import {
   IconLink,
   IconVideo,
 } from "@tabler/icons-react";
-import { NewRoomButton } from "../TopBar/TopBar";
+import { NewRoomButton, JoinRoomButton } from "../TopBar/TopBar";
 import styles from "./Home.module.css";
 import { MetadataContext } from "../../MetadataContext";
 
@@ -25,8 +25,9 @@ export const Home = () => {
           heroText={"Watch videos together in real-time sync."}
           subText={"Stream YouTube, local files, screen shares, and video links with friends. 100% free with no registration or downloads."}
           action={
-            <div className={styles.heroAction}>
+            <div className={styles.heroAction} style={{ display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center" }}>
               <NewRoomButton size="xl" />
+              <JoinRoomButton size="xl" />
             </div>
           }
           image={"/screenshot4.png"}

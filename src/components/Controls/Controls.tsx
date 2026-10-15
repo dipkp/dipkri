@@ -64,6 +64,8 @@ interface ControlsProps {
   clientId?: string;
   myName?: string;
   roomSubtitle?: string;
+  unreadCount?: number;
+  onClearUnread?: () => void;
 }
 
 export const Controls = (props: ControlsProps) => {
@@ -193,30 +195,30 @@ export const Controls = (props: ControlsProps) => {
   // In-video floating chat button: available in full-bleed video OR on desktop when page chat column is collapsed
   const canShowInVideoChat = Boolean(props.chat) && (isFullBleedVideo || (!props.isMobileView && !props.showChatColumn));
 
-  // Live message strip: active in full-bleed video or collapsed desktop chat, and suppressed when chat drawer is open
-  const canShowMessageStrip = (isFullBleedVideo || (!props.isMobileView && !props.showChatColumn)) && !isChatDrawerOpen;
+  // User requirement:
+  // "breaking news like ribbon but only text no background with some shadow for text visibility
+  // whenever person send message that should come in the bottom line left to right
+  // BUT ONLY in the landscape mode or in fullscreen mode"
+  const canShowMessageStrip = Boolean(isFullscreen || isLandscapeMobile) && !isChatDrawerOpen;
 
-  // Stream new incoming messages left-to-right (ignore commands and own messages)
+  // Stream new incoming messages left-to-right along bottom line
   useEffect(() => {
     if (!props.chat || props.chat.length === 0) return;
     const currentLen = props.chat.length;
     if (currentLen > lastChatLenRef.current) {
       const latest = props.chat[props.chat.length - 1];
-      const isSelf =
-        (props.clientId && latest.id === props.clientId) ||
-        (props.myName && latest.id === props.myName);
-      if (latest && !latest.cmd && !latest.system && !isSelf) {
+      if (latest && !latest.cmd && !latest.system) {
         setActiveStripMsg(latest);
         if (stripTimerRef.current) {
           clearTimeout(stripTimerRef.current);
         }
         stripTimerRef.current = setTimeout(() => {
           setActiveStripMsg(null);
-        }, 8600);
+        }, 9500);
       }
     }
     lastChatLenRef.current = currentLen;
-  }, [props.chat, props.clientId, props.myName]);
+  }, [props.chat]);
 
   const getEnd = () => props.duration;
   const getStart = () => 0;
@@ -341,12 +343,17 @@ export const Controls = (props: ControlsProps) => {
     }
   };
 
+  const isWebRTC = Boolean(props.video && (props.video.startsWith("screenshare://") || props.video.startsWith("fileshare://")));
   const behindThreshold = 5;
-  const behindTime =
-    !isLiveStream && leaderTime && leaderTime < Infinity
-      ? Math.max(0, leaderTime - currentTime)
-      : Math.max(0, getEnd() - getCurrent());
-  const isBehind = behindTime > behindThreshold;
+  const isBehind =
+    !isLiveStream &&
+    !isWebRTC &&
+    leaderTime !== undefined &&
+    Number.isFinite(leaderTime) &&
+    leaderTime > 0 &&
+    Number.isFinite(currentTime) &&
+    leaderTime - currentTime > behindThreshold;
+  const behindTime = isBehind ? Math.max(0, leaderTime - currentTime) : 0;
 
   // Buffer range bars
   const buffers = timeRanges.map(({ start, end }) => {
@@ -745,10 +752,24 @@ export const Controls = (props: ControlsProps) => {
             {canShowInVideoChat && (
               <div
                 className={`${styles.action} ${styles.fullscreenChatBtn} ${isChatDrawerOpen ? styles.activeFeature : ""}`}
-                onClick={() => setIsChatDrawerOpen((prev) => !prev)}
+                onClick={() => {
+                  setIsChatDrawerOpen((prev) => {
+                    const next = !prev;
+                    if (next && props.onClearUnread) {
+                      props.onClearUnread();
+                    }
+                    return next;
+                  });
+                }}
                 title={isChatDrawerOpen ? "Close Chat" : "Open Chat"}
+                style={{ position: "relative" }}
               >
                 <WPIconChat size={20} />
+                {Boolean(props.unreadCount && props.unreadCount > 0 && !isChatDrawerOpen) && (
+                  <span className={styles.chatBadge}>
+                    {(props.unreadCount ?? 0) > 99 ? "99+" : props.unreadCount}
+                  </span>
+                )}
               </div>
             )}
 
