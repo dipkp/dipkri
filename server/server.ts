@@ -759,6 +759,23 @@ app.get("/proxy/*splat", async (req, res) => {
   }
 });
 
+app.get("/favicon.ico", (_req, res) => {
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.sendFile(
+    path.resolve(
+      import.meta.dirname + `/../${config.BUILD_DIRECTORY}/favicon.ico`,
+    ),
+  );
+});
+app.get("/favicon.svg", (_req, res) => {
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.sendFile(
+    path.resolve(
+      import.meta.dirname + `/../${config.BUILD_DIRECTORY}/favicon.svg`,
+    ),
+  );
+});
+
 app.use(express.static(config.BUILD_DIRECTORY));
 // Send index.html for all other requests (SPA)
 app.use("/*splat", (_req, res) => {

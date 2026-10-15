@@ -18,7 +18,13 @@ import {
   WPIconCheck,
   WPIconChat,
   WPIconClose,
+  WPIconSettings,
 } from "../Icons/CustomIcons";
+import {
+  getWebcamSettings,
+  setWebcamSettings,
+  BubbleSize,
+} from "../VideoChat/webcamSettings";
 import { Chat } from "../Chat/Chat";
 
 interface ControlsProps {
@@ -83,6 +89,19 @@ export const Controls = (props: ControlsProps) => {
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [activeStripMsg, setActiveStripMsg] = useState<ChatMessage | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [webcamState, setWebcamState] = useState(() => getWebcamSettings());
+
+  useEffect(() => {
+    const handleWebcamChange = (e: any) => {
+      if (e?.detail) {
+        setWebcamState((prev) => ({ ...prev, ...e.detail }));
+      }
+    };
+    window.addEventListener("dipkri-webcam-settings-changed", handleWebcamChange);
+    return () => {
+      window.removeEventListener("dipkri-webcam-settings-changed", handleWebcamChange);
+    };
+  }, []);
 
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
@@ -772,6 +791,100 @@ export const Controls = (props: ControlsProps) => {
                 )}
               </div>
             )}
+
+            {/* Player Settings Menu: Webcam Bubbles Drag, Size & Preferences */}
+            <Menu
+              position="top-end"
+              withinPortal={true}
+              portalProps={{
+                target:
+                  typeof document !== "undefined"
+                    ? (document.fullscreenElement as HTMLElement) || document.body
+                    : undefined,
+              }}
+              onOpen={() => setIsMenuOpen(true)}
+              onClose={() => {
+                setIsMenuOpen(false);
+                resetHideTimer();
+              }}
+            >
+              <Menu.Target>
+                <div
+                  className={`${styles.action} ${webcamState.dragUnlocked ? styles.activeFeature : ""}`}
+                  title="Player & Webcam Settings"
+                >
+                  <WPIconSettings size={20} />
+                </div>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Webcam Bubbles</Menu.Label>
+                {/* 1. Drag Unlock Toggle */}
+                <Menu.Item
+                  onClick={() => {
+                    setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked });
+                  }}
+                  rightSection={
+                    webcamState.dragUnlocked ? (
+                      <WPIconCheck size={16} color="#6366f1" />
+                    ) : null
+                  }
+                >
+                  {webcamState.dragUnlocked ? "Dragging: Unlocked (Movable)" : "Dragging: Locked (Clean Video)"}
+                </Menu.Item>
+
+                {/* 2. Size presets */}
+                <Menu.Divider />
+                <Menu.Label>Bubble Size</Menu.Label>
+                {[
+                  { key: "min", label: "Minimum (48px)" },
+                  { key: "small", label: "Small (70px)" },
+                  { key: "medium", label: "Medium (95px)" },
+                  { key: "max", label: "Maximum (145px)" },
+                ].map((item) => (
+                  <Menu.Item
+                    key={item.key}
+                    onClick={() => {
+                      setWebcamSettings({ size: item.key as BubbleSize });
+                    }}
+                    rightSection={
+                      webcamState.size === item.key ? (
+                        <WPIconCheck size={16} color="#6366f1" />
+                      ) : null
+                    }
+                  >
+                    {item.label}
+                  </Menu.Item>
+                ))}
+
+                <Menu.Divider />
+                {/* 3. Show / Hide Bubbles */}
+                <Menu.Item
+                  onClick={() => {
+                    setWebcamSettings({ visible: !webcamState.visible });
+                  }}
+                  rightSection={
+                    webcamState.visible ? (
+                      <WPIconCheck size={16} color="#6366f1" />
+                    ) : null
+                  }
+                >
+                  {webcamState.visible ? "Webcam Bubbles: Visible" : "Webcam Bubbles: Hidden"}
+                </Menu.Item>
+
+                {/* 4. Link to all room settings */}
+                {props.onOpenSettings && (
+                  <>
+                    <Menu.Divider />
+                    <Menu.Item
+                      leftSection={<WPIconSettings size={16} />}
+                      onClick={props.onOpenSettings}
+                    >
+                      All Room Settings...
+                    </Menu.Item>
+                  </>
+                )}
+              </Menu.Dropdown>
+            </Menu>
 
             {/* Fullscreen Toggle */}
             <div

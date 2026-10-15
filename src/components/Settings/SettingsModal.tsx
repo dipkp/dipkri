@@ -13,6 +13,11 @@ import {
   SegmentedControl,
 } from "@mantine/core";
 import { getCurrentSettings, updateSettings } from "./LocalSettings";
+import {
+  getWebcamSettings,
+  setWebcamSettings,
+  BubbleSize,
+} from "../VideoChat/webcamSettings";
 import { serverPath } from "../../utils/utils";
 import { PermanentRoomModal } from "../Modal/PermanentRoomModal";
 import { Socket } from "socket.io-client";
@@ -210,25 +215,55 @@ export const SettingsModal = ({
             }}
           />
 
+          {/* SECTION 2.5: Floating Webcam Bubbles Controls */}
           <SettingRow
             disabled={false}
             content={
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", padding: "4px 0" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", padding: "4px 0" }}>
+                {/* 1. Drag Unlock Option */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ maxWidth: "380px" }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
+                      Unlock Bubble Dragging
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                      Turn on to drag and reposition webcam bubbles anywhere over the video. Turn off to lock position and eliminate all drag icons.
+                    </div>
+                  </div>
+                  <Switch
+                    size="md"
+                    color="indigo"
+                    checked={getWebcamSettings().dragUnlocked}
+                    onChange={(e) => {
+                      const next = e.currentTarget.checked;
+                      setWebcamSettings({ dragUnlocked: next });
+                      updateSettings(
+                        JSON.stringify({
+                          ...getCurrentSettings(),
+                          webcamDragUnlocked: next,
+                        }),
+                      );
+                      setUpdateTS(Date.now());
+                    }}
+                  />
+                </div>
+
+                {/* 2. Bubble Size Option (Min / Small / Medium / Max) */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
                       Webcam Bubble Size
                     </div>
                     <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                      Adjust the size of the floating circular video bubbles over the player.
+                      Adjust circular video head diameter (Minimum to Maximum).
                     </div>
                   </div>
                   <SegmentedControl
                     size="xs"
-                    value={getCurrentSettings().webcamBubbleSize || localStorage.getItem("dipkri-webcam-size") || "medium"}
+                    value={getWebcamSettings().size}
                     onChange={(val) => {
-                      const newSize = val as "small" | "medium" | "large";
-                      localStorage.setItem("dipkri-webcam-size", newSize);
+                      const newSize = val as BubbleSize;
+                      setWebcamSettings({ size: newSize });
                       updateSettings(
                         JSON.stringify({
                           ...getCurrentSettings(),
@@ -238,10 +273,39 @@ export const SettingsModal = ({
                       setUpdateTS(Date.now());
                     }}
                     data={[
-                      { label: "Small (60px)", value: "small" },
-                      { label: "Medium (90px)", value: "medium" },
-                      { label: "Large (130px)", value: "large" },
+                      { label: "Min (48px)", value: "min" },
+                      { label: "Small (70px)", value: "small" },
+                      { label: "Medium (95px)", value: "medium" },
+                      { label: "Max (145px)", value: "max" },
                     ]}
+                  />
+                </div>
+
+                {/* 3. Show / Hide Floating Bubbles */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ maxWidth: "380px" }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
+                      Show Floating Webcams
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                      Display participant video bubbles floating over the video player.
+                    </div>
+                  </div>
+                  <Switch
+                    size="md"
+                    color="indigo"
+                    checked={getWebcamSettings().visible}
+                    onChange={(e) => {
+                      const next = e.currentTarget.checked;
+                      setWebcamSettings({ visible: next });
+                      updateSettings(
+                        JSON.stringify({
+                          ...getCurrentSettings(),
+                          webcamBubblesVisible: next,
+                        }),
+                      );
+                      setUpdateTS(Date.now());
+                    }}
                   />
                 </div>
               </div>

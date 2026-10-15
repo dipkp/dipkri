@@ -5,30 +5,21 @@ import {
   getDefaultPicture,
   getColorForStringHex,
 } from "../../utils/utils";
-import {
-  WPIconClose,
-  WPIconUser,
-  WPIconChevronLeft,
-  WPIconChevronRight,
-} from "../Icons/CustomIcons";
+import { WPIconClose } from "../Icons/CustomIcons";
 import {
   IconMicrophone,
   IconMicrophoneOff,
   IconVideo,
   IconVideoOff,
   IconPin,
-  IconPinned,
   IconArrowsMove,
-  IconMinus,
 } from "@tabler/icons-react";
-
-export type BubbleSize = "small" | "medium" | "large";
-
-const SIZE_PRESETS: Record<BubbleSize, number> = {
-  small: 60,
-  medium: 90,
-  large: 130,
-};
+import {
+  BubbleSize,
+  SIZE_PRESETS,
+  getWebcamSettings,
+  setWebcamSettings,
+} from "./webcamSettings";
 
 // Stream-driven video element
 const BubbleVideoElement = ({
@@ -130,25 +121,21 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
 }) => {
   const selfId = getOrCreateClientId();
 
-  // Load saved size from localStorage or default to medium
-  const [sizePreset, setSizePreset] = useState<BubbleSize>(() => {
-    try {
-      const saved = localStorage.getItem("dipkri-webcam-size");
-      if (saved === "small" || saved === "medium" || saved === "large") {
-        return saved;
-      }
-    } catch {}
-    return "medium";
-  });
+  // Load initial settings from centralized store
+  const [sizePreset, setSizePreset] = useState<BubbleSize>(
+    () => getWebcamSettings().size,
+  );
+  const [isDragUnlocked, setIsDragUnlocked] = useState<boolean>(
+    () => getWebcamSettings().dragUnlocked,
+  );
+  const [isVisible, setIsVisible] = useState<boolean>(
+    () => getWebcamSettings().visible,
+  );
 
-  // State: Pinned user ID (single person focus)
+  // Pinned user state (single friend pin)
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
-  // State: Minimized pill mode
-  const [isMinimized, setIsMinimized] = useState(false);
-  // State: Focused single-user only vs all
-  const [focusMode, setFocusMode] = useState<"all" | "pinned-only">("all");
 
-  // Draggable position coordinates (x, y in pixels from top-right by default)
+  // Position state (pixels from top-right)
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
     try {
       const saved = localStorage.getItem("dipkri-webcam-pos");
@@ -156,30 +143,54 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
         return JSON.parse(saved);
       }
     } catch {}
-    return { x: 20, y: 70 }; // default top-right offset
+    return { x: 20, y: 70 };
   });
 
   const isDraggingRef = useRef(false);
-  const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number }>({
+  const dragStartRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    startX: number;
+    startY: number;
+  }>({
     mouseX: 0,
     mouseY: 0,
     startX: 0,
     startY: 0,
   });
 
-  // Save size changes
-  const changeSize = (newSize: BubbleSize) => {
-    setSizePreset(newSize);
-    try {
-      localStorage.setItem("dipkri-webcam-size", newSize);
-    } catch {}
-  };
+  // Listen for real-time setting updates dispatched from SettingsModal or Controls
+  useEffect(() => {
+    const handleSettingsChange = (e: any) => {
+      if (e?.detail) {
+        if (e.detail.size) setSizePreset(e.detail.size);
+        if (typeof e.detail.dragUnlocked === "boolean") {
+          setIsDragUnlocked(e.detail.dragUnlocked);
+        }
+        if (typeof e.detail.visible === "boolean") {
+          setIsVisible(e.detail.visible);
+        }
+      }
+    };
 
-  const cycleSize = () => {
-    if (sizePreset === "small") changeSize("medium");
-    else if (sizePreset === "medium") changeSize("large");
-    else changeSize("small");
-  };
+    window.addEventListener(
+      "dipkri-webcam-settings-changed",
+      handleSettingsChange,
+    );
+    window.addEventListener("storage", () => {
+      const current = getWebcamSettings();
+      setSizePreset(current.size);
+      setIsDragUnlocked(current.dragUnlocked);
+      setIsVisible(current.visible);
+    });
+
+    return () => {
+      window.removeEventListener(
+        "dipkri-webcam-settings-changed",
+        handleSettingsChange,
+      );
+    };
+  }, []);
 
   // Filter video chat users
   const videoUsers = participants.filter((p) => p.isVideoChat);
@@ -187,6 +198,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
 
   // Drag handlers
   const handleDragStart = (clientX: number, clientY: number) => {
+    if (!isDragUnlocked) return;
     isDraggingRef.current = true;
     dragStartRef.current = {
       mouseX: clientX,
@@ -239,23 +251,25 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     };
   }, [handleDragMove, handleDragEnd]);
 
-  // If no one is in video chat, don't show the bubbles
-  if (videoUsers.length === 0) {
+  // Lock dragging directly from banner button
+  const handleLockPosition = () => {
+    setIsDragUnlocked(false);
+    setWebcamSettings({ dragUnlocked: false });
+  };
+
+  // If user disabled floating bubbles in settings or no one is in video chat
+  if (!isVisible || videoUsers.length === 0) {
     return null;
   }
 
-  const diameter = SIZE_PRESETS[sizePreset];
+  const diameter = SIZE_PRESETS[sizePreset] || SIZE_PRESETS.medium;
 
-  // Resolve which users to render based on Pin and Focus Mode
+  // Resolve ordering: pinned user first
   let usersToRender = [...videoUsers];
-  if (pinnedUserId && focusMode === "pinned-only") {
-    const pinnedUser = videoUsers.find((u) => u.id === pinnedUserId);
-    if (pinnedUser) {
-      usersToRender = [pinnedUser];
-    }
-  } else if (pinnedUserId) {
-    // Put pinned user first
-    usersToRender.sort((a, b) => (a.id === pinnedUserId ? -1 : b.id === pinnedUserId ? 1 : 0));
+  if (pinnedUserId) {
+    usersToRender.sort((a, b) =>
+      a.id === pinnedUserId ? -1 : b.id === pinnedUserId ? 1 : 0,
+    );
   }
 
   // Get stream for user
@@ -284,192 +298,161 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
         top: `${position.y}px`,
       }}
     >
-      {/* Minimized Pill */}
-      {isMinimized ? (
+      {/* Drag Mode Banner: ONLY rendered when "Unlock Dragging" is turned ON in Settings */}
+      {isDragUnlocked && (
         <div
-          className={styles.minimizedPill}
-          onClick={() => setIsMinimized(false)}
-          title="Click to expand webcam bubbles"
+          className={styles.dragModeBanner}
+          onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
+          onTouchStart={(e) => {
+            if (e.touches[0]) {
+              handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+            }
+          }}
+          title="Drag to reposition webcam bubbles"
         >
-          <div className={styles.liveCallDot} />
-          <span>{videoUsers.length} in Call</span>
-        </div>
-      ) : (
-        <>
-          {/* Draggable Toolbar */}
-          <div
-            className={styles.floatingToolbar}
-            onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
-            onTouchStart={(e) => {
-              if (e.touches[0]) {
-                handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
-              }
-            }}
-          >
-            <div className={styles.dragHandle} title="Drag bubbles anywhere">
-              <IconArrowsMove size={13} />
-            </div>
-
-            {/* Quick Size Cycler: S / M / L */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              onClick={cycleSize}
-              title={`Bubble Size: ${sizePreset.toUpperCase()} (Click to toggle)`}
-            >
-              {sizePreset === "small" ? "S" : sizePreset === "medium" ? "M" : "L"}
-            </button>
-
-            {/* Pin Toggle */}
-            {pinnedUserId && (
-              <button
-                type="button"
-                className={`${styles.toolBtn} ${focusMode === "pinned-only" ? styles.activeToolBtn : ""}`}
-                onClick={() =>
-                  setFocusMode((prev) => (prev === "all" ? "pinned-only" : "all"))
-                }
-                title={focusMode === "pinned-only" ? "Show All Friends" : "Focus Only Pinned Friend"}
-              >
-                {focusMode === "pinned-only" ? "Show All" : "1 Pin"}
-              </button>
-            )}
-
-            {/* Join Call Quick Pill if self not in call */}
-            {!isSelfInVideo && onJoinVideo && (
-              <button
-                type="button"
-                className={styles.joinCallBtn}
-                onClick={onJoinVideo}
-                title="Join Video Call"
-              >
-                <IconVideo size={13} />
-                <span>Join</span>
-              </button>
-            )}
-
-            {/* Minimize Pill Button */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              onClick={() => setIsMinimized(true)}
-              title="Minimize to small pill"
-            >
-              <IconMinus size={13} />
-            </button>
+          <div className={styles.dragHandleIcon}>
+            <IconArrowsMove size={13} />
           </div>
+          <span>Drag to Move</span>
+          <button
+            type="button"
+            className={styles.lockBtn}
+            onClick={handleLockPosition}
+            title="Lock bubbles in place and hide drag controls"
+          >
+            Lock
+          </button>
+        </div>
+      )}
 
-          {/* Bubbles Cluster */}
-          <div className={styles.bubblesCluster}>
-            {usersToRender.map((user) => {
-              const isSelf = user.id === selfId;
-              const isPinned = user.id === pinnedUserId;
-              const stream = getUserStream(user.id);
-              const displayName = nameMap[user.id] || (isSelf ? "You" : "Friend");
-              const avatar =
-                pictureMap[user.id] ||
-                getDefaultPicture(displayName, getColorForStringHex(user.id));
-              const isMuted = user.isMuted;
+      {/* Pure Circular Video Bubbles Cluster - Zero Clutter */}
+      <div
+        className={`${styles.bubblesCluster} ${isDragUnlocked ? styles.dragActiveCluster : ""}`}
+        onMouseDown={(e) => {
+          if (isDragUnlocked) {
+            handleDragStart(e.clientX, e.clientY);
+          }
+        }}
+        onTouchStart={(e) => {
+          if (isDragUnlocked && e.touches[0]) {
+            handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }}
+      >
+        {usersToRender.map((user) => {
+          const isSelf = user.id === selfId;
+          const isPinned = user.id === pinnedUserId;
+          const stream = getUserStream(user.id);
+          const displayName = nameMap[user.id] || (isSelf ? "You" : "Friend");
+          const avatar =
+            pictureMap[user.id] ||
+            getDefaultPicture(displayName, getColorForStringHex(user.id));
+          const isMuted = user.isMuted;
+          const bubbleWidth = isPinned ? diameter * 1.25 : diameter;
 
-              return (
+          return (
+            <div
+              key={user.id}
+              className={styles.bubbleItem}
+              style={{
+                width: `${bubbleWidth}px`,
+                height: `${bubbleWidth}px`,
+              }}
+              onClick={() => {
+                // If dragging is unlocked, avoid accidental pin toggle on drag
+                if (isDragUnlocked) return;
+                // Pin / unpin on click
+                setPinnedUserId(isPinned ? null : user.id);
+              }}
+              title={`${displayName}${isPinned ? " (Pinned)" : " - Click to pin"}`}
+            >
+              <div
+                className={`${styles.videoCircle} ${
+                  isPinned
+                    ? styles.pinnedRing
+                    : !isMuted
+                      ? styles.speakingRing
+                      : styles.mutedRing
+                }`}
+              >
+                <BubbleVideoElement
+                  stream={stream}
+                  isSelf={isSelf}
+                  avatarUrl={avatar}
+                  name={displayName}
+                />
+              </div>
+
+              {/* Pin Badge */}
+              {isPinned && (
+                <div className={styles.pinBadge} title="Pinned Friend">
+                  <IconPin size={11} />
+                </div>
+              )}
+
+              {/* Mic Muted Badge */}
+              {isMuted && (
+                <div className={styles.micBadge} title="Microphone Muted">
+                  <IconMicrophoneOff size={10} />
+                </div>
+              )}
+
+              {/* Name Tag Tooltip on Hover */}
+              <div className={styles.nameTag}>
+                {displayName} {isPinned ? "(Pinned)" : ""}
+              </div>
+
+              {/* In-Bubble Quick Controls for Self - Only visible on hover */}
+              {isSelf && (
                 <div
-                  key={user.id}
-                  className={styles.bubbleItem}
-                  style={{
-                    width: `${isPinned && focusMode === "pinned-only" ? diameter * 1.3 : diameter}px`,
-                    height: `${isPinned && focusMode === "pinned-only" ? diameter * 1.3 : diameter}px`,
-                  }}
-                  onClick={() => {
-                    // Tap to pin/unpin
-                    if (isPinned) {
-                      setPinnedUserId(null);
-                      setFocusMode("all");
-                    } else {
-                      setPinnedUserId(user.id);
-                    }
-                  }}
-                  title={`${displayName} - Click to ${isPinned ? "unpin" : "pin"}`}
+                  className={styles.selfOverlay}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <div
-                    className={`${styles.videoCircle} ${
-                      isPinned
-                        ? styles.pinnedRing
-                        : !isMuted
-                        ? styles.speakingRing
-                        : styles.mutedRing
-                    }`}
-                  >
-                    <BubbleVideoElement
-                      stream={stream}
-                      isSelf={isSelf}
-                      avatarUrl={avatar}
-                      name={displayName}
-                    />
-                  </div>
-
-                  {/* Pin Badge */}
-                  {isPinned && (
-                    <div className={styles.pinBadge} title="Pinned Friend">
-                      <IconPin size={12} />
-                    </div>
-                  )}
-
-                  {/* Mic Muted Badge */}
-                  {isMuted && (
-                    <div className={styles.micBadge} title="Microphone Muted">
-                      <IconMicrophoneOff size={11} />
-                    </div>
-                  )}
-
-                  {/* Name Tag Tooltip */}
-                  <div className={styles.nameTag}>
-                    {displayName} {isPinned ? "(Pinned)" : ""}
-                  </div>
-
-                  {/* In-Bubble Quick Controls for Self */}
-                  {isSelf && (
-                    <div
-                      className={styles.selfOverlay}
-                      onClick={(e) => e.stopPropagation()}
+                  {onToggleAudio && (
+                    <button
+                      type="button"
+                      className={styles.quickActionBtn}
+                      onClick={onToggleAudio}
+                      title={isAudioMuted ? "Unmute Mic" : "Mute Mic"}
                     >
-                      {onToggleAudio && (
-                        <button
-                          type="button"
-                          className={styles.quickActionBtn}
-                          onClick={onToggleAudio}
-                          title={isAudioMuted ? "Unmute Mic" : "Mute Mic"}
-                        >
-                          {isAudioMuted ? <IconMicrophoneOff size={13} /> : <IconMicrophone size={13} />}
-                        </button>
+                      {isAudioMuted ? (
+                        <IconMicrophoneOff size={12} />
+                      ) : (
+                        <IconMicrophone size={12} />
                       )}
-                      {onToggleVideo && (
-                        <button
-                          type="button"
-                          className={styles.quickActionBtn}
-                          onClick={onToggleVideo}
-                          title={isVideoMuted ? "Start Camera" : "Stop Camera"}
-                        >
-                          {isVideoMuted ? <IconVideoOff size={13} /> : <IconVideo size={13} />}
-                        </button>
+                    </button>
+                  )}
+                  {onToggleVideo && (
+                    <button
+                      type="button"
+                      className={styles.quickActionBtn}
+                      onClick={onToggleVideo}
+                      title={isVideoMuted ? "Start Camera" : "Stop Camera"}
+                    >
+                      {isVideoMuted ? (
+                        <IconVideoOff size={12} />
+                      ) : (
+                        <IconVideo size={12} />
                       )}
-                      {onLeaveVideo && (
-                        <button
-                          type="button"
-                          className={styles.quickActionBtn}
-                          onClick={onLeaveVideo}
-                          style={{ background: "rgba(239, 68, 68, 0.85)" }}
-                          title="Leave Video Call"
-                        >
-                          <WPIconClose size={13} />
-                        </button>
-                      )}
-                    </div>
+                    </button>
+                  )}
+                  {onLeaveVideo && (
+                    <button
+                      type="button"
+                      className={styles.quickActionBtn}
+                      onClick={onLeaveVideo}
+                      style={{ background: "rgba(239, 68, 68, 0.9)" }}
+                      title="Leave Video Call"
+                    >
+                      <WPIconClose size={12} />
+                    </button>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

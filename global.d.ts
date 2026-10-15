@@ -46,9 +46,13 @@ interface ChatMessage extends ChatMessageBase {
   reactions?: { [value: string]: string[] };
 }
 
+type BubbleSize = "min" | "small" | "medium" | "max";
+
 interface Settings {
   disableChatSound?: boolean;
-  webcamBubbleSize?: "small" | "medium" | "large";
+  webcamBubbleSize?: BubbleSize;
+  webcamDragUnlocked?: boolean;
+  webcamBubblesVisible?: boolean;
 }
 
 interface PlaylistVideo {
