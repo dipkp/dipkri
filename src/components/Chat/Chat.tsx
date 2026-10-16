@@ -180,6 +180,7 @@ export class Chat extends React.Component<ChatProps> {
   sampleCanvas?: HTMLCanvasElement;
   lastSendTime = 0;
   blurTimeout: any = null;
+  isSending = false;
 
   async componentDidMount() {
     this.scrollToBottom();
@@ -351,7 +352,7 @@ export class Chat extends React.Component<ChatProps> {
 
   sendChatMsg = () => {
     const now = Date.now();
-    if (now - this.lastSendTime < 200) {
+    if (now - this.lastSendTime < 180) {
       return;
     }
     this.lastSendTime = now;
@@ -363,6 +364,19 @@ export class Chat extends React.Component<ChatProps> {
       return;
     }
 
+    this.isSending = true;
+
+    const keepKeyboardAlive = () => {
+      this.chatInputRef.current?.focus();
+      requestAnimationFrame(() => {
+        this.chatInputRef.current?.focus();
+      });
+      setTimeout(() => {
+        this.chatInputRef.current?.focus();
+        this.isSending = false;
+      }, 120);
+    };
+
     if (this.state.replyTo?.id && this.state.replyTo.timestamp) {
       const chatPayload: ChatPayload = {
         msg: text,
@@ -370,18 +384,14 @@ export class Chat extends React.Component<ChatProps> {
         replyToTimestamp: this.state.replyTo.timestamp,
       };
       this.props.socket.emit("CMD:chatV2", chatPayload);
-      this.setState({ chatMsg: "", replyTo: undefined }, () => {
-        this.chatInputRef.current?.focus();
-      });
-      this.chatInputRef.current?.focus();
+      this.setState({ chatMsg: "", replyTo: undefined }, keepKeyboardAlive);
+      keepKeyboardAlive();
       return;
     }
 
-    this.setState({ chatMsg: "", replyTo: undefined }, () => {
-      this.chatInputRef.current?.focus();
-    });
+    this.setState({ chatMsg: "", replyTo: undefined }, keepKeyboardAlive);
     this.props.socket.emit("CMD:chat", text);
-    this.chatInputRef.current?.focus();
+    keepKeyboardAlive();
   };
 
   setReplyTo = (id: string, timestamp: string, msg?: string) => {
@@ -715,20 +725,28 @@ export class Chat extends React.Component<ChatProps> {
                 }
               }}
               onBlur={() => {
+                if (this.isSending) {
+                  this.chatInputRef.current?.focus();
+                  return;
+                }
                 this.blurTimeout = setTimeout(() => {
-                  if (document.activeElement !== this.chatInputRef.current) {
+                  if (document.activeElement !== this.chatInputRef.current && !this.isSending) {
                     this.props.onKeyboardToggle?.(false);
                   }
-                }, 160);
+                }, 180);
                 if (typeof window !== "undefined") {
                   setTimeout(() => {
                     window.scrollTo(0, 0);
                   }, 60);
                 }
               }}
+              enterKeyHint="send"
+              autoComplete="off"
+              autoCorrect="off"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
+                  e.stopPropagation();
                   this.sendChatMsg();
                 }
               }}
@@ -743,18 +761,27 @@ export class Chat extends React.Component<ChatProps> {
             />
           </div>
 
-          {/* WhatsApp Circular Green Send Button */}
+          {/* WhatsApp Circular Green Send Button - NEVER set disabled in DOM to prevent browser cancelling touch and closing keyboard */}
           <button
             type="button"
+            tabIndex={-1}
             className={`${styles.sendButton} ${
               this.state.chatMsg.trim() ? styles.sendActive : styles.sendDisabled
             }`}
+            style={{
+              cursor: this.state.chatMsg.trim() ? "pointer" : "default",
+              pointerEvents: this.props.isChatDisabled ? "none" : "auto",
+            }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+            }}
             onMouseDown={(e) => {
-              // Crucial: Prevent mouse click from stealing focus from input
               e.preventDefault();
             }}
             onTouchStart={(e) => {
-              // Crucial on mobile: Prevent touch from stealing focus so keyboard never drops
+              e.preventDefault();
+            }}
+            onTouchEnd={(e) => {
               e.preventDefault();
               this.sendChatMsg();
             }}
@@ -762,7 +789,6 @@ export class Chat extends React.Component<ChatProps> {
               e.preventDefault();
               this.sendChatMsg();
             }}
-            disabled={this.props.isChatDisabled || !this.state.chatMsg.trim()}
             title="Send (Enter)"
           >
             <WPIconSend size={18} />
