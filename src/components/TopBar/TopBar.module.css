@@ -1,212 +1,295 @@
-:root {
-  --bg-primary: #090a0f;
-  --bg-glass: rgba(255, 255, 255, 0.04);
-  --bg-glass-hover: rgba(255, 255, 255, 0.08);
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --border-glass-strong: rgba(255, 255, 255, 0.12);
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  --accent-glow: 0 0 20px rgba(99, 102, 241, 0.4);
-}
+/* TopBar.module.css - Ultra-Compact Minimalist Command Bar */
 
 .topBar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  row-gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   position: sticky;
   top: 0;
   z-index: 100;
-  padding: 8px 16px;
-  background: rgba(9, 10, 15, 0.85);
+  height: 46px;
+  min-height: 46px;
+  max-height: 46px;
+  padding: 0 16px;
+  background: rgba(8, 9, 13, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   width: 100%;
   box-sizing: border-box;
-  transition: all 0.2s ease;
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .brandLink {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .topbarArtLogo {
-  height: 38px;
+  height: 25px;
   width: auto;
-  max-width: 140px;
+  max-width: 110px;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
 
 .brandLink:hover .topbarArtLogo {
-  transform: scale(1.05);
-  filter: drop-shadow(0 0 14px rgba(253, 230, 138, 0.35));
+  transform: scale(1.04);
 }
 
-@media only screen and (max-width: 600px) {
-  .topbarArtLogo {
-    height: 32px;
-    max-width: 110px;
+.roomPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px 8px;
+  color: #cbd5e1;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roomPill:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.roomPillCopied {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: #34d399 !important;
+}
+
+/* Center Smart Status Indicators */
+.centerSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media only screen and (max-width: 860px) {
+  .centerSection {
+    display: none;
   }
 }
 
-.brandLogo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  transition: transform 0.2s ease;
-}
-
-.brandLink:hover .brandLogo {
-  transform: scale(1.05);
-}
-
-.logo {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  line-height: 1.2;
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: transparent;
+.statusPill {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 9999px;
+  padding: 3px 9px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: -0.01em;
   user-select: none;
 }
 
-.roomTitleContainer {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  margin-left: 12px;
-  margin-right: 12px;
+.syncDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+  animation: syncPulse 2s infinite ease-in-out;
 }
 
-.roomTitle {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  line-height: 1.2;
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: transparent;
+.syncDotBehind {
+  background: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.8);
+  animation: syncPulse 1.2s infinite ease-in-out;
 }
 
-.roomDescription {
-  color: var(--text-secondary, #94a3b8);
-  font-size: 13px;
-  margin-top: 2px;
+@keyframes syncPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
 }
 
-.actionGroup {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.iconGroup {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.iconButton {
-  border-radius: 50% !important;
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: #94a3b8 !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 !important;
-}
-
-.iconButton:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-}
-
-.newRoomButton {
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%) !important;
-  color: #ffffff !important;
-  border-radius: 12px !important;
-  font-weight: 600 !important;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  border: none !important;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.35);
+.syncBtnClickable {
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.newRoomButton:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.55), 0 0 15px rgba(6, 182, 212, 0.35);
-  filter: brightness(1.05);
+.syncBtnClickable:hover {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fdba74;
 }
 
-.signInButton {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: #f8fafc !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 12px !important;
-  font-weight: 600 !important;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+/* Right Actions */
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
-.signInButton:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  color: #ffffff !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+.shareBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.shareBtn:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #ffffff;
+  transform: translateY(-0.5px);
+}
+
+.shareBtn:active {
+  transform: translateY(0);
+}
+
+.newRoomBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  border: none;
+  color: #ffffff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+  transition: all 0.18s ease;
+}
+
+.newRoomBtn:hover {
+  transform: translateY(-0.5px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.5);
+  filter: brightness(1.06);
+}
+
+.joinBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.joinBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.signInBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.signInBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* User Avatar Ring */
+.userAvatarRing {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(99, 102, 241, 0.5);
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+  transition: all 0.2s ease;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.userAvatarRing:hover {
+  transform: scale(1.08);
+  border-color: rgba(6, 182, 212, 0.8);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.4);
 }
 
 @media only screen and (max-width: 600px) {
   .topBar {
-    padding: 6px 12px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 0 10px;
+    gap: 8px;
   }
 
-  .logo {
-    font-size: 20px;
+  .topbarArtLogo {
+    height: 22px;
   }
 
-  .brandLogo {
-    width: 32px;
-    height: 32px;
+  .roomPill {
+    font-size: 10.5px;
+    padding: 2px 6px;
+    max-width: 110px;
   }
 
-  .roomTitle {
-    font-size: 18px;
-  }
-
-  .actionGroup {
-    gap: 6px;
-    width: 100%;
-    margin-left: 0;
+  .shareBtn,
+  .joinBtn,
+  .newRoomBtn {
+    padding: 4px 8px;
+    font-size: 11px;
   }
 }

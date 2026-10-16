@@ -45,11 +45,11 @@
   --glass-blur: 16px;
   --glass-blur-sm: 8px;
 
-  /* Mantine Theme Variable Overrides */
+  /* Minimalist Mantine Theme Variable Overrides */
   --mantine-color-body: var(--bg-primary);
   --mantine-color-text: var(--text-primary);
-  --mantine-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --mantine-font-family-headings: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mantine-font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mantine-font-family-headings: 'Plus Jakarta Sans', 'Inter', sans-serif;
 }
 
 /* ==========================================================================
@@ -78,17 +78,19 @@ body {
   min-height: 100%;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.45;
+  letter-spacing: -0.012em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-tap-highlight-color: transparent;
   overflow-x: clip;
 }
 
-/* Headings font family */
+/* Headings font family - Minimalist geometric style */
 h1,
 h2,
 h3,
@@ -96,10 +98,19 @@ h4,
 h5,
 h6,
 .display-font {
-  font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.02em;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.025em;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+/* Tabular numerals for timestamps, stats, and durations */
+.tabular-nums,
+[data-tabular-nums="true"],
+code,
+time {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* ==========================================================================

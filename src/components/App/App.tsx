@@ -96,7 +96,7 @@ import {
 } from "../Mobile/MobileEnhancements";
 import { LiveCaptions } from "../LiveCaptions/LiveCaptions";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
-import { getPlayerSettings } from "../PlayerSettings/playerSettings";
+import { getPlayerSettings, setPlayerSettings } from "../PlayerSettings/playerSettings";
 import { InviteButton } from "../InviteButton/InviteButton";
 import type WebTorrent from "webtorrent";
 import type Hls from "hls.js";
@@ -207,7 +207,9 @@ interface AppState {
   isKeyboardOpen: boolean;
   isTyping: boolean;
   incomingReaction: { emoji: string; ts: number; senderId?: string } | null;
-  desktopSidebarTab?: "chat" | "people" | "playlist";
+  desktopSidebarTab?: "chat" | "people" | "playlist" | "settings";
+  audioBoost: number;
+  copiedLink: boolean;
 }
 
 const checkIsMobileDevice = () => {
@@ -322,6 +324,8 @@ export class App extends React.Component<AppProps, AppState> {
     convertProgress: undefined,
     convertEnabled: window.localStorage.getItem("watchparty-convert") === "1",
     incomingReaction: null,
+    audioBoost: getPlayerSettings().audioBoost || 100,
+    copiedLink: false,
   };
   socket: Socket = null!;
   videoChatRef = React.createRef<VideoChat>();
@@ -2353,9 +2357,40 @@ export class App extends React.Component<AppProps, AppState> {
     this.setState({ settingsModalOpen });
   };
 
+  cycleAudioBoost = () => {
+    const current = this.state.audioBoost || 100;
+    const next = current === 100 ? 150 : current === 150 ? 200 : 100;
+    this.setState({ audioBoost: next });
+    setPlayerSettings({ audioBoost: next });
+    audioEnhancer.setBoost(next);
+  };
+
+  copyRoomLink = () => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(window.location.href);
+      this.setState({ copiedLink: true });
+      setTimeout(() => this.setState({ copiedLink: false }), 2000);
+    }
+  };
+
   render() {
     const sharer = this.state.participants.find((p) => p.isScreenShare);
     const playlist = this.state.playlist;
+    const isBehind =
+      !this.state.isLiveStream &&
+      !this.playingScreenShare() &&
+      !this.playingFileShare() &&
+      Boolean(this.getLeaderTime()) &&
+      Number.isFinite(this.getLeaderTime()) &&
+      this.getLeaderTime() > 0 &&
+      this.getLeaderTime() - this.Player().getCurrentTime() > 10;
+    const onSyncAction = () => {
+      if (this.state.isLiveStream) {
+        this.roomSeek(this.Player().getDuration());
+      } else {
+        this.localSeek();
+      }
+    };
     const controls = (
       <Controls
         key={this.state.controlsTimestamp}
@@ -2617,22 +2652,8 @@ export class App extends React.Component<AppProps, AppState> {
             this.socket?.emit("CMD:chat", emoji);
           }}
           incomingReaction={this.state.incomingReaction}
-          isBehind={
-            !this.state.isLiveStream &&
-            !this.playingScreenShare() &&
-            !this.playingFileShare() &&
-            Boolean(this.getLeaderTime()) &&
-            Number.isFinite(this.getLeaderTime()) &&
-            this.getLeaderTime() > 0 &&
-            this.getLeaderTime() - this.Player().getCurrentTime() > 10
-          }
-          onSync={() => {
-            if (this.state.isLiveStream) {
-              this.roomSeek(this.Player().getDuration());
-            } else {
-              this.localSeek();
-            }
-          }}
+          isBehind={isBehind}
+          onSync={onSyncAction}
         />
       </div>
     );
@@ -2762,7 +2783,7 @@ export class App extends React.Component<AppProps, AppState> {
         )}
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>
-            {/* Slim 44px Top Bar (dipkri Title only) - auto-hides when typing to maximize video & chat room */}
+            {/* Slim 38px Compact Mobile Header with Room Code & Sync Status */}
             <header
               className={`${styles.mobileHeader} ${
                 this.state.isKeyboardOpen || this.state.isTyping
@@ -2770,7 +2791,7 @@ export class App extends React.Component<AppProps, AppState> {
                   : ""
               }`}
             >
-              <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <a
                   href="/"
                   style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
@@ -2779,13 +2800,47 @@ export class App extends React.Component<AppProps, AppState> {
                   <img
                     src="/dypkri-art.png"
                     alt="Dypkri"
-                    style={{ height: "26px", width: "auto", objectFit: "contain", display: "block" }}
+                    style={{ height: "22px", width: "auto", objectFit: "contain", display: "block" }}
                   />
                 </a>
-                {this.state.roomTitle && (
-                  <span className={styles.mobileTitle}>
-                    {this.state.roomTitle}
-                  </span>
+                {this.state.roomId && (
+                  <button
+                    type="button"
+                    className={styles.mobileRoomPill}
+                    onClick={this.copyRoomLink}
+                    title="Tap to copy room link"
+                  >
+                    <span>{this.state.copiedLink ? "Copied! ✓" : (this.state.roomTitle || `#${this.state.roomId.replace(/^\//, "")}`)}</span>
+                  </button>
+                )}
+              </div>
+
+              <div className={styles.mobileHeaderActions}>
+                {this.state.roomId && (
+                  <div
+                    className={isBehind ? styles.mobileSyncDotBehind : styles.mobileSyncDot}
+                    onClick={isBehind ? onSyncAction : undefined}
+                    title={isBehind ? "Behind • Tap to sync" : "In Sync"}
+                    style={{ cursor: isBehind ? "pointer" : "default" }}
+                  />
+                )}
+                {this.state.roomLock && (
+                  <span title="Locked by Host" style={{ fontSize: "11px" }}>🔒</span>
+                )}
+                {this.state.participants.length > 0 && (
+                  <div className={styles.mobileViewerBadge} title={`${this.state.participants.length} viewers in room`}>
+                    <span>👥 {this.state.participants.length}</span>
+                  </div>
+                )}
+                {this.state.roomId && (
+                  <button
+                    type="button"
+                    className={styles.mobileShareBtn}
+                    onClick={this.copyRoomLink}
+                    title="Share room link"
+                  >
+                    <span>{this.state.copiedLink ? "✓" : "Share"}</span>
+                  </button>
                 )}
               </div>
             </header>
@@ -3111,6 +3166,11 @@ export class App extends React.Component<AppProps, AppState> {
                 roomTitle={this.state.roomTitle}
                 roomDescription={this.state.roomDescription}
                 roomTitleColor={this.state.roomTitleColor}
+                roomId={this.state.roomId}
+                roomLock={this.state.roomLock}
+                participantsCount={this.state.participants.length}
+                isBehind={isBehind}
+                onSync={onSyncAction}
               />
             )}
             <div
@@ -3214,6 +3274,21 @@ export class App extends React.Component<AppProps, AppState> {
                         )}
                       </button>
 
+                      {/* Audio Boost Toggle */}
+                      <button
+                        type="button"
+                        className={`${styles.desktopPillBtn} ${
+                          (this.state.audioBoost || 100) > 100
+                            ? styles.desktopPillActive
+                            : ""
+                        }`}
+                        onClick={this.cycleAudioBoost}
+                        title="Boost dialogue and movie audio (1x, 1.5x, 2x)"
+                      >
+                        <WPIconVolumeOn size={14} />
+                        <span>Boost {this.state.audioBoost === 150 ? "1.5x" : this.state.audioBoost === 200 ? "2x" : "1x"}</span>
+                      </button>
+
                       {/* Optional Transcoder Switch */}
                       {isClientTranscodeSupported() && (
                         <div className={styles.desktopConvertSwitch}>
@@ -3278,12 +3353,12 @@ export class App extends React.Component<AppProps, AppState> {
                 </div>
               </div>
 
-              {/* Right Column: Desktop Command Center Sidebar (390px) */}
+              {/* Right Column: Desktop Command Center Sidebar (340px Compact) */}
               <div
                 className={styles.desktopSidebarColumn}
                 style={{
-                  width: this.state.showChatColumn ? 390 : 0,
-                  maxWidth: this.state.showChatColumn ? 390 : 0,
+                  width: this.state.showChatColumn ? 340 : 0,
+                  maxWidth: this.state.showChatColumn ? 340 : 0,
                   opacity: this.state.showChatColumn ? 1 : 0,
                   pointerEvents: this.state.showChatColumn ? "auto" : "none",
                   borderWidth: this.state.showChatColumn ? 1 : 0,
@@ -3381,6 +3456,21 @@ export class App extends React.Component<AppProps, AppState> {
                         {playlist.length}
                       </span>
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`${styles.desktopNavTab} ${
+                      this.state.desktopSidebarTab === "settings"
+                        ? styles.desktopNavTabActive
+                        : ""
+                    }`}
+                    onClick={() => {
+                      this.setState({ desktopSidebarTab: "settings" });
+                    }}
+                  >
+                    <WPIconSettings size={15} />
+                    <span>Settings</span>
                   </button>
                 </div>
 
@@ -3513,6 +3603,31 @@ export class App extends React.Component<AppProps, AppState> {
                         );
                       })
                     )}
+                  </div>
+
+                  {/* TAB 4: Room & Video Settings */}
+                  <div
+                    style={{
+                      display:
+                        this.state.desktopSidebarTab === "settings"
+                          ? "flex"
+                          : "none",
+                      flexDirection: "column",
+                      height: "100%",
+                      width: "100%",
+                      overflowY: "auto",
+                      padding: "10px",
+                    }}
+                  >
+                    <SettingsModal
+                      inline
+                      modalOpen={true}
+                      setModalOpen={() => {}}
+                      roomLock={this.state.roomLock}
+                      setRoomLock={this.setRoomLock}
+                      socket={this.socket}
+                      roomId={this.state.roomId}
+                    />
                   </div>
                 </div>
               </div>

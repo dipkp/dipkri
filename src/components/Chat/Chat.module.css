@@ -364,10 +364,11 @@
   position: relative;
   max-width: 80%;
   min-width: 75px;
-  padding: 6px 9px 5px 9px;
-  font-family: 'Inter', -apple-system, sans-serif;
-  font-size: 14px;
-  line-height: 1.42;
+  padding: 5px 8px 4px 8px;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
   word-break: break-word;
   overflow-wrap: anywhere;
   box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.18);

@@ -1,21 +1,16 @@
-import React, { useCallback, useContext } from "react";
-import { serverPath, getUserImage, softWhite } from "../../utils/utils";
-import { Avatar, Button, Text } from "@mantine/core";
+import React, { useCallback, useContext, useState } from "react";
+import { serverPath, getUserImage } from "../../utils/utils";
+import { Avatar, Tooltip } from "@mantine/core";
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import { LoginModal } from "../Modal/LoginModal";
 import { ProfileModal } from "../Modal/ProfileModal";
 import Announce from "../Announce/Announce";
-import { InviteButton } from "../InviteButton/InviteButton";
-import appStyles from "../App/App.module.css";
 import { MetadataContext } from "../../MetadataContext";
-import config from "../../config";
 import {
   WPIconPlus,
   WPIconLogin,
-  WPIconDiscord,
-  WPIconGitHub,
-  DipkriLogo,
+  WPIconSync,
 } from "../Icons/CustomIcons";
 import { JoinRoomModal } from "../Modal/JoinRoomModal";
 import styles from "./TopBar.module.css";
@@ -56,14 +51,15 @@ export const NewRoomButton = (props: {
     await createRoom(context.user, props.openNewTab);
   }, [context.user, props.openNewTab]);
   return (
-    <Button
-      size={props.size}
+    <button
+      type="button"
       onClick={onClick}
-      leftSection={<WPIconPlus size={20} />}
-      className={styles.newRoomButton}
+      className={styles.newRoomBtn}
+      title="Create a new synced watch room"
     >
-      New Room
-    </Button>
+      <WPIconPlus size={14} />
+      <span>New Room</span>
+    </button>
   );
 };
 
@@ -71,16 +67,15 @@ export const JoinRoomButton = (props: { size?: string }) => {
   const [opened, setOpened] = React.useState(false);
   return (
     <>
-      <Button
-        size={props.size}
-        variant="light"
-        color="cyan"
+      <button
+        type="button"
         onClick={() => setOpened(true)}
-        leftSection={<WPIconLogin size={18} />}
-        style={{ borderRadius: "12px", fontWeight: 600 }}
+        className={styles.joinBtn}
+        title="Join an existing room using room code or link"
       >
-        Join with Code
-      </Button>
+        <WPIconLogin size={14} />
+        <span>Join</span>
+      </button>
       <JoinRoomModal opened={opened} onClose={() => setOpened(false)} />
     </>
   );
@@ -102,27 +97,18 @@ export class SignInButton extends React.Component<SignInButtonProps> {
   render() {
     if (this.context.user) {
       return (
-        <div
-          style={{
-            margin: "4px",
-            minWidth: "40px",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-          }}
-        >
-          <Avatar
-            src={this.state.userImage}
+        <div style={{ display: "inline-flex", alignItems: "center" }}>
+          <div
+            className={styles.userAvatarRing}
             onClick={() => this.setState({ isProfileOpen: true })}
-            style={{
-              cursor: "pointer",
-              borderRadius: "50%",
-              border: "2px solid rgba(99, 102, 241, 0.4)",
-              boxShadow: "0 0 12px rgba(99, 102, 241, 0.25)",
-              transition: "transform 0.2s ease, box-shadow 0.2s ease",
-            }}
-          />
+            title={this.context.user.displayName || "Account Profile"}
+          >
+            <Avatar
+              src={this.state.userImage}
+              size={26}
+              radius="xl"
+            />
+          </div>
           {this.state.isProfileOpen && this.context.user && (
             <ProfileModal
               userImage={this.state.userImage}
@@ -139,13 +125,14 @@ export class SignInButton extends React.Component<SignInButtonProps> {
             closeModal={() => this.setState({ isLoginOpen: false })}
           />
         )}
-        <Button
-          className={styles.signInButton}
-          leftSection={<WPIconLogin size={18} />}
+        <button
+          type="button"
+          className={styles.signInBtn}
           onClick={() => this.setState({ isLoginOpen: true })}
         >
-          Sign in
-        </Button>
+          <WPIconLogin size={14} />
+          <span>Sign In</span>
+        </button>
       </React.Fragment>
     );
   }
@@ -157,75 +144,103 @@ export const TopBar = (props: {
   roomTitle?: string;
   roomDescription?: string;
   roomTitleColor?: string;
+  roomId?: string;
+  roomLock?: string;
+  participantsCount?: number;
+  isBehind?: boolean;
+  onSync?: () => void;
 }) => {
-  const context = useContext(MetadataContext);
+  const [copied, setCopied] = useState(false);
+
+  const copyRoomLink = useCallback(() => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, []);
+
+  const displayRoomCode = props.roomId ? `#${props.roomId.replace(/^\//, "")}` : "";
+
   return (
-    <React.Fragment>
-      <div
-        className={styles.topBar}
-        style={{
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          background: "rgba(9, 10, 15, 0.85)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-          padding: "8px 16px",
-          position: "sticky",
-          top: 0,
-          zIndex: 100,
-          display: "flex",
-          alignItems: "center",
-          flexWrap: "wrap",
-          rowGap: "8px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <a
-            href="/"
-            className={styles.brandLink}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              textDecoration: "none",
-            }}
-            title="Dypkri Home"
-          >
-            <img
-              src="/dypkri-art.png"
-              alt="Dypkri"
-              className={styles.topbarArtLogo}
-            />
-          </a>
-          {(props.roomTitle || props.roomDescription) && (
-            <div className={styles.roomTitleContainer}>
-              <div
-                className={styles.roomTitle}
-                style={
-                  props.roomTitleColor
-                    ? {
-                        background: "none",
-                        WebkitTextFillColor: props.roomTitleColor,
-                        color: props.roomTitleColor,
-                      }
-                    : undefined
-                }
-              >
-                {props.roomTitle?.toUpperCase()}
-              </div>
-              {props.roomDescription && (
-                <Text size="sm" className={styles.roomDescription}>
-                  {props.roomDescription}
-                </Text>
-              )}
-            </div>
-          )}
-        </div>
-        <Announce />
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          {!props.hideNewRoom && <JoinRoomButton size="sm" />}
-          {!props.hideNewRoom && <NewRoomButton size="sm" />}
-          {!props.hideSignin && <SignInButton />}
-        </div>
+    <header className={styles.topBar}>
+      {/* Left: Brand Logo + Compact Room Pill */}
+      <div className={styles.leftSection}>
+        <a
+          href="/"
+          className={styles.brandLink}
+          title="Dypkri — Back to Home"
+        >
+          <img
+            src="/dypkri-art.png"
+            alt="Dypkri"
+            className={styles.topbarArtLogo}
+          />
+        </a>
+
+        {displayRoomCode && (
+          <Tooltip label={copied ? "Link Copied!" : "Click to copy room link"} withArrow>
+            <button
+              type="button"
+              className={`${styles.roomPill} ${copied ? styles.roomPillCopied : ""}`}
+              onClick={copyRoomLink}
+            >
+              <span>{copied ? "Copied! ✓" : (props.roomTitle || displayRoomCode)}</span>
+            </button>
+          </Tooltip>
+        )}
       </div>
-    </React.Fragment>
+
+      {/* Center: Live Sync, Lock & Participant Badges */}
+      <div className={styles.centerSection}>
+        {props.roomId && (
+          <Tooltip
+            label={props.isBehind ? "Click to jump to room leader time" : "Video is perfectly synchronized"}
+            withArrow
+          >
+            <div
+              className={`${styles.statusPill} ${props.isBehind ? styles.syncBtnClickable : ""}`}
+              onClick={props.isBehind ? props.onSync : undefined}
+            >
+              <span className={props.isBehind ? styles.syncDotBehind : styles.syncDot} />
+              <span>{props.isBehind ? "Behind • Click to Sync" : "In Sync"}</span>
+            </div>
+          </Tooltip>
+        )}
+
+        {props.roomLock && (
+          <Tooltip label="Room is locked: only the host can change media and playback" withArrow>
+            <div className={styles.statusPill}>
+              <span>🔒 Host Controls</span>
+            </div>
+          </Tooltip>
+        )}
+
+        {props.participantsCount !== undefined && props.participantsCount > 0 && (
+          <div className={styles.statusPill} title={`${props.participantsCount} members in room`}>
+            <span>👥 {props.participantsCount}</span>
+          </div>
+        )}
+      </div>
+
+      <Announce />
+
+      {/* Right: Quick Share + New Room + Join + Sign In */}
+      <div className={styles.rightSection}>
+        {props.roomId && (
+          <button
+            type="button"
+            className={styles.shareBtn}
+            onClick={copyRoomLink}
+            title="Copy invite link to share with friends"
+          >
+            <span>{copied ? "Copied! ✓" : "Share"}</span>
+          </button>
+        )}
+        {!props.hideNewRoom && <JoinRoomButton size="sm" />}
+        {!props.hideNewRoom && <NewRoomButton size="sm" />}
+        {!props.hideSignin && <SignInButton />}
+      </div>
+    </header>
   );
 };
