@@ -4,9 +4,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.0.0"
-  },
   "scripts": {
     "start": "node server/server.ts",
     "ui": "vite --host",
