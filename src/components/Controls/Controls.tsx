@@ -240,10 +240,27 @@ export const Controls = (props: ControlsProps) => {
   // In-video floating chat button: available in full-bleed video OR on desktop when page chat column is collapsed
   const canShowInVideoChat = Boolean(props.chat) && (isFullBleedVideo || (!props.isMobileView && !props.showChatColumn));
 
-  // Breaking news headline ticker ribbon: active in landscape mode or fullscreen mode when chat drawer isn't open
-  const canShowMessageStrip = Boolean(isFullscreen || isLandscapeMobile) && !isChatDrawerOpen;
+  // Direct socket listener for instant 0-latency simultaneous display on video alongside chat box
+  useEffect(() => {
+    if (!props.socket) return;
+    const handleIncomingChat = (data: ChatMessage) => {
+      if (!data || data.cmd || data.system || !data.msg) return;
+      setActiveStripMsg(data);
+      if (stripTimerRef.current) {
+        clearTimeout(stripTimerRef.current);
+      }
+      stripTimerRef.current = setTimeout(() => {
+        setActiveStripMsg(null);
+      }, 8000);
+    };
 
-  // Stream new incoming messages along bottom line like breaking news headlines
+    props.socket.on("REC:chat", handleIncomingChat);
+    return () => {
+      props.socket.off("REC:chat", handleIncomingChat);
+    };
+  }, [props.socket]);
+
+  // Fallback listener on props.chat updates
   useEffect(() => {
     if (!props.chat || props.chat.length === 0) return;
     const validMsgs = props.chat.filter((m) => !m.cmd && !m.system && m.msg);
@@ -252,8 +269,8 @@ export const Controls = (props: ControlsProps) => {
     const latest = validMsgs[validMsgs.length - 1];
     const currentLen = props.chat.length;
 
-    // Trigger immediately when new message arrives, or show recent message when entering landscape/fullscreen mode
-    if (currentLen > lastChatLenRef.current || (!activeStripMsg && canShowMessageStrip)) {
+    // Trigger immediately when any new message arrives
+    if (currentLen > lastChatLenRef.current) {
       setActiveStripMsg(latest);
       if (stripTimerRef.current) {
         clearTimeout(stripTimerRef.current);
@@ -263,7 +280,7 @@ export const Controls = (props: ControlsProps) => {
       }, 8000);
     }
     lastChatLenRef.current = currentLen;
-  }, [props.chat, canShowMessageStrip]);
+  }, [props.chat]);
 
   const getEnd = () => props.duration;
   const getStart = () => 0;
@@ -482,10 +499,10 @@ export const Controls = (props: ControlsProps) => {
         </div>
       )}
 
-      {/* Live In-Video Message Overlay (Instant, Transparent Background, Crisp White Font with Shadow) */}
-      {canShowMessageStrip && activeStripMsg && (
+      {/* Live In-Video Message Overlay (Simultaneous with Chat Box, Instant, Transparent Background, Crisp White Font with Shadow) */}
+      {activeStripMsg && (
         <div
-          className={`${styles.fullscreenMsgStrip} ${isControlsVisible ? styles.msgStripControlsVisible : styles.msgStripControlsHidden}`}
+          className={`${styles.fullscreenMsgStrip} ${isControlsVisible ? styles.msgStripControlsVisible : styles.msgStripControlsHidden} ${(isChatDrawerOpen || isVideoDrawerOpen) ? styles.drawerOpen : ""}`}
         >
           <div
             key={activeStripMsg.id + activeStripMsg.timestamp}

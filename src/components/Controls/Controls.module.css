@@ -210,6 +210,18 @@
   bottom: 74px;
 }
 
+.fullscreenMsgStrip.drawerOpen {
+  right: 345px;
+  width: calc(100% - 360px);
+}
+
+@media (max-width: 950px) and (orientation: landscape), (max-height: 520px) and (orientation: landscape) {
+  .fullscreenMsgStrip.drawerOpen {
+    right: calc(min(310px, 42vw) + 16px);
+    width: calc(100% - min(310px, 42vw) - 32px);
+  }
+}
+
 .fullscreenMsgItem {
   display: inline-flex;
   align-items: center;

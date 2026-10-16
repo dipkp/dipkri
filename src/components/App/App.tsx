@@ -794,7 +794,7 @@ export class App extends React.Component<AppProps, AppState> {
         (this.state.isMobileView || this.state.showChatColumn);
 
       this.setState({
-        chat: this.state.chat,
+        chat: [...this.state.chat],
         scrollTimestamp: Date.now(),
         unreadCount: isChatVisible ? 0 : this.state.unreadCount + 1,
         incomingReaction: isReaction
