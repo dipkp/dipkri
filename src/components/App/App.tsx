@@ -136,6 +136,7 @@ interface AppProps {
 interface AppState {
   state: "starting" | "connected";
   roomMedia: string;
+  roomVideoTS?: number;
   roomSubtitle: string;
   roomPaused: boolean;
   roomLoop: boolean;
@@ -249,6 +250,7 @@ export class App extends React.Component<AppProps, AppState> {
     isTyping: false,
     desktopSidebarTab: "chat",
     roomMedia: "",
+    roomVideoTS: 0,
     roomPaused: false,
     roomSubtitle: "",
     roomLoop: false,
@@ -351,6 +353,68 @@ export class App extends React.Component<AppProps, AppState> {
 
   chatRef = React.createRef<Chat>();
 
+  savePlaybackTime = (
+    roomId: string,
+    media: string,
+    time: number,
+    paused: boolean,
+  ) => {
+    if (!roomId || !media || typeof time !== "number" || time <= 0) return;
+    try {
+      const cleanRoomId = roomId.replace(/^\//, "");
+      const payload = JSON.stringify({
+        media,
+        time,
+        paused,
+        updatedAt: Date.now(),
+      });
+      sessionStorage.setItem(`wp_playback_${cleanRoomId}`, payload);
+      localStorage.setItem(`wp_playback_${cleanRoomId}`, payload);
+      localStorage.setItem("wp_last_room", cleanRoomId);
+    } catch {}
+  };
+
+  getSavedPlaybackTime = (roomId: string, media?: string): number => {
+    if (!roomId) return 0;
+    try {
+      const cleanRoomId = roomId.replace(/^\//, "");
+      const raw =
+        sessionStorage.getItem(`wp_playback_${cleanRoomId}`) ||
+        localStorage.getItem(`wp_playback_${cleanRoomId}`);
+      if (!raw) return 0;
+      const data = JSON.parse(raw);
+      if (media && data.media && data.media !== media) {
+        return 0;
+      }
+      if (typeof data.time === "number" && data.time > 0) {
+        if (!data.updatedAt || Date.now() - data.updatedAt < 48 * 60 * 60 * 1000) {
+          return data.time;
+        }
+      }
+    } catch {}
+    return 0;
+  };
+
+  handleBeforeUnload = () => {
+    if (this.state.roomMedia && this.roomId) {
+      const curTime = this.Player().getCurrentTime();
+      if (curTime > 0) {
+        this.savePlaybackTime(
+          this.roomId,
+          this.state.roomMedia,
+          curTime,
+          this.state.roomPaused,
+        );
+      }
+    }
+  };
+
+  handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") {
+      this.handleBeforeUnload();
+    }
+  };
+
   initialScreenHeight = typeof window !== "undefined" ? window.innerHeight : 800;
 
   updateViewportMetrics = () => {
@@ -409,6 +473,10 @@ export class App extends React.Component<AppProps, AppState> {
       10 * 60 * 1000,
     );
 
+    window.addEventListener("beforeunload", this.handleBeforeUnload);
+    window.addEventListener("pagehide", this.handleBeforeUnload);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
+
     const canAutoplay = await testAutoplay();
     this.setState({ isAutoPlayable: canAutoplay });
     this.loadSettings();
@@ -424,6 +492,9 @@ export class App extends React.Component<AppProps, AppState> {
   }
 
   componentWillUnmount() {
+    window.removeEventListener("beforeunload", this.handleBeforeUnload);
+    window.removeEventListener("pagehide", this.handleBeforeUnload);
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     document.removeEventListener("fullscreenchange", this.onFullScreenChange);
     document.removeEventListener("keydown", this.onKeydown);
     window.removeEventListener("resize", this.handleResize);
@@ -603,6 +674,7 @@ export class App extends React.Component<AppProps, AppState> {
       this.setState(
         {
           roomMedia: currentMedia,
+          roomVideoTS: data.videoTS ?? 0,
           roomPaused: data.paused,
           roomSubtitle: data.subtitle,
           roomLoop: data.loop,
@@ -730,7 +802,16 @@ export class App extends React.Component<AppProps, AppState> {
             return;
           }
           const src = data.video;
-          const time = data.videoTS;
+          let time = data.videoTS ?? 0;
+          if (time <= 0 && src) {
+            const savedTime = this.getSavedPlaybackTime(this.roomId, src);
+            if (savedTime > 0) {
+              time = savedTime;
+              try {
+                this.socket.emit("CMD:seek", this.getRoomTSToSet(savedTime));
+              } catch {}
+            }
+          }
           if (isMagnet(src)) {
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
             const streamUrl = `/stream?torrent=${encodeURIComponent(src)}`;
@@ -803,19 +884,21 @@ export class App extends React.Component<AppProps, AppState> {
                   audioEnhancer.setBoost(currentSettings.audioBoost);
                 }
               }
-              let ts = undefined;
-              // Torrent streams, WebTorrent, Hls and Dash reset position back to 0 so set it back here
-              if (
-                isMagnet(src) ||
-                src.includes("/stream?torrent=") ||
-                isHls(src) ||
-                isDash(src) ||
-                this.state.isLiveStream
-              ) {
-                ts = time;
+              // Restore playback position on refresh or load
+              let ts = typeof time === "number" && time > 0 ? time : undefined;
+              if (ts === undefined) {
+                const savedTime = this.getSavedPlaybackTime(this.roomId, src);
+                if (savedTime > 0) {
+                  ts = savedTime;
+                }
               }
-              // Resync to leader since the loading might have taken some time
-              this.localSeek(ts);
+              const leader = this.getLeaderTime();
+              if (leader > 0) {
+                ts = leader;
+              }
+              if (ts !== undefined && ts > 0) {
+                this.localSeek(ts);
+              }
               if (data.playbackRate) {
                 // Set playback rate again since it might have been lost
                 console.log("setting playback rate again", data.playbackRate);
@@ -1103,8 +1186,17 @@ export class App extends React.Component<AppProps, AppState> {
     socket.on("REC:getRoomState", this.handleRoomState);
     window.setInterval(() => {
       if (this.state.roomMedia) {
-        const toSend = this.getRoomTSToSet(this.Player().getCurrentTime());
+        const curTime = this.Player().getCurrentTime();
+        const toSend = this.getRoomTSToSet(curTime);
         this.socket.emit("CMD:ts", toSend);
+        if (curTime > 0 && this.roomId) {
+          this.savePlaybackTime(
+            this.roomId,
+            this.state.roomMedia,
+            curTime,
+            this.state.roomPaused,
+          );
+        }
       }
     }, 1000);
   };
@@ -1173,6 +1265,30 @@ export class App extends React.Component<AppProps, AppState> {
               e.data === window.YT?.PlayerState?.CUED
             ) {
               this.setState({ loading: false });
+              const pending = (this.YouTubeInterface as any).pendingTime;
+              const leader = this.getLeaderTime();
+              const target =
+                typeof pending === "number" && pending > 0
+                  ? pending
+                  : leader > 0
+                    ? leader
+                    : 0;
+              if (target > 0) {
+                this.YouTubeInterface.seekVideo(target);
+              }
+            }
+            if (
+              this.usingYoutube() &&
+              e.data === window.YT?.PlayerState?.PLAYING
+            ) {
+              const pending = (this.YouTubeInterface as any).pendingTime;
+              if (typeof pending === "number" && pending > 0) {
+                const cur = this.YouTubeInterface.getCurrentTime();
+                if (Math.abs(cur - pending) > 2) {
+                  this.YouTubeInterface.seekVideo(pending);
+                }
+                (this.YouTubeInterface as any).pendingTime = undefined;
+              }
             }
             if (
               this.usingYoutube() &&
@@ -2105,6 +2221,14 @@ export class App extends React.Component<AppProps, AppState> {
     } else {
       this.socket.emit("CMD:pause");
       this.localPause();
+      if (this.state.roomMedia && this.roomId) {
+        this.savePlaybackTime(
+          this.roomId,
+          this.state.roomMedia,
+          this.Player().getCurrentTime(),
+          true,
+        );
+      }
     }
   };
 
@@ -2114,6 +2238,14 @@ export class App extends React.Component<AppProps, AppState> {
     this.Player().seekVideo(target);
     const toSend = this.getRoomTSToSet(target);
     this.socket.emit("CMD:seek", toSend);
+    if (this.state.roomMedia && this.roomId) {
+      this.savePlaybackTime(
+        this.roomId,
+        this.state.roomMedia,
+        target,
+        this.state.roomPaused,
+      );
+    }
   };
 
   getRoomTSToSet = (time: number) => {
@@ -2316,6 +2448,19 @@ export class App extends React.Component<AppProps, AppState> {
   getLeaderTime = () => {
     const values = Object.values(this.state.tsMap).filter(Number.isFinite);
     if (!values.length) {
+      if (
+        typeof this.state.roomVideoTS === "number" &&
+        this.state.roomVideoTS > 0
+      ) {
+        return this.state.roomVideoTS;
+      }
+      const saved = this.getSavedPlaybackTime(
+        this.roomId,
+        this.state.roomMedia,
+      );
+      if (saved > 0) {
+        return saved;
+      }
       return 0;
     }
     if (this.state.participants.length > 2) {

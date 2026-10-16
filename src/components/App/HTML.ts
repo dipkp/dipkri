@@ -40,8 +40,24 @@ export class HTML implements Player {
   setSrcAndTime = async (src: string, time: number) => {
     const leftVideo = this.getVideoEl();
     if (leftVideo) {
-      leftVideo.currentTime = time;
-      leftVideo.src = src;
+      if (leftVideo.src !== src && leftVideo.currentSrc !== src) {
+        leftVideo.src = src;
+      }
+      if (typeof time === "number" && time > 0) {
+        const applyTime = () => {
+          try {
+            if (Math.abs(leftVideo.currentTime - time) > 0.5) {
+              leftVideo.currentTime = time;
+            }
+          } catch {}
+        };
+        if (leftVideo.readyState >= 1) {
+          applyTime();
+        } else {
+          leftVideo.addEventListener("loadedmetadata", applyTime, { once: true });
+          leftVideo.addEventListener("canplay", applyTime, { once: true });
+        }
+      }
     }
   };
 
@@ -58,8 +74,25 @@ export class HTML implements Player {
   };
 
   seekVideo = (time: number) => {
-    if (this.getVideoEl()) {
-      this.getVideoEl().currentTime = time;
+    const leftVideo = this.getVideoEl();
+    if (leftVideo && typeof time === "number" && Number.isFinite(time)) {
+      try {
+        if (leftVideo.readyState >= 1) {
+          leftVideo.currentTime = time;
+        } else {
+          leftVideo.addEventListener(
+            "loadedmetadata",
+            () => {
+              try {
+                leftVideo.currentTime = time;
+              } catch {}
+            },
+            { once: true },
+          );
+        }
+      } catch (e) {
+        console.warn("HTML seekVideo error:", e);
+      }
     }
   };
 

@@ -41,13 +41,19 @@ export class YouTube implements Player {
     this.watchPartyYTPlayer?.setPlaybackRate(rate);
   };
 
+  pendingTime?: number;
+
   setSrcAndTime = async (src: string, time: number) => {
     let url = new window.URL(src);
     // Standard link https://www.youtube.com/watch?v=ID
     let videoId = new URLSearchParams(url.search).get("v");
     // Link shortener https://youtu.be/ID
     let altVideoId = src.split("/").slice(-1)[0].split("?")[0];
-    this.watchPartyYTPlayer?.cueVideoById(videoId || altVideoId, time);
+    const targetId = videoId || altVideoId;
+    if (typeof time === "number" && time > 0) {
+      this.pendingTime = time;
+    }
+    this.watchPartyYTPlayer?.cueVideoById(targetId, time || 0);
     // this.watchPartyYTPlayer?.cuePlaylist({listType: 'playlist', list: 'OLAK5uy_mtoaOGQksRdPbwlNtQ9IiK67wir5QqyIc'});
   };
 
@@ -55,6 +61,14 @@ export class YouTube implements Player {
     setTimeout(() => {
       console.log("play yt");
       this.watchPartyYTPlayer?.playVideo();
+      if (typeof this.pendingTime === "number" && this.pendingTime > 0) {
+        try {
+          const cur = this.watchPartyYTPlayer?.getCurrentTime() ?? 0;
+          if (Math.abs(cur - this.pendingTime) > 1.5) {
+            this.watchPartyYTPlayer?.seekTo(this.pendingTime, true);
+          }
+        } catch {}
+      }
     }, 200);
   };
 
@@ -63,6 +77,9 @@ export class YouTube implements Player {
   };
 
   seekVideo = (time: number) => {
+    if (typeof time === "number" && time >= 0) {
+      this.pendingTime = time;
+    }
     this.watchPartyYTPlayer?.seekTo(time, true);
   };
 

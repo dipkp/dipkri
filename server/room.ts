@@ -790,6 +790,13 @@ export class Room {
       msg: this.tsMap[socket.clientId]?.toString(),
     };
     this.paused = true;
+    if (
+      socket?.clientId &&
+      typeof this.tsMap[socket.clientId] === "number" &&
+      this.tsMap[socket.clientId] > 0
+    ) {
+      this.videoTS = this.tsMap[socket.clientId];
+    }
     this.addChatMessage(socket, chatMsg);
   };
 
@@ -835,7 +842,7 @@ export class Room {
     }
     // This is negative for live streams, so allow overwriting
     // Otherwise, only increment this value to prevent a lagging viewer from holding up the room state
-    if (data < 0 || data > this.videoTS) {
+    if (data < 0 || data > this.videoTS || this.roster.length <= 1) {
       this.videoTS = data;
     }
     // Normalize the received TS based on how long since the last tsMap emit
@@ -1428,6 +1435,14 @@ export class Room {
         this.roster.splice(index, 1);
       }
       this.io.of(this.roomId).emit("roster", this.getRosterForApp());
+      if (
+        typeof this.tsMap[clientId] === "number" &&
+        this.tsMap[clientId] > 0
+      ) {
+        if (this.tsMap[clientId] > this.videoTS || this.roster.length === 0) {
+          this.videoTS = this.tsMap[clientId];
+        }
+      }
       delete this.tsMap[clientId];
       delete this.socketIdMap[clientId];
     }

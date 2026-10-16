@@ -23,10 +23,20 @@ export const Home = () => {
   const [roomInput, setRoomInput] = useState("");
   const [userImage, setUserImage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [lastRoom, setLastRoom] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("wp_last_room");
+    } catch {
+      return null;
+    }
+  });
 
   // Listen to auth state to resolve initial session without screen flicker
   useEffect(() => {
     let isMounted = true;
+    try {
+      setLastRoom(localStorage.getItem("wp_last_room"));
+    } catch {}
     const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
       if (!isMounted) return;
       setAuthResolved(true);
@@ -106,6 +116,9 @@ export const Home = () => {
     e.preventDefault();
     if (!context.user) return;
     let code = roomInput.trim();
+    if (!code && lastRoom) {
+      code = lastRoom;
+    }
     if (!code) return;
     if (code.includes("/watch/")) {
       code = code.split("/watch/")[1];
@@ -266,6 +279,48 @@ export const Home = () => {
             </button>
           </div>
         </div>
+
+        {/* Resume Room Banner if available */}
+        {lastRoom && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "rgba(99, 102, 241, 0.08)",
+              border: "1px solid rgba(99, 102, 241, 0.25)",
+              borderRadius: "14px",
+              padding: "12px 18px",
+              marginBottom: "20px",
+              backdropFilter: "blur(12px)",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  boxShadow: "0 0 8px #10b981",
+                }}
+              />
+              <span style={{ fontSize: "14px", color: "#F0F0F5" }}>
+                Active watch party: <strong style={{ color: "#6366f1" }}>#{lastRoom}</strong>
+              </span>
+            </div>
+            <Button
+              size="xs"
+              variant="gradient"
+              gradient={{ from: "indigo", to: "cyan" }}
+              onClick={() => window.location.assign("/watch/" + lastRoom)}
+              style={{ fontWeight: 600, borderRadius: "10px", flexShrink: 0 }}
+            >
+              Resume Room
+            </Button>
+          </div>
+        )}
 
         {/* The Action Cards: New Room & Join Room */}
         <div className={styles.actionsGrid}>
