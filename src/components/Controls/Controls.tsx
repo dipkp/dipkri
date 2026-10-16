@@ -1098,11 +1098,12 @@ export const Controls = (props: ControlsProps) => {
                     )}
 
                     <Menu.Divider />
+                    <Menu.Divider />
                     <Menu.Item
                       leftSection={<WPIconCaptions size={16} />}
                       onClick={localSubtitleModal}
                     >
-                      Search & Upload Subtitles...
+                      Search & Auto-Load Subtitles (.srt)...
                     </Menu.Item>
                     <Menu.Divider />
                     <Menu.Item
@@ -1117,7 +1118,13 @@ export const Controls = (props: ControlsProps) => {
                         ) : null
                       }
                     >
-                      Live Audio Captions: {playerSettingsState.liveCaptions ? "English (On)" : "Off"}
+                      Live Audio Captions (Mic): {playerSettingsState.liveCaptions ? "On" : "Off"}
+                    </Menu.Item>
+                    <Menu.Item
+                      onClick={localSubtitleModal}
+                      style={{ fontSize: "11px", color: "#818cf8" }}
+                    >
+                      🎧 Wearing Earbuds? Click for Captions Guide
                     </Menu.Item>
                   </>
                 )}

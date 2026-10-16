@@ -71,6 +71,7 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
   };
 
   async componentDidMount() {
+    let query = this.state.titleQuery;
     if (this.props.roomMedia.includes("/stream?torrent=magnet")) {
       const re = /&fileIndex=(\d+)$/;
       const match = re.exec(this.props.roomMedia);
@@ -83,8 +84,9 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
             );
             const data = await response.json();
             if (data?.files?.[fileIndex]?.name) {
+              query = cleanMovieTitle(data.files[fileIndex].name);
               this.setState({
-                titleQuery: cleanMovieTitle(data.files[fileIndex].name),
+                titleQuery: query,
               });
             }
           } catch (e) {
@@ -92,6 +94,10 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
           }
         }
       }
+    }
+    // Auto-search immediately so subtitles appear with 0 extra clicks!
+    if (query && query.trim() && query !== "Torrent" && query !== "Torrent Stream") {
+      this.searchByTitle();
     }
   }
 
@@ -308,6 +314,28 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
               </ActionIcon>
             </div>
           )}
+
+          {/* Earbuds & Mobile Live Caption Tip Banner */}
+          <div
+            style={{
+              background: "rgba(99, 102, 241, 0.08)",
+              border: "1px solid rgba(99, 102, 241, 0.2)",
+              borderRadius: "8px",
+              padding: "8px 12px",
+              fontSize: "12px",
+              color: "#c7d2fe",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              margin: "6px 0 10px 0",
+              lineHeight: 1.4,
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>🎧</span>
+            <span>
+              <strong>Using Earbuds / Headphones?</strong> Search and pick a synced subtitle below for 100% accurate earbud captions. On Android / iPhone, you can also press your phone's <strong>Volume Button</strong> and tap the <strong>Caption icon</strong> for instant device-level live captions!
+            </span>
+          </div>
 
           {/* Search OpenSubtitles Section */}
           <div className={styles.searchSection}>
