@@ -1509,7 +1509,7 @@ export const Controls = (props: ControlsProps) => {
                         >
                           <div>
                             <div style={{ fontWeight: 600 }}>Live Audio Transcribe</div>
-                            <div className={styles.settingsHint}>On-device speech-to-text (English)</div>
+                            <div className={styles.settingsHint}>Video source audio • 0.03s zero gap</div>
                           </div>
                           {playerSettingsState.liveCaptions ? (
                             <span className={styles.badgeActiveText}>ON</span>

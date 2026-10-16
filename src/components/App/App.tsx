@@ -2790,6 +2790,7 @@ export class App extends React.Component<AppProps, AppState> {
           videoEl={this.HTMLInterface.getVideoEl()}
           isYouTube={this.usingYoutube()}
           roomSubtitle={this.state.roomSubtitle}
+          roomMedia={this.state.roomMedia}
           getYoutubeTime={() => this.YouTubeInterface.getCurrentTime()}
         />
         <MobileFloatingReactions

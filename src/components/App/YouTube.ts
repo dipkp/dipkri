@@ -22,15 +22,7 @@ export class YouTube implements Player {
   };
 
   isSubtitled = (): boolean => {
-    // This actually isn't accurate after subtitles have been toggled off because track doesn't update
-    // try {
-    //   const current = this.watchPartyYTPlayer?.getOption('captions', 'track');
-    //   return Boolean(current && current.languageCode);
-    // } catch (e) {
-    //   console.warn(e);
-    //   return false;
-    // }
-    return false;
+    return this.subtitleMode === "showing";
   };
 
   getPlaybackRate = (): number => {

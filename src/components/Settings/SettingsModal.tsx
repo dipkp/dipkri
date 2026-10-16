@@ -221,7 +221,7 @@ export const SettingsModal = ({
             toggle
             updateTS={updateTS}
             name="Live Audio Transcription"
-            description="High-speed real-time speech-to-text. Automatically transcribes dialogue and live audio with low latency synchronized to the video."
+            description="Real-time live dialogue transcript from video source audio. Zero microphone access, ultra-responsive 0.03s synchronized stream."
             label="Live Transcribe"
             checked={Boolean(getPlayerSettings().liveCaptions)}
             disabled={false}
