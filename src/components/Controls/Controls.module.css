@@ -659,80 +659,68 @@
     display: none !important;
   }
 
+  .controlsContainer {
+    padding: 3px 6px 6px 6px !important;
+    gap: 3px !important;
+  }
+
+  .timelineRow {
+    gap: 4px !important;
+  }
+
+  .timeText {
+    font-size: 10px !important;
+    min-width: 28px !important;
+  }
+
+  .actionsRow {
+    gap: 3px !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+  }
+
+  .actionsLeft {
+    gap: 3px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .actionsRight {
+    gap: 3px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    justify-content: flex-end !important;
+  }
+
   .action {
-    min-width: 36px;
-    min-height: 36px;
-    padding: 6px;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 3px !important;
+    border-radius: 6px !important;
   }
-}
 
-/* Volume Control Group & Expandable Slider */
-.volumeGroup {
-  display: inline-flex;
-  align-items: center;
-  position: relative;
-}
-
-.volumeSliderWrapper {
-  width: 0;
-  overflow: hidden;
-  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
-  opacity: 0;
-  display: flex;
-  align-items: center;
-}
-
-.volumeGroup:hover .volumeSliderWrapper,
-.volumeGroup:focus-within .volumeSliderWrapper {
-  width: 74px;
-  opacity: 1;
-  margin-left: 2px;
-}
-
-@media (hover: none) {
-  .volumeSliderWrapper {
-    width: 60px;
-    opacity: 0.95;
-    margin-left: 2px;
+  .action svg {
+    width: 17px !important;
+    height: 17px !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
   }
-}
 
-.volumeSlider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.25);
-  outline: none;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
+  .speedButton {
+    padding: 2px 4px !important;
+    font-size: 10px !important;
+    gap: 2px !important;
+    height: 28px !important;
+    min-width: 32px !important;
+    border-radius: 6px !important;
+  }
 
-.volumeSlider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-  transition: transform 150ms ease;
-}
-
-.volumeSlider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-}
-
-.volumeSlider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
+  .speedButton svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
 }
 
 /* In-bar Sync Indicator Glow */

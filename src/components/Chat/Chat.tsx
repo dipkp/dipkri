@@ -365,6 +365,10 @@ export class Chat extends React.Component<ChatProps> {
     }
 
     this.isSending = true;
+    if (this.blurTimeout) {
+      clearTimeout(this.blurTimeout);
+      this.blurTimeout = null;
+    }
 
     const keepKeyboardAlive = () => {
       this.chatInputRef.current?.focus();
@@ -373,8 +377,13 @@ export class Chat extends React.Component<ChatProps> {
       });
       setTimeout(() => {
         this.chatInputRef.current?.focus();
+      }, 50);
+      setTimeout(() => {
+        this.chatInputRef.current?.focus();
+      }, 150);
+      setTimeout(() => {
         this.isSending = false;
-      }, 120);
+      }, 350);
     };
 
     if (this.state.replyTo?.id && this.state.replyTo.timestamp) {
@@ -537,12 +546,6 @@ export class Chat extends React.Component<ChatProps> {
         <div
           className={styles.chatContainer}
           ref={this.messagesRef}
-          onTouchStart={() => {
-            if (document.activeElement === this.chatInputRef.current) {
-              this.chatInputRef.current?.blur();
-              this.props.onKeyboardToggle?.(false);
-            }
-          }}
         >
           {this.props.chat.map((msg, index) => {
             const currentDate = formatWhatsAppDate(msg.timestamp);
@@ -733,7 +736,7 @@ export class Chat extends React.Component<ChatProps> {
                   if (document.activeElement !== this.chatInputRef.current && !this.isSending) {
                     this.props.onKeyboardToggle?.(false);
                   }
-                }, 180);
+                }, 300);
                 if (typeof window !== "undefined") {
                   setTimeout(() => {
                     window.scrollTo(0, 0);

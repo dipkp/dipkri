@@ -912,45 +912,6 @@ export const Controls = (props: ControlsProps) => {
                 <WPIconSkipForward size={20} />
               </div>
             )}
-
-            {/* Volume Control & Expandable Slider */}
-            <div className={styles.volumeGroup}>
-              <div
-                className={styles.action}
-                onClick={() => {
-                  props.localToggleMute();
-                  resetHideTimer();
-                }}
-                title={props.muted ? "Unmute" : "Mute"}
-              >
-                {props.muted || props.volume === 0 ? (
-                  <WPIconVolumeOff size={20} />
-                ) : props.volume < 0.4 ? (
-                  <WPIconVolumeLow size={20} />
-                ) : (
-                  <WPIconVolumeOn size={20} />
-                )}
-              </div>
-              <div className={styles.volumeSliderWrapper}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.02"
-                  value={props.muted ? 0 : props.volume}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    props.localSetVolume(val);
-                    if (props.muted && val > 0) {
-                      props.localToggleMute();
-                    }
-                    resetHideTimer();
-                  }}
-                  className={styles.volumeSlider}
-                  aria-label="Volume Slider"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Right Actions */}
@@ -1178,8 +1139,8 @@ export const Controls = (props: ControlsProps) => {
               </div>
             )}
 
-            {/* In-Video Voice & Webcams Button (Available in Full-Bleed / Landscape / Fullscreen) */}
-            {Boolean(isFullBleedVideo || props.participants) && (
+            {/* In-Video Voice & Webcams Button (Available in Full-Bleed / Landscape / Fullscreen, or Desktop) */}
+            {Boolean(isFullBleedVideo || (!props.isMobileView && props.participants)) && (
               <div
                 className={`${styles.action} ${styles.fullscreenChatBtn} ${isVideoDrawerOpen ? styles.activeFeature : ""}`}
                 onClick={() => {
