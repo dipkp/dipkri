@@ -54,8 +54,9 @@ export class SearchComponent extends React.Component<SearchComponentProps> {
 
   onSelectItem = async (result: SearchResult) => {
     this.props.setShowMultiSelect(true);
+    const basePath = this.context.streamPath || "";
     let response = await fetch(
-      this.context.streamPath +
+      basePath +
         "/data?torrent=" +
         encodeURIComponent(result.magnet!),
     );
@@ -64,7 +65,7 @@ export class SearchComponent extends React.Component<SearchComponentProps> {
     const multiStreamSelection = metadata.files.map((file: any, i: number) => ({
       ...file,
       url:
-        this.context.streamPath +
+        basePath +
         "/stream?torrent=" +
         encodeURIComponent(result.magnet!) +
         "&fileIndex=" +

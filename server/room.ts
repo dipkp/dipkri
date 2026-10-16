@@ -669,6 +669,11 @@ export class Room {
       } catch (e) {
         console.warn(e);
       }
+    } else if (data?.startsWith("magnet:")) {
+      const match = data.match(/fileIndex=(\d+)/);
+      const fileIndex = match ? match[1] : undefined;
+      const cleanMagnet = data.replace(/[&?]fileIndex=\d+/, "");
+      data = `/stream?torrent=${encodeURIComponent(cleanMagnet)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
     }
     this.cmdHost(socket, data);
   };
@@ -699,12 +704,24 @@ export class Room {
     }
     redisCount("playlistAdds");
     const youtubeVideoId = getYoutubeVideoID(data);
+    const isMag = data.startsWith("magnet:");
+    let magnetName = data;
+    if (isMag) {
+      const dnMatch = data.match(/[?&]dn=([^&]+)/);
+      if (dnMatch && dnMatch[1]) {
+        try {
+          magnetName = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+        } catch {
+          magnetName = dnMatch[1];
+        }
+      }
+    }
     const item = {
-      name: data,
-      channel: "Video URL",
+      name: isMag ? magnetName : data,
+      channel: isMag ? "Torrent" : "Video URL",
       duration: 0,
-      url: data,
-      type: data.startsWith("magnet:") ? "magnet" : "file",
+      url: isMag ? `/stream?torrent=${encodeURIComponent(data)}` : data,
+      type: isMag || data.includes("/stream?torrent=magnet") ? "magnet" : "file",
     };
     let video: PlaylistVideo | null = null;
     try {

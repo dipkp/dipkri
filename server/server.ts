@@ -27,6 +27,11 @@ import { gzipSync } from "node:zlib";
 import { resolveShard } from "./utils/resolveShard.ts";
 import { makeRoomName, makeUserName } from "./utils/moniker.ts";
 import { getStats } from "./utils/getStats.ts";
+import {
+  handleTorrentData,
+  handleTorrentProgress,
+  handleTorrentStream,
+} from "./torrent.ts";
 
 if (process.env.NODE_ENV === "development") {
   axios.interceptors.request.use(
@@ -534,7 +539,7 @@ app.get("/metadata", async (req, res) => {
   const beta =
     decoded?.email != null &&
     Boolean(config.BETA_USER_EMAILS.split(",").includes(decoded?.email));
-  const streamPath = beta ? config.STREAM_PATH : undefined;
+  const streamPath = config.STREAM_PATH || "";
   // log metrics but don't wait for it
   if (postgres && decoded?.uid) {
     upsertObject(
@@ -551,6 +556,11 @@ app.get("/metadata", async (req, res) => {
     streamPath,
   });
 });
+
+// Direct torrent streaming endpoints for BitTorrent magnet links
+app.get("/data", handleTorrentData);
+app.get("/stream", handleTorrentStream);
+app.get("/progress", handleTorrentProgress);
 
 app.get("/resolveRoom/:vanity", async (req, res) => {
   const vanity = req.params.vanity;

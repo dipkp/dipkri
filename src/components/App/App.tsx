@@ -579,83 +579,9 @@ export class App extends React.Component<AppProps, AppState> {
           const src = data.video;
           const time = data.videoTS;
           if (isMagnet(src)) {
-            // WebTorrent
-            if (!window.watchparty.webtorrent) {
-              const WebTorrent = //@ts-expect-error
-                (await import("webtorrent/dist/webtorrent.min.js")).default;
-              window.watchparty.webtorrent = new WebTorrent();
-              const reg = await navigator.serviceWorker?.register("/sw.min.js");
-              const worker = reg.active || reg.waiting || reg.installing;
-              const checkState = (worker: ServiceWorker | null) => {
-                if (worker?.state === "activated") {
-                  return window.watchparty.webtorrent?.createServer({
-                    controller: reg,
-                  });
-                }
-                return null;
-              };
-              if (!checkState(worker)) {
-                worker?.addEventListener("statechange", ({ target }) =>
-                  checkState(target as ServiceWorker),
-                );
-              }
-            }
-            await new Promise(async (resolve) => {
-              const finish = (torrent: Torrent) => {
-                // Got torrent metadata!
-                console.log("Client is downloading:", torrent.infoHash);
-
-                // Torrents can contain many files.
-                const files = torrent.files;
-                const fileIndex = new URLSearchParams(src).get("fileIndex");
-                // Try to find a single large file to play
-                let target;
-                if (fileIndex != null && fileIndex !== "") {
-                  target = files[Number(fileIndex)];
-                }
-                if (!target) {
-                  target = pickSingleLargeFile(files);
-                }
-                if (!target) {
-                  // Open the selector
-                  // Selecting a file sets a new URL with the fileIndex set so we go through again
-                  this.setMultiSelectModal(true);
-                  this.setFileSelection(
-                    files.map((f: WebTorrent.TorrentFile, i: number) => ({
-                      name: f.name,
-                      url: src + `&fileIndex=${i}`,
-                      length: f.length,
-                    })),
-                  );
-                } else {
-                  //@ts-expect-error
-                  target.streamTo(leftVideo);
-                }
-                resolve(undefined);
-              };
-              let target = await window.watchparty.webtorrent?.get(src);
-              if (!target) {
-                target = window.watchparty.webtorrent?.add(src, {
-                  announce: [
-                    "wss://tracker.btorrent.xyz",
-                    "wss://tracker.openwebtorrent.com",
-                  ],
-                  destroyStoreOnDestroy: true,
-                  maxWebConns: 4,
-                  path: "/tmp/webtorrent/",
-                  storeCacheSlots: 20,
-                  strategy: "sequential",
-                  // noPeersIntervalTime: 30,
-                });
-              }
-              if (target?.ready) {
-                finish(target);
-              } else {
-                target?.on("ready", () => {
-                  finish(target);
-                });
-              }
-            });
+            // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
+            const streamUrl = `/stream?torrent=${encodeURIComponent(src)}`;
+            await this.Player().setSrcAndTime(streamUrl, time);
           } else if (isDash(src)) {
             if (!window.watchparty.dash) {
               const Dash = await import("dashjs");
@@ -718,9 +644,10 @@ export class App extends React.Component<AppProps, AppState> {
             () => {
               this.setLoadingFalse();
               let ts = undefined;
-              // WebTorrent and Hls and Dash reset position back to 0 so set it back here
+              // Torrent streams, WebTorrent, Hls and Dash reset position back to 0 so set it back here
               if (
                 isMagnet(src) ||
+                src.includes("/stream?torrent=") ||
                 isHls(src) ||
                 isDash(src) ||
                 this.state.isLiveStream
@@ -740,31 +667,23 @@ export class App extends React.Component<AppProps, AppState> {
 
           // Progress updater
           window.clearInterval(this.progressUpdater);
-          this.setState({ downloaded: 0, total: 0, speed: 0 });
-          if (currentMedia.includes("/stream?torrent=magnet")) {
+          this.setState({ downloaded: 0, total: 0, speed: 0, connections: 0 });
+          if (currentMedia.includes("/stream?torrent=") || isMagnet(currentMedia)) {
+            const progressUrl = currentMedia.includes("/stream")
+              ? currentMedia.replace("/stream", "/progress")
+              : `/progress?torrent=${encodeURIComponent(currentMedia)}`;
             this.progressUpdater = window.setInterval(async () => {
-              const response = await fetch(
-                currentMedia.replace("/stream", "/progress"),
-              );
-              const data = await response.json();
-              this.setState({
-                downloaded: data.downloaded,
-                total: data.total,
-                speed: data.speed,
-                connections: data.connections,
-              });
-            }, 1000);
-          }
-          if (isMagnet(currentMedia)) {
-            this.progressUpdater = window.setInterval(async () => {
-              const client = window.watchparty.webtorrent;
-              if (client) {
+              try {
+                const response = await fetch(progressUrl);
+                const data = await response.json();
                 this.setState({
-                  downloaded: client.torrents[0]?.downloaded,
-                  total: client.torrents[0]?.length,
-                  speed: client.torrents[0]?.downloadSpeed,
-                  connections: client.torrents[0]?.numPeers,
+                  downloaded: data.downloaded,
+                  total: data.total,
+                  speed: data.speed,
+                  connections: data.connections,
                 });
+              } catch {
+                // ignore
               }
             }, 1000);
           }
@@ -2084,20 +2003,32 @@ export class App extends React.Component<AppProps, AppState> {
       return "Virtual Browser" + (this.state.isVBrowserLarge ? "+" : "");
     }
     if (isMagnet(input)) {
-      const magnetParsed = new URLSearchParams(input);
+      const magnetParsed = new URLSearchParams(input.replace(/^magnet:\?/, ""));
+      const dn = magnetParsed.get("dn");
       const index = magnetParsed.get("fileIndex");
-      return magnetParsed.get("dn") + (index != null ? ` (file ${index})` : "");
-    }
-    if (input.includes("/stream?torrent=magnet")) {
-      const search = new URL(input).search;
-      const searchParsed = new URLSearchParams(search);
-      const magnetUrl = searchParsed.get("torrent") ?? "";
-      const magnetParsed = new URLSearchParams(magnetUrl);
-      const index = searchParsed.get("fileIndex");
       return (
-        (magnetParsed.get("dn") ?? searchParsed.get("dn")) +
+        (dn ? decodeURIComponent(dn.replace(/\+/g, " ")) : "Torrent") +
         (index != null ? ` (file ${index})` : "")
       );
+    }
+    if (input.includes("/stream?torrent=")) {
+      try {
+        const search = new URL(
+          input,
+          typeof window !== "undefined" ? window.location.origin : "http://localhost",
+        ).search;
+        const searchParsed = new URLSearchParams(search);
+        const magnetUrl = searchParsed.get("torrent") ?? "";
+        const magnetParsed = new URLSearchParams(magnetUrl.replace(/^magnet:\?/, ""));
+        const dn = magnetParsed.get("dn") ?? searchParsed.get("dn");
+        const index = searchParsed.get("fileIndex");
+        return (
+          (dn ? decodeURIComponent(dn.replace(/\+/g, " ")) : "Torrent Stream") +
+          (index != null ? ` (file ${index})` : "")
+        );
+      } catch {
+        return "Torrent Stream";
+      }
     }
     if (input.includes("/proxy")) {
       const urlParsed = new URLSearchParams(input);

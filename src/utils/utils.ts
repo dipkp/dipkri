@@ -111,6 +111,7 @@ export const isDirectVideoUrl = (input: string) => {
     !isHls(input) &&
     !isDash(input) &&
     !isMpegTs(input) &&
+    !input.includes("/stream?torrent=") &&
     !/^https?:\/\/(www\.|old\.)?(reddit|twitch)\.(com|tv)(\/|$)/.test(input)
   );
 };
