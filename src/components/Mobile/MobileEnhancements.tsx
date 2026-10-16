@@ -16,8 +16,10 @@ interface FlyingEmoji {
   size: number;
   delayMs: number;
   duration: number;
-  driftX: number;
-  rotation: number;
+  driftX1: number;
+  driftX2: number;
+  rotation1: number;
+  rotation2: number;
 }
 
 const REACTION_EMOJIS = ["🔥", "❤️", "🤣", "🚀", "👏", "🍿"];
@@ -41,25 +43,28 @@ export const MobileFloatingReactions = ({
 
   // High-energy multi-emoji burst fountain
   const spawnFountain = useCallback((emoji: string) => {
-    const burstCount = 18;
+    const burstCount = 20;
     const newBatch: FlyingEmoji[] = [];
     const baseTime = Date.now();
 
     for (let i = 0; i < burstCount; i++) {
-      const angle = (Math.random() - 0.5) * 55;
+      const rot = (Math.random() - 0.5) * 44;
+      const drift = (Math.random() - 0.5) * 75;
       newBatch.push({
         id: baseTime + Math.random() + i,
         emoji,
-        left: 35 + Math.random() * 58,
-        size: 24 + Math.random() * 26,
-        delayMs: i * 35 + Math.random() * 25,
-        duration: 1.8 + Math.random() * 0.8,
-        driftX: (Math.random() - 0.5) * 110,
-        rotation: angle,
+        left: 45 + (Math.random() - 0.5) * 46,
+        size: 26 + Math.random() * 24,
+        delayMs: i * 35,
+        duration: 2.2 + Math.random() * 0.6,
+        driftX1: drift * 0.6,
+        driftX2: -drift * 0.8,
+        rotation1: rot,
+        rotation2: -rot * 0.7,
       });
     }
 
-    setFlyingEmojis((prev) => [...prev.slice(-48), ...newBatch]);
+    setFlyingEmojis((prev) => [...prev.slice(-50), ...newBatch]);
   }, []);
 
   // Trigger reaction locally for immediate feedback
@@ -105,8 +110,10 @@ export const MobileFloatingReactions = ({
                 fontSize: `${item.size}px`,
                 animationDelay: `${item.delayMs}ms`,
                 animationDuration: `${item.duration}s`,
-                "--drift": `${item.driftX}px`,
-                "--rot": `${item.rotation}deg`,
+                "--drift1": `${item.driftX1}px`,
+                "--drift2": `${item.driftX2}px`,
+                "--rot1": `${item.rotation1}deg`,
+                "--rot2": `${item.rotation2}deg`,
               } as React.CSSProperties
             }
           >
@@ -118,8 +125,12 @@ export const MobileFloatingReactions = ({
       {/* Floating Quick Resync Pill when behind */}
       {isBehind && onSync && (
         <button
+          type="button"
           className={styles.mobileSyncPill}
-          onClick={onSync}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSync();
+          }}
           title="You are behind the host! Tap to catch up."
         >
           <WPIconSync size={14} />
@@ -129,12 +140,23 @@ export const MobileFloatingReactions = ({
 
       {/* Quick Reaction Bar */}
       {!hide && (
-        <div className={styles.floatingReactionsBar}>
+        <div
+          className={styles.floatingReactionsBar}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           {REACTION_EMOJIS.map((emoji) => (
             <button
               key={emoji}
+              type="button"
               className={`${styles.reactionBtn} ${activeBtn === emoji ? styles.activeReactionBtn : ""}`}
-              onClick={() => triggerReaction(emoji)}
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerReaction(emoji);
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
               aria-label={`React with ${emoji}`}
             >
               {emoji}

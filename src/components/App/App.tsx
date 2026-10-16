@@ -2377,6 +2377,7 @@ export class App extends React.Component<AppProps, AppState> {
             .filter(Boolean)
             .join(" - ")}
         </div>
+        {this.state.roomMedia && controls}
         {this.state.roomMedia && (
           <MobileFloatingReactions
             hide={Boolean(this.state.settingsModalOpen)}
@@ -2402,7 +2403,6 @@ export class App extends React.Component<AppProps, AppState> {
             }}
           />
         )}
-        {this.state.roomMedia && controls}
       </div>
     );
     return (

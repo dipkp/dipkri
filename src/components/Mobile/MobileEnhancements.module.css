@@ -78,42 +78,48 @@
 .emojiBurstContainer {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  overflow: visible;
-  z-index: 60;
+  overflow: hidden;
+  z-index: 90;
 }
 
 .floatingEmoji {
   position: absolute;
-  bottom: 25px;
-  animation: sexyFloatingEmojiFountain 2.2s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.85));
+  bottom: 30px;
+  opacity: 0;
   will-change: transform, opacity;
+  animation-name: sexyFloatingEmojiFountain;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.25, 1);
+  animation-fill-mode: both;
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.75));
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
+  line-height: 1;
 }
 
 @keyframes sexyFloatingEmojiFountain {
   0% {
     opacity: 0;
-    transform: translateY(0) scale(0.3) rotate(0deg);
+    transform: translate3d(0, 0, 0) scale(0.4) rotate(0deg);
   }
-  14% {
+  12% {
     opacity: 1;
-    transform: translateY(-50px) scale(1.4) rotate(var(--rot, 12deg));
+    transform: translate3d(var(--drift1, 8px), -60px, 0) scale(1.35) rotate(var(--rot1, 10deg));
   }
   45% {
     opacity: 1;
-    transform: translateY(-160px) translateX(var(--drift, 25px)) scale(1.22) rotate(calc(var(--rot, 12deg) * -1));
+    transform: translate3d(var(--drift2, -15px), -200px, 0) scale(1.2) rotate(var(--rot2, -10deg));
   }
   75% {
     opacity: 0.95;
-    transform: translateY(-290px) translateX(calc(var(--drift, 25px) * 1.6)) scale(1.05) rotate(var(--rot, 12deg));
+    transform: translate3d(var(--drift1, 12px), -360px, 0) scale(1.05) rotate(var(--rot1, 8deg));
   }
   100% {
     opacity: 0;
-    transform: translateY(-440px) translateX(calc(var(--drift, 25px) * 2.2)) scale(0.6) rotate(calc(var(--rot, 12deg) * -1.5));
+    transform: translate3d(var(--drift2, -22px), -520px, 0) scale(0.65) rotate(var(--rot2, -14deg));
   }
 }
 
