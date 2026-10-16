@@ -589,38 +589,6 @@ app.get("/resolveShard/:roomId", async (req, res) => {
   res.send(String(config.SHARD ? shardNum : ""));
 });
 
-app.get("/listRooms", async (req, res) => {
-  const decoded = await validateUserToken(
-    String(req.query?.uid),
-    String(req.query?.token),
-  );
-  if (!decoded) {
-    res.status(400).json({ error: "invalid user token" });
-    return;
-  }
-  const result = await postgres?.query<PersistentRoom>(
-    `SELECT "roomId", vanity, password from room WHERE owner = $1`,
-    [decoded.uid],
-  );
-  res.json(result?.rows ?? []);
-});
-
-app.delete("/deleteRoom", async (req, res) => {
-  const decoded = await validateUserToken(
-    String(req.query?.uid),
-    String(req.query?.token),
-  );
-  if (!decoded) {
-    res.status(400).json({ error: "invalid user token" });
-    return;
-  }
-  const result = await postgres?.query(
-    `DELETE from room WHERE owner = $1 and "roomId" = $2`,
-    [decoded.uid, req.query.roomId],
-  );
-  res.json(result?.rows);
-});
-
 app.get("/linkAccount", async (req, res) => {
   const decoded = await validateUserToken(
     String(req.query?.uid),

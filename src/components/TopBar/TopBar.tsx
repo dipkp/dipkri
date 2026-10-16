@@ -1,6 +1,6 @@
 import React, { useCallback, useContext } from "react";
 import { serverPath, getUserImage, softWhite } from "../../utils/utils";
-import { ActionIcon, Avatar, Button, Menu, Text } from "@mantine/core";
+import { Avatar, Button, Text } from "@mantine/core";
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import { LoginModal } from "../Modal/LoginModal";
@@ -12,9 +12,7 @@ import { MetadataContext } from "../../MetadataContext";
 import config from "../../config";
 import {
   WPIconPlus,
-  WPIconDatabase,
   WPIconLogin,
-  WPIconTrash,
   WPIconDiscord,
   WPIconGitHub,
   DipkriLogo,
@@ -153,104 +151,9 @@ export class SignInButton extends React.Component<SignInButtonProps> {
   }
 }
 
-export class ListRoomsButton extends React.Component<{}> {
-  static contextType = MetadataContext;
-  declare context: React.ContextType<typeof MetadataContext>;
-  public state = { rooms: [] as PersistentRoom[] };
-
-  componentDidMount() {
-    this.refreshRooms();
-  }
-
-  refreshRooms = async () => {
-    if (this.context.user) {
-      const token = await this.context.user.getIdToken();
-      const response = await fetch(
-        serverPath + `/listRooms?uid=${this.context.user?.uid}&token=${token}`,
-      );
-      this.setState({ rooms: await response.json() });
-    }
-  };
-
-  deleteRoom = async (roomId: string) => {
-    if (this.context.user) {
-      const token = await this.context.user.getIdToken();
-      await fetch(
-        serverPath +
-          `/deleteRoom?uid=${this.context.user?.uid}&token=${token}&roomId=${roomId}`,
-        { method: "DELETE" },
-      );
-      this.setState({
-        rooms: this.state.rooms.filter((room) => room.roomId !== roomId),
-      });
-      this.refreshRooms();
-    }
-  };
-
-  render() {
-    return (
-      <Menu>
-        <Menu.Target>
-          <Button
-            className={styles.myRoomsButton}
-            onClick={this.refreshRooms}
-            leftSection={<WPIconDatabase size={18} />}
-          >
-            My rooms
-          </Button>
-        </Menu.Target>
-        <Menu.Dropdown className={styles.menuDropdown}>
-          {this.state.rooms.length === 0 && (
-            <Menu.Item disabled>You have no permanent rooms.</Menu.Item>
-          )}
-          {this.state.rooms.map((room: any) => {
-            return (
-              <Menu.Item
-                key={room.roomId}
-                component="a"
-                href={
-                  room.vanity ? "/r/" + room.vanity : "/watch" + room.roomId
-                }
-              >
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <div>
-                    <Text>
-                      {room.vanity
-                        ? `/r/${room.vanity}`
-                        : `/watch${room.roomId}`}
-                    </Text>
-                    <Text size="xs" c="grey">
-                      {room.roomId}
-                    </Text>
-                  </div>
-                  <div style={{ marginLeft: "auto", paddingLeft: "20px" }}>
-                    <ActionIcon
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        e.nativeEvent.stopImmediatePropagation();
-                        e.preventDefault();
-                        this.deleteRoom(room.roomId);
-                      }}
-                      color="red"
-                      variant="subtle"
-                    >
-                      <WPIconTrash size={16} />
-                    </ActionIcon>
-                  </div>
-                </div>
-              </Menu.Item>
-            );
-          })}
-        </Menu.Dropdown>
-      </Menu>
-    );
-  }
-}
-
 export const TopBar = (props: {
   hideNewRoom?: boolean;
   hideSignin?: boolean;
-  hideMyRooms?: boolean;
   roomTitle?: string;
   roomDescription?: string;
   roomTitleColor?: string;
