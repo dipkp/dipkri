@@ -12,14 +12,13 @@ import {
 interface FlyingEmoji {
   id: number;
   emoji: string;
-  left: number; // percentage across player
+  right: number; // pixels from right edge
   size: number;
   delayMs: number;
   duration: number;
-  driftX1: number;
-  driftX2: number;
-  rotation1: number;
-  rotation2: number;
+  drift1: number;
+  drift2: number;
+  rotation: number;
 }
 
 const REACTION_EMOJIS = ["🔥", "❤️", "🤣", "🚀", "👏", "🍿"];
@@ -39,36 +38,37 @@ export const MobileFloatingReactions = ({
 }) => {
   const [flyingEmojis, setFlyingEmojis] = useState<FlyingEmoji[]>([]);
   const [activeBtn, setActiveBtn] = useState<string | null>(null);
+  const lastLocalClickTsRef = useRef<number>(0);
   const lastIncomingTsRef = useRef<number>(0);
 
-  // High-energy multi-emoji burst fountain
+  // High-energy multi-emoji burst fountain ("lot of likes" animation)
   const spawnFountain = useCallback((emoji: string) => {
-    const burstCount = 20;
+    const burstCount = 28;
     const newBatch: FlyingEmoji[] = [];
     const baseTime = Date.now();
 
     for (let i = 0; i < burstCount; i++) {
-      const rot = (Math.random() - 0.5) * 44;
-      const drift = (Math.random() - 0.5) * 75;
+      const rot = (Math.random() - 0.5) * 36;
+      const drift = (Math.random() - 0.5) * 80;
       newBatch.push({
         id: baseTime + Math.random() + i,
         emoji,
-        left: 45 + (Math.random() - 0.5) * 46,
-        size: 26 + Math.random() * 24,
-        delayMs: i * 35,
-        duration: 2.2 + Math.random() * 0.6,
-        driftX1: drift * 0.6,
-        driftX2: -drift * 0.8,
-        rotation1: rot,
-        rotation2: -rot * 0.7,
+        right: 15 + Math.random() * 95,
+        size: 24 + Math.random() * 26,
+        delayMs: Math.round(i * 26 + Math.random() * 22),
+        duration: +(1.9 + Math.random() * 0.7).toFixed(2),
+        drift1: +(drift * 0.7).toFixed(1),
+        drift2: +(-drift * 0.9).toFixed(1),
+        rotation: +rot.toFixed(1),
       });
     }
 
-    setFlyingEmojis((prev) => [...prev.slice(-50), ...newBatch]);
+    setFlyingEmojis((prev) => [...prev.slice(-60), ...newBatch]);
   }, []);
 
   // Trigger reaction locally for immediate feedback
   const triggerReaction = (emoji: string) => {
+    lastLocalClickTsRef.current = Date.now();
     onSendReaction(emoji);
     setActiveBtn(emoji);
     setTimeout(() => setActiveBtn(null), 350);
@@ -79,9 +79,8 @@ export const MobileFloatingReactions = ({
   useEffect(() => {
     if (incomingReaction && incomingReaction.emoji && incomingReaction.ts !== lastIncomingTsRef.current) {
       lastIncomingTsRef.current = incomingReaction.ts;
-      const selfId = getOrCreateClientId();
-      // If the reaction came from another person in the room, burst it immediately!
-      if (!incomingReaction.senderId || incomingReaction.senderId !== selfId) {
+      // If we just clicked locally within 280ms, we already spawned it locally
+      if (Date.now() - lastLocalClickTsRef.current > 280) {
         spawnFountain(incomingReaction.emoji);
       }
     }
@@ -92,7 +91,7 @@ export const MobileFloatingReactions = ({
     if (flyingEmojis.length === 0) return;
     const timer = setTimeout(() => {
       setFlyingEmojis([]);
-    }, 3400);
+    }, 3200);
     return () => clearTimeout(timer);
   }, [flyingEmojis]);
 
@@ -106,14 +105,13 @@ export const MobileFloatingReactions = ({
             className={styles.floatingEmoji}
             style={
               {
-                left: `${item.left}%`,
+                right: `${item.right}px`,
                 fontSize: `${item.size}px`,
                 animationDelay: `${item.delayMs}ms`,
                 animationDuration: `${item.duration}s`,
-                "--drift1": `${item.driftX1}px`,
-                "--drift2": `${item.driftX2}px`,
-                "--rot1": `${item.rotation1}deg`,
-                "--rot2": `${item.rotation2}deg`,
+                "--drift1": `${item.drift1}px`,
+                "--drift2": `${item.drift2}px`,
+                "--rot": `${item.rotation}deg`,
               } as React.CSSProperties
             }
           >

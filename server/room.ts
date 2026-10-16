@@ -284,6 +284,15 @@ export class Room {
       socket.on("CMD:chatV2", (data: unknown) =>
         this.sendChatMessage(socket, data),
       );
+      socket.on("CMD:reaction", (data: unknown) => {
+        if (typeof data === "string" && data.length <= 16) {
+          this.io.of(this.roomId).emit("REC:reaction", {
+            emoji: data,
+            senderId: socket.clientId,
+            ts: Date.now(),
+          });
+        }
+      });
       socket.on("CMD:addReaction", (data: unknown) =>
         this.addReaction(socket, data),
       );
@@ -885,8 +894,8 @@ export class Room {
     if (!data || !data.value || !data.msgId || !data.msgTimestamp) {
       return;
     }
-    // Emojis can be multiple bytes
-    if (data.value.length > 8) {
+    // Emojis can be multiple bytes / ZWJ compound
+    if (data.value.length > 32) {
       return;
     }
     const msg = this.chat.find(
@@ -911,8 +920,8 @@ export class Room {
     if (!data || !data.value || !data.msgId || !data.msgTimestamp) {
       return;
     }
-    // Emojis can be multiple bytes
-    if (data.value.length > 8) {
+    // Emojis can be multiple bytes / ZWJ compound
+    if (data.value.length > 32) {
       return;
     }
     const msg = this.chat.find(

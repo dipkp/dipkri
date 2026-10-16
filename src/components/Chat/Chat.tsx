@@ -872,6 +872,34 @@ const ChatMessageItem = ({
           </div>
         )}
 
+        {/* Message Actions Bar (Quick React & Reply) */}
+        <div className={`${styles.messageActionBar} ${isMe ? styles.outgoingActions : styles.incomingActions}`}>
+          <button
+            type="button"
+            className={styles.messageActionBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              setReactionMenu(!isReactionMenuOpen, id, timestamp);
+            }}
+            title="React to message"
+            aria-label="React"
+          >
+            <WPIconReaction size={15} />
+          </button>
+          <button
+            type="button"
+            className={styles.messageActionBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply(id, timestamp, msg);
+            }}
+            title="Reply to message"
+            aria-label="Reply"
+          >
+            <WPIconReply size={15} />
+          </button>
+        </div>
+
         <div
           ref={bubbleRef}
           className={`${styles.bubble} ${isMe ? styles.outgoing : styles.incoming}`}

@@ -802,6 +802,15 @@ export class App extends React.Component<AppProps, AppState> {
           : this.state.incomingReaction,
       });
     });
+    socket.on("REC:reaction", (data: { emoji: string; senderId?: string; ts?: number }) => {
+      this.setState({
+        incomingReaction: {
+          emoji: data.emoji,
+          ts: data.ts || Date.now(),
+          senderId: data.senderId,
+        },
+      });
+    });
     socket.on("REC:addReaction", (data: Reaction) => {
       const { chat } = this.state;
       const msgIndex = chat.findIndex(
@@ -2378,31 +2387,30 @@ export class App extends React.Component<AppProps, AppState> {
             .join(" - ")}
         </div>
         {this.state.roomMedia && controls}
-        {this.state.roomMedia && (
-          <MobileFloatingReactions
-            hide={Boolean(this.state.settingsModalOpen)}
-            onSendReaction={(emoji: string) => {
-              this.socket?.emit("CMD:chat", emoji);
-            }}
-            incomingReaction={this.state.incomingReaction}
-            isBehind={
-              !this.state.isLiveStream &&
-              !this.playingScreenShare() &&
-              !this.playingFileShare() &&
-              Boolean(this.getLeaderTime()) &&
-              Number.isFinite(this.getLeaderTime()) &&
-              this.getLeaderTime() > 0 &&
-              this.getLeaderTime() - this.Player().getCurrentTime() > 10
+        <MobileFloatingReactions
+          hide={Boolean(this.state.settingsModalOpen)}
+          onSendReaction={(emoji: string) => {
+            this.socket?.emit("CMD:reaction", emoji);
+            this.socket?.emit("CMD:chat", emoji);
+          }}
+          incomingReaction={this.state.incomingReaction}
+          isBehind={
+            !this.state.isLiveStream &&
+            !this.playingScreenShare() &&
+            !this.playingFileShare() &&
+            Boolean(this.getLeaderTime()) &&
+            Number.isFinite(this.getLeaderTime()) &&
+            this.getLeaderTime() > 0 &&
+            this.getLeaderTime() - this.Player().getCurrentTime() > 10
+          }
+          onSync={() => {
+            if (this.state.isLiveStream) {
+              this.roomSeek(this.Player().getDuration());
+            } else {
+              this.localSeek();
             }
-            onSync={() => {
-              if (this.state.isLiveStream) {
-                this.roomSeek(this.Player().getDuration());
-              } else {
-                this.localSeek();
-              }
-            }}
-          />
-        )}
+          }}
+        />
       </div>
     );
     return (
