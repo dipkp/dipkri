@@ -1052,7 +1052,6 @@ const ChatMessageItem = ({
         {/* WhatsApp Inline Metadata (Time + Double Blue Ticks for sent) */}
         <div className={styles.messageMeta}>
           <span>{formatWhatsAppTime(timestamp)}</span>
-          {Boolean(videoTS) && <span>@{formatTimestamp(videoTS)}</span>}
           {isMe && (
             <span className={styles.doubleTick} title="Delivered & Read">
               <WPIconDoubleCheck size={15} />

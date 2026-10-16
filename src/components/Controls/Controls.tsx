@@ -180,13 +180,18 @@ export const Controls = (props: ControlsProps) => {
     };
   }, [paused, resetHideTimer]);
 
-  // Mobile landscape detection listener
+  // Universal mobile/tablet & desktop landscape detection listener
   useEffect(() => {
     const checkLandscape = () => {
       if (typeof window === "undefined") return;
-      const isLand = window.matchMedia(
-        "(max-width: 950px) and (orientation: landscape), (max-height: 520px) and (orientation: landscape)"
-      ).matches;
+      const isLandscape = window.innerWidth > window.innerHeight;
+      const isMobileDevice = Boolean(
+        props.isMobileView ||
+        window.innerHeight <= 680 ||
+        window.innerWidth <= 1024 ||
+        /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      );
+      const isLand = isLandscape && (isMobileDevice || window.matchMedia("(orientation: landscape)").matches);
       setIsLandscapeMobile(isLand);
     };
     checkLandscape();
@@ -196,7 +201,7 @@ export const Controls = (props: ControlsProps) => {
       window.removeEventListener("resize", checkLandscape);
       window.removeEventListener("orientationchange", checkLandscape);
     };
-  }, []);
+  }, [props.isMobileView]);
 
   // Fullscreen and PiP state listeners
   useEffect(() => {
@@ -235,30 +240,30 @@ export const Controls = (props: ControlsProps) => {
   // In-video floating chat button: available in full-bleed video OR on desktop when page chat column is collapsed
   const canShowInVideoChat = Boolean(props.chat) && (isFullBleedVideo || (!props.isMobileView && !props.showChatColumn));
 
-  // User requirement:
-  // "breaking news like ribbon but only text no background with some shadow for text visibility
-  // whenever person send message that should come in the bottom line left to right
-  // BUT ONLY in the landscape mode or in fullscreen mode"
+  // Breaking news headline ticker ribbon: active in landscape mode or fullscreen mode when chat drawer isn't open
   const canShowMessageStrip = Boolean(isFullscreen || isLandscapeMobile) && !isChatDrawerOpen;
 
-  // Stream new incoming messages left-to-right along bottom line
+  // Stream new incoming messages along bottom line like breaking news headlines
   useEffect(() => {
     if (!props.chat || props.chat.length === 0) return;
+    const validMsgs = props.chat.filter((m) => !m.cmd && !m.system && m.msg);
+    if (validMsgs.length === 0) return;
+
+    const latest = validMsgs[validMsgs.length - 1];
     const currentLen = props.chat.length;
-    if (currentLen > lastChatLenRef.current) {
-      const latest = props.chat[props.chat.length - 1];
-      if (latest && !latest.cmd && !latest.system) {
-        setActiveStripMsg(latest);
-        if (stripTimerRef.current) {
-          clearTimeout(stripTimerRef.current);
-        }
-        stripTimerRef.current = setTimeout(() => {
-          setActiveStripMsg(null);
-        }, 9500);
+
+    // Trigger when new message arrives, or show recent message when entering landscape/fullscreen mode
+    if (currentLen > lastChatLenRef.current || (!activeStripMsg && canShowMessageStrip)) {
+      setActiveStripMsg(latest);
+      if (stripTimerRef.current) {
+        clearTimeout(stripTimerRef.current);
       }
+      stripTimerRef.current = setTimeout(() => {
+        setActiveStripMsg(null);
+      }, 14000);
     }
     lastChatLenRef.current = currentLen;
-  }, [props.chat]);
+  }, [props.chat, canShowMessageStrip]);
 
   const getEnd = () => props.duration;
   const getStart = () => 0;
@@ -477,17 +482,27 @@ export const Controls = (props: ControlsProps) => {
         </div>
       )}
 
-      {/* Live Message Strip (streaming Left to Right) */}
+      {/* Live Breaking News Headline Ribbon in Landscape / Fullscreen */}
       {canShowMessageStrip && activeStripMsg && (
-        <div className={styles.fullscreenMsgStrip}>
-          <div
-            key={activeStripMsg.id + activeStripMsg.timestamp}
-            className={styles.fullscreenMsgItem}
-          >
-            <span className={styles.fullscreenMsgAuthor}>
-              {nameMap?.[activeStripMsg.id] || "Friend"}:
-            </span>
-            <span>{activeStripMsg.msg}</span>
+        <div
+          className={`${styles.fullscreenMsgStrip} ${isControlsVisible ? styles.msgStripControlsVisible : styles.msgStripControlsHidden}`}
+        >
+          <div className={styles.newsHeadlineBadge}>
+            <span className={styles.newsPulseDot} />
+            <span>BREAKING</span>
+          </div>
+          <div className={styles.newsHeadlineTrack}>
+            <div
+              key={activeStripMsg.id + activeStripMsg.timestamp}
+              className={styles.fullscreenMsgItem}
+            >
+              <span className={styles.fullscreenMsgAuthor}>
+                {nameMap?.[activeStripMsg.id] || "Friend"}:
+              </span>
+              <span className={styles.fullscreenMsgBody}>
+                {activeStripMsg.msg}
+              </span>
+            </div>
           </div>
         </div>
       )}
