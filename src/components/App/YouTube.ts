@@ -91,10 +91,11 @@ export class YouTube implements Player {
     return (volume ?? 0) / 100;
   };
 
-  setSubtitleMode = (mode?: TextTrackMode, lang?: string) => {
+  setSubtitleMode = (mode?: TextTrackMode, langOrIndex?: string | number) => {
     // Show the available options
     // console.log(this.watchPartyYTPlayer?.getOptions('captions'));
     if (mode === "showing") {
+      const lang = typeof langOrIndex === "string" ? langOrIndex : "en";
       console.log(lang);
       //@ts-expect-error
       this.watchPartyYTPlayer?.setOption("captions", "reload", true);

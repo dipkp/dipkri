@@ -1169,6 +1169,13 @@ export class App extends React.Component<AppProps, AppState> {
     } else {
       leftVideo.src = URL.createObjectURL(file);
     }
+    if (leftVideo) {
+      audioEnhancer.attachToElement(leftVideo);
+      const s = getPlayerSettings();
+      if (s.audioBoost) {
+        audioEnhancer.setBoost(s.audioBoost);
+      }
+    }
     leftVideo.play();
     //@ts-expect-error
     this.localStreamToPublish = leftVideo?.captureStream();
@@ -2295,6 +2302,13 @@ export class App extends React.Component<AppProps, AppState> {
               maxHeight: isMobileLayout ? "100%" : VIDEO_MAX_HEIGHT_CSS,
             }}
             id="leftVideo"
+            onPlay={(e) => {
+              audioEnhancer.attachToElement(e.currentTarget);
+              const s = getPlayerSettings();
+              if (s.audioBoost) {
+                audioEnhancer.setBoost(s.audioBoost);
+              }
+            }}
             onEnded={(e) => this.onVideoEnded(e.currentTarget.src)}
             playsInline
             onClick={this.roomTogglePlay}

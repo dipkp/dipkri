@@ -89,18 +89,19 @@ export class HTML implements Player {
     return this.getVideoEl()?.volume ?? 1;
   };
 
-  setSubtitleMode = (mode?: TextTrackMode) => {
-    if (this.getVideoEl()) {
-      for (
-        let i = 0;
-        i < Math.min(this.getVideoEl().textTracks.length, 1);
-        i++
-      ) {
-        this.getVideoEl().textTracks[i].mode =
-          mode ??
-          (this.getVideoEl().textTracks[i].mode === "hidden"
-            ? "showing"
-            : "hidden");
+  setSubtitleMode = (
+    mode?: TextTrackMode,
+    trackIndexOrLang?: number | string,
+  ) => {
+    const video = this.getVideoEl();
+    if (!video || !video.textTracks) return;
+    const tracks = video.textTracks;
+    const targetIdx = typeof trackIndexOrLang === "number" ? trackIndexOrLang : 0;
+    for (let i = 0; i < tracks.length; i++) {
+      if (mode === "showing") {
+        tracks[i].mode = i === targetIdx ? "showing" : "hidden";
+      } else {
+        tracks[i].mode = "hidden";
       }
     }
   };

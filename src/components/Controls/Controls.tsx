@@ -75,7 +75,11 @@ interface ControlsProps {
   localSubtitleModal: () => void;
   localSeek: () => void;
   localSetVolume: (volume: number) => void;
-  localSetSubtitleMode: (mode: TextTrackMode, lang?: string) => void;
+  localSetSubtitleMode: (
+    mode: TextTrackMode,
+    lang?: string,
+    trackIndex?: number,
+  ) => void;
   roomPlaylistPlay: (index: number) => void;
   playlist: PlaylistVideo[];
   chat?: ChatMessage[];
@@ -154,6 +158,30 @@ export const Controls = (props: ControlsProps) => {
     return audioEnhancer.getAvailableTracks(
       typeof document !== "undefined" ? (document.getElementById("leftVideo") as HTMLMediaElement) : null,
     );
+  }, [props.video, isMenuOpen]);
+
+  const attachedSubtitleTracks = useMemo(() => {
+    if (typeof document === "undefined") return [];
+    const video = document.getElementById("leftVideo") as HTMLVideoElement;
+    if (!video || !video.textTracks) return [];
+    const tracks: { index: number; label: string; language?: string; active: boolean }[] = [];
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const t = video.textTracks[i];
+      tracks.push({
+        index: i,
+        label: t.label || t.language || `Subtitle Track ${i + 1}`,
+        language: t.language || undefined,
+        active: t.mode === "showing",
+      });
+    }
+    return tracks;
+  }, [props.video, props.subtitled, isMenuOpen]);
+
+  const nativeResolution = useMemo(() => {
+    if (typeof document === "undefined") return "";
+    const video = document.getElementById("leftVideo") as HTMLVideoElement;
+    if (!video || !video.videoWidth) return "";
+    return `${video.videoWidth}x${video.videoHeight}`;
   }, [props.video, isMenuOpen]);
 
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1051,6 +1079,24 @@ export const Controls = (props: ControlsProps) => {
                     >
                       Captions: On {props.roomSubtitle ? "(Room File)" : "(Track)"}
                     </Menu.Item>
+
+                    {/* Attached Subtitle Tracks from Video / MKV / MP4 File */}
+                    {attachedSubtitleTracks.length > 0 && (
+                      <>
+                        <Menu.Divider />
+                        <Menu.Label>Attached Subtitles ({attachedSubtitleTracks.length})</Menu.Label>
+                        {attachedSubtitleTracks.map((t) => (
+                          <Menu.Item
+                            key={t.index}
+                            onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
+                            rightSection={t.active ? <WPIconCheck size={16} color="#6366f1" /> : null}
+                          >
+                            {t.label}
+                          </Menu.Item>
+                        ))}
+                      </>
+                    )}
+
                     <Menu.Divider />
                     <Menu.Item
                       leftSection={<WPIconCaptions size={16} />}
@@ -1189,9 +1235,36 @@ export const Controls = (props: ControlsProps) => {
                   Live Captions: {playerSettingsState.liveCaptions ? "English (On)" : "Off"}
                 </Menu.Item>
 
+                {/* Attached Subtitles in Player Settings */}
+                {attachedSubtitleTracks.length > 0 && (
+                  <>
+                    <Menu.Divider />
+                    <Menu.Label>Attached Subtitles ({attachedSubtitleTracks.length})</Menu.Label>
+                    <Menu.Item
+                      onClick={() => props.localSetSubtitleMode("hidden")}
+                      rightSection={!subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
+                    >
+                      Subtitles: Off
+                    </Menu.Item>
+                    {attachedSubtitleTracks.map((t) => (
+                      <Menu.Item
+                        key={t.index}
+                        leftSection={<WPIconCaptions size={16} />}
+                        onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
+                        rightSection={t.active ? <WPIconCheck size={16} color="#6366f1" /> : null}
+                      >
+                        {t.label}
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
+
                 {/* 2. Quality Change Option */}
                 <Menu.Divider />
-                <Menu.Label>Video Quality ({playerSettingsState.quality.toUpperCase()})</Menu.Label>
+                <Menu.Label>
+                  Video Quality ({playerSettingsState.quality.toUpperCase()})
+                  {nativeResolution ? ` • Source: ${nativeResolution}` : ""}
+                </Menu.Label>
                 {QUALITY_PRESETS.map((q) => (
                   <Menu.Item
                     key={q.key}

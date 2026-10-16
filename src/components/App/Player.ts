@@ -14,7 +14,10 @@ export abstract class Player {
   public abstract setVolume: (volume: number) => void;
   public abstract isSubtitled: () => boolean;
   public abstract getSubtitleMode: () => TextTrackMode;
-  public abstract setSubtitleMode: (mode?: TextTrackMode) => void;
+  public abstract setSubtitleMode: (
+    mode?: TextTrackMode,
+    langOrIndex?: string | number,
+  ) => void;
   public abstract isReady: () => boolean;
   public abstract clearState: () => void;
   public abstract loadSubtitles: (src: string) => void;
