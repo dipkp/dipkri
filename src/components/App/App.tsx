@@ -198,6 +198,7 @@ interface AppState {
   convertProgress: number | undefined;
   convertEnabled: boolean;
   isMobileView: boolean;
+  isKeyboardOpen: boolean;
   incomingReaction: { emoji: string; ts: number; senderId?: string } | null;
 }
 
@@ -234,6 +235,7 @@ export class App extends React.Component<AppProps, AppState> {
   state: AppState = {
     state: "starting",
     isMobileView: checkIsMobileDevice(),
+    isKeyboardOpen: false,
     roomMedia: "",
     roomPaused: false,
     roomSubtitle: "",
@@ -335,11 +337,52 @@ export class App extends React.Component<AppProps, AppState> {
 
   chatRef = React.createRef<Chat>();
 
+  updateViewportMetrics = () => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    const height = vv ? vv.height : window.innerHeight;
+    const keyboardHeight = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
+    const isKeyboardOpen = keyboardHeight > 80;
+
+    document.documentElement.style.setProperty(
+      "--visual-viewport-height",
+      `${height}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--keyboard-height",
+      `${keyboardHeight}px`,
+    );
+
+    // Force scroll position to 0 on mobile to guarantee video never leaves frame
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+
+    if (this.state.isKeyboardOpen !== isKeyboardOpen) {
+      this.setState({ isKeyboardOpen });
+    }
+  };
+
+  onWindowScroll = () => {
+    if (this.state.isMobileView && window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+  };
+
   async componentDidMount() {
     document.onfullscreenchange = this.onFullScreenChange;
     document.onkeydown = this.onKeydown;
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("orientationchange", this.handleResize);
+
+    this.updateViewportMetrics();
+    if (typeof window !== "undefined") {
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", this.updateViewportMetrics);
+        window.visualViewport.addEventListener("scroll", this.updateViewportMetrics);
+      }
+      window.addEventListener("scroll", this.onWindowScroll);
+    }
 
     // Send heartbeat to the server
     this.heartbeat = window.setInterval(
@@ -368,6 +411,13 @@ export class App extends React.Component<AppProps, AppState> {
     document.removeEventListener("keydown", this.onKeydown);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("orientationchange", this.handleResize);
+    if (typeof window !== "undefined") {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", this.updateViewportMetrics);
+        window.visualViewport.removeEventListener("scroll", this.updateViewportMetrics);
+      }
+      window.removeEventListener("scroll", this.onWindowScroll);
+    }
     window.clearInterval(this.heartbeat);
   }
 
@@ -376,6 +426,7 @@ export class App extends React.Component<AppProps, AppState> {
     if (isMobileView !== this.state.isMobileView) {
       this.setState({ isMobileView });
     }
+    this.updateViewportMetrics();
   };
 
   init = async () => {
@@ -2572,8 +2623,12 @@ export class App extends React.Component<AppProps, AppState> {
         )}
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>
-            {/* Slim 44px Top Bar (dipkri Title only) */}
-            <header className={styles.mobileHeader}>
+            {/* Slim 44px Top Bar (dipkri Title only) - auto-hides when typing to maximize video & chat room */}
+            <header
+              className={`${styles.mobileHeader} ${
+                this.state.isKeyboardOpen ? styles.mobileHeaderKeyboardOpen : ""
+              }`}
+            >
               <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <DipkriLogo size={20} />
                 <span className={styles.mobileTitle}>
@@ -2583,7 +2638,11 @@ export class App extends React.Component<AppProps, AppState> {
             </header>
 
             {/* Fixed 16:9 Video Player (Top pinned, zero scroll with on-video controls) */}
-            <div className={styles.mobileVideoWrapper}>
+            <div
+              className={`${styles.mobileVideoWrapper} ${
+                this.state.isKeyboardOpen ? styles.mobileVideoWrapperKeyboardOpen : ""
+              }`}
+            >
               {renderPlayerBox(true)}
             </div>
 
@@ -2611,6 +2670,12 @@ export class App extends React.Component<AppProps, AppState> {
                   ref={this.chatRef}
                   hide={this.state.currentTab !== "chat"}
                   videoPaused={this.state.roomPaused}
+                  isKeyboardOpen={this.state.isKeyboardOpen}
+                  onKeyboardToggle={(open) => {
+                    if (this.state.isKeyboardOpen !== open) {
+                      this.setState({ isKeyboardOpen: open });
+                    }
+                  }}
                 />
               </div>
 
@@ -2815,8 +2880,12 @@ export class App extends React.Component<AppProps, AppState> {
               )}
             </div>
 
-            {/* Smartphone Native Bottom Navigation Bar */}
-            <nav className={styles.mobileBottomNav}>
+            {/* Smartphone Native Bottom Navigation Bar - hidden when typing on keyboard so typing box sits directly on top of keypad */}
+            <nav
+              className={`${styles.mobileBottomNav} ${
+                this.state.isKeyboardOpen ? styles.mobileBottomNavHidden : ""
+              }`}
+            >
               <button
                 type="button"
                 className={`${styles.bottomNavTab} ${

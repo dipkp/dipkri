@@ -236,13 +236,20 @@
 }
 
 .mobileAppContainer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  max-height: 100dvh;
+  height: var(--visual-viewport-height, 100dvh);
+  max-height: var(--visual-viewport-height, 100dvh);
   width: 100vw;
   overflow: hidden;
   background-color: var(--bg-primary, #090A0F);
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 .mobileHeader {
@@ -257,6 +264,19 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   z-index: 100;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobileHeaderKeyboardOpen {
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
 }
 
 .mobileBrand {
@@ -322,6 +342,11 @@
   background: #000000;
   flex-shrink: 0;
   overflow: hidden;
+  transition: max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobileVideoWrapperKeyboardOpen {
+  max-height: min(34vh, 205px) !important;
 }
 
 @media (max-width: 950px) and (orientation: landscape), (max-height: 520px) and (orientation: landscape) {
@@ -372,6 +397,11 @@
   z-index: 100;
   width: 100%;
   box-sizing: border-box;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.mobileBottomNavHidden {
+  display: none !important;
 }
 
 .bottomNavTab {

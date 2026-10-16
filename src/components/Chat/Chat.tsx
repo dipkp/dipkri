@@ -147,6 +147,8 @@ interface ChatProps {
   owner: string | undefined;
   ref: RefObject<Chat>;
   videoPaused?: boolean;
+  isKeyboardOpen?: boolean;
+  onKeyboardToggle?: (open: boolean) => void;
 }
 
 export class Chat extends React.Component<ChatProps> {
@@ -292,6 +294,11 @@ export class Chat extends React.Component<ChatProps> {
     }
     if (this.props.hide !== prevProps.hide) {
       this.scrollToBottom();
+    }
+    if (!prevProps.isKeyboardOpen && this.props.isKeyboardOpen) {
+      setTimeout(() => {
+        this.scrollToBottom();
+      }, 60);
     }
   }
 
@@ -645,7 +652,11 @@ export class Chat extends React.Component<ChatProps> {
         )}
 
         {/* Authentic WhatsApp Composer Bar */}
-        <div className={styles.whatsappComposer}>
+        <div
+          className={`${styles.whatsappComposer} ${
+            this.props.isKeyboardOpen ? styles.composerKeyboardOpen : ""
+          }`}
+        >
           {/* Emoji Smiley Button */}
           <button
             type="button"
@@ -664,6 +675,24 @@ export class Chat extends React.Component<ChatProps> {
               className={styles.composerInput}
               value={this.state.chatMsg}
               onChange={this.updateChatMsg}
+              onFocus={() => {
+                this.props.onKeyboardToggle?.(true);
+                if (typeof window !== "undefined") {
+                  setTimeout(() => {
+                    window.scrollTo(0, 0);
+                    document.body.scrollTop = 0;
+                    this.scrollToBottom();
+                  }, 60);
+                }
+              }}
+              onBlur={() => {
+                this.props.onKeyboardToggle?.(false);
+                if (typeof window !== "undefined") {
+                  setTimeout(() => {
+                    window.scrollTo(0, 0);
+                  }, 60);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
