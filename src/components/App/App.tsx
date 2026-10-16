@@ -494,8 +494,17 @@ export class App extends React.Component<AppProps, AppState> {
         successMessage: "",
         warningMessage: "",
       });
-      // Use the name in our state, generate one if empty
-      this.updateName(this.state.myName || (await generateName()));
+      // Use the Google user name, custom name, or generated name
+      const googleName =
+        this.context.user?.displayName ||
+        this.context.user?.email?.split("@")[0];
+      const customName =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("watchparty-custom-name")
+          : null;
+      const initialName =
+        customName || googleName || this.state.myName || (await generateName());
+      this.updateName(initialName);
       this.loadSignInData(this.context.user);
       // Re-join video chat if we were in it before the reconnection
       if (window.watchparty.ourStream) {
@@ -1122,21 +1131,14 @@ export class App extends React.Component<AppProps, AppState> {
 
   loadSignInData = async (user: firebase.User | undefined) => {
     if (user && this.socket) {
-      // NOTE: firebase auth doesn't provide the actual first name data that individual providers (G/FB) do
-      // It's accessible at the time the user logs in but not afterward
-      // If we want accurate surname/given name we'll need to save that somewhere
-      const firstName = user.displayName?.split(" ")[0];
-      if (firstName) {
-        // Don't update the username if the user wants to customize their own
-        // Set a flag in localstorage so we only update this once, if the user changes name manually later we won't overwrite
-        // Clear the flag on logout
-        if (!window.localStorage.getItem("watchparty-loginname")) {
-          this.updateName(firstName);
-          window.localStorage.setItem(
-            "watchparty-loginname",
-            Date.now().toString(),
-          );
-        }
+      const googleName = user.displayName || user.email?.split("@")[0];
+      const customName =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("watchparty-custom-name")
+          : null;
+      const activeName = customName || googleName;
+      if (activeName) {
+        this.updateName(activeName);
       }
       const userImage = await getUserImage(user);
       if (userImage) {
@@ -2722,6 +2724,8 @@ export class App extends React.Component<AppProps, AppState> {
           setRoomTitleColor={this.setRoomTitleColor}
           mediaPath={this.state.mediaPath}
           setMediaPath={this.setMediaPath}
+          myName={this.state.myName}
+          updateName={this.updateName}
         />
         {this.state.errorMessage && (
           <Alert
@@ -3011,19 +3015,7 @@ export class App extends React.Component<AppProps, AppState> {
                   flexDirection: "column",
                 }}
               >
-                {/* Card 1: Your Profile */}
-                <div className={styles.mobileCard}>
-                  <div className={styles.panelSectionTitle}>
-                    <span>Your Nickname</span>
-                  </div>
-                  <TextInput
-                    value={this.state.myName}
-                    onChange={(e) => this.updateName(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                  />
-                </div>
-
-                {/* Card 2: Video & Audio Chat */}
+                {/* Voice & Video Chat */}
                 {this.state.state === "connected" && (
                   <div className={styles.mobileCard}>
                     <div className={styles.panelSectionTitle}>
@@ -3045,7 +3037,7 @@ export class App extends React.Component<AppProps, AppState> {
                   </div>
                 )}
 
-                {/* Card 3: Invite & Share Room */}
+                {/* Invite & Share Room */}
                 <div className={styles.mobileCard}>
                   <div className={styles.panelSectionTitle}>
                     <span>Invite Friends</span>
@@ -3083,6 +3075,8 @@ export class App extends React.Component<AppProps, AppState> {
                     setRoomTitleColor={this.setRoomTitleColor}
                     mediaPath={this.state.mediaPath}
                     setMediaPath={this.setMediaPath}
+                    myName={this.state.myName}
+                    updateName={this.updateName}
                   />
                 </div>
               )}
@@ -3091,6 +3085,7 @@ export class App extends React.Component<AppProps, AppState> {
             {/* Smartphone Native Bottom Navigation Bar - completely hidden while typing */}
             {!this.state.isKeyboardOpen && !this.state.isTyping && (
               <nav className={styles.mobileBottomNav}>
+              {/* 1. Chat */}
               <button
                 type="button"
                 className={`${styles.bottomNavTab} ${
@@ -3109,22 +3104,7 @@ export class App extends React.Component<AppProps, AppState> {
                 <span className={styles.tabLabel}>Chat</span>
               </button>
 
-              <button
-                type="button"
-                className={`${styles.bottomNavTab} ${
-                  this.state.currentTab === "media" ? styles.activeTab : ""
-                }`}
-                onClick={() => this.setState({ currentTab: "media" })}
-              >
-                <div className={styles.tabIconWrapper}>
-                  <WPIconPlaylist size={18} />
-                  {playlist.length > 0 && (
-                    <span className={styles.bottomNavBadge}>{playlist.length}</span>
-                  )}
-                </div>
-                <span className={styles.tabLabel}>Media & Queue</span>
-              </button>
-
+              {/* 2. People */}
               <button
                 type="button"
                 className={`${styles.bottomNavTab} ${
@@ -3143,6 +3123,24 @@ export class App extends React.Component<AppProps, AppState> {
                 <span className={styles.tabLabel}>People</span>
               </button>
 
+              {/* 3. Media */}
+              <button
+                type="button"
+                className={`${styles.bottomNavTab} ${
+                  this.state.currentTab === "media" ? styles.activeTab : ""
+                }`}
+                onClick={() => this.setState({ currentTab: "media" })}
+              >
+                <div className={styles.tabIconWrapper}>
+                  <WPIconPlaylist size={18} />
+                  {playlist.length > 0 && (
+                    <span className={styles.bottomNavBadge}>{playlist.length}</span>
+                  )}
+                </div>
+                <span className={styles.tabLabel}>Media</span>
+              </button>
+
+              {/* 4. Settings */}
               <button
                 type="button"
                 className={`${styles.bottomNavTab} ${
@@ -3365,11 +3363,11 @@ export class App extends React.Component<AppProps, AppState> {
                   padding: this.state.showChatColumn ? undefined : 0,
                 }}
               >
-                {/* Sidebar Header: Nickname Pill + Invite */}
+                {/* Sidebar Header: Nickname Display + Invite */}
                 <div className={styles.desktopSidebarHeader}>
                   <div
                     className={styles.desktopUserPill}
-                    title="Click to edit your nickname"
+                    title={`Signed in as ${this.state.myName}`}
                   >
                     <div className={styles.desktopUserAvatar}>
                       {this.state.myPicture ? (
@@ -3381,20 +3379,14 @@ export class App extends React.Component<AppProps, AppState> {
                         <WPIconUser size={13} />
                       )}
                     </div>
-                    <input
-                      type="text"
-                      className={styles.desktopNameInput}
-                      value={this.state.myName}
-                      onChange={(e) => this.updateName(e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      placeholder="Your name..."
-                      maxLength={30}
-                    />
+                    <span className={styles.desktopUserNameText}>
+                      {this.state.myName}
+                    </span>
                   </div>
                   <InviteButton />
                 </div>
 
-                {/* Sidebar Navigation Tabs */}
+                {/* Sidebar Navigation Tabs: Chat, People, Media, Settings */}
                 <div className={styles.desktopSidebarNav}>
                   <button
                     type="button"
@@ -3441,16 +3433,17 @@ export class App extends React.Component<AppProps, AppState> {
                   <button
                     type="button"
                     className={`${styles.desktopNavTab} ${
+                      this.state.desktopSidebarTab === "media" ||
                       this.state.desktopSidebarTab === "playlist"
                         ? styles.desktopNavTabActive
                         : ""
                     }`}
                     onClick={() => {
-                      this.setState({ desktopSidebarTab: "playlist" });
+                      this.setState({ desktopSidebarTab: "media" });
                     }}
                   >
                     <WPIconPlaylist size={15} />
-                    <span>Queue</span>
+                    <span>Media</span>
                     {playlist.length > 0 && (
                       <span className={styles.desktopNavCount}>
                         {playlist.length}
@@ -3627,6 +3620,26 @@ export class App extends React.Component<AppProps, AppState> {
                       setRoomLock={this.setRoomLock}
                       socket={this.socket}
                       roomId={this.state.roomId}
+                      owner={this.state.owner}
+                      setOwner={this.setOwner}
+                      vanity={this.state.vanity}
+                      setVanity={this.setVanity}
+                      inviteLink={this.state.inviteLink}
+                      password={this.state.password}
+                      setPassword={this.setPassword}
+                      isChatDisabled={this.state.isChatDisabled}
+                      setIsChatDisabled={this.setIsChatDisabled}
+                      clearChat={this.clearChat}
+                      roomTitle={this.state.roomTitle}
+                      setRoomTitle={this.setRoomTitle}
+                      roomDescription={this.state.roomDescription}
+                      setRoomDescription={this.setRoomDescription}
+                      roomTitleColor={this.state.roomTitleColor}
+                      setRoomTitleColor={this.setRoomTitleColor}
+                      mediaPath={this.state.mediaPath}
+                      setMediaPath={this.setMediaPath}
+                      myName={this.state.myName}
+                      updateName={this.updateName}
                     />
                   </div>
                 </div>

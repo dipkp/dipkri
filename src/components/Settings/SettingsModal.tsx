@@ -55,6 +55,8 @@ interface SettingsModalProps {
   mediaPath?: string | undefined;
   setMediaPath?: (path: string) => void;
   inline?: boolean;
+  myName?: string;
+  updateName?: (name: string) => void;
 }
 
 export const SettingsModal = ({
@@ -70,11 +72,45 @@ export const SettingsModal = ({
   setRoomTitle,
   roomDescription,
   setRoomDescription,
+  myName,
+  updateName,
 }: SettingsModalProps) => {
   const [updateTS, setUpdateTS] = useState(0);
+  const [nickname, setNickname] = useState(myName || "");
+
+  React.useEffect(() => {
+    if (myName !== undefined) {
+      setNickname(myName);
+    }
+  }, [myName]);
 
   const settingsContent = (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 0. Nickname / User Profile */}
+      {updateName && (
+        <>
+          <div className={styles.sectionHeader}>Profile & Nickname</div>
+          <div className={styles.settingCard}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+              <TextInput
+                label="Your Nickname"
+                description="Defaulted to your Google account name. Edit here if you want a custom nickname in this room."
+                value={nickname}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNickname(val);
+                  updateName(val);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem("watchparty-custom-name", val);
+                  }
+                }}
+                placeholder="Enter nickname..."
+                maxLength={30}
+              />
+            </div>
+          </div>
+        </>
+      )}
       {/* 1. Room Details & Customization (Title, Description, Password) */}
       {(setRoomTitle || setRoomDescription || setPassword) && (
         <>

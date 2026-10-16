@@ -1241,6 +1241,17 @@
   color: #64748b;
 }
 
+.desktopUserNameText {
+  color: #f8fafc;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
 .desktopSidebarNav {
   display: flex;
   gap: 3px;
