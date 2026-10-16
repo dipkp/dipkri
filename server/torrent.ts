@@ -15,17 +15,14 @@ function getClient(): WebTorrent.Instance {
   return torrentClient;
 }
 
-// High-availability public BitTorrent trackers for accelerated peer discovery
+// High-availability BitTorrent and WebTorrent trackers for accelerated peer discovery
 const DEFAULT_TRACKERS = [
+  "wss://tracker.openwebtorrent.com",
+  "wss://tracker.btorrent.xyz",
   "udp://tracker.opentrackr.org:1337/announce",
   "udp://open.stealth.si:80/announce",
   "udp://tracker.torrent.eu.org:451/announce",
-  "udp://tracker.coppersurfer.tk:6969/announce",
   "udp://tracker.openbittorrent.com:6969/announce",
-  "udp://opentracker.i2p.rocks:6969/announce",
-  "udp://tracker.qu.ax:6969/announce",
-  "udp://tracker.cyberia.is:6969/announce",
-  "udp://explodie.org:6969/announce",
   "http://tracker.opentrackr.org:1337/announce",
 ];
 
@@ -83,28 +80,24 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
   const client = getClient();
   const infoHash = extractInfoHash(magnetUri);
 
-  // 1. Check existing torrents in client.torrents first
+  // 1. Check existing torrents in client.torrents synchronously
   let existing: WebTorrent.Torrent | undefined = undefined;
   if (infoHash) {
     existing = client.torrents.find(
-      (t) => t.infoHash && t.infoHash.toLowerCase() === infoHash
+      (t) => t.infoHash && t.infoHash.toLowerCase() === infoHash.toLowerCase()
     );
   }
   if (!existing) {
     existing = client.torrents.find((t) => t.magnetURI === magnetUri);
-  }
-  if (!existing) {
-    try {
-      existing = (client.get(infoHash || magnetUri) as unknown as WebTorrent.Torrent) || undefined;
-    } catch {}
   }
 
   if (existing) {
     if (existing.ready) {
       return existing;
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       existing!.once("ready", () => resolve(existing!));
+      existing!.once("error", (err) => reject(err));
     });
   }
 
@@ -119,7 +112,7 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
     try {
       // Re-check right before adding in case of concurrent execution
       const doubleCheck = infoHash
-        ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash)
+        ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash.toLowerCase())
         : client.torrents.find((t) => t.magnetURI === magnetUri);
 
       if (doubleCheck) {
@@ -137,10 +130,10 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
 
       const timeout = setTimeout(() => {
         pendingTorrents.delete(cacheKey);
-        if (!torrent.ready && torrent.numPeers === 0) {
-          console.warn("[WebTorrent] Waiting for peers timed out for infoHash:", torrent.infoHash);
+        if (!torrent.ready) {
+          reject(new Error("Torrent metadata lookup timed out. No active seeders responded."));
         }
-      }, 45000);
+      }, 35000);
 
       torrent.once("ready", () => {
         clearTimeout(timeout);
@@ -158,7 +151,7 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
       // Gracefully recover if duplicate torrent was added
       if (err?.message?.includes("duplicate") || err?.message?.includes("already exists")) {
         const found = infoHash
-          ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash)
+          ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash.toLowerCase())
           : client.torrents.find((t) => t.magnetURI === magnetUri);
         if (found) {
           if (found.ready) return resolve(found);
@@ -328,9 +321,7 @@ export async function handleTorrentStream(req: any, res: any) {
         if (endStr) {
           end = parseInt(endStr, 10);
         } else {
-          // Seeking in middle: request in 16MB chunks for lightning-fast piece prioritization
-          const MAX_CHUNK = 16 * 1024 * 1024;
-          end = Math.min(start + MAX_CHUNK - 1, fileSize - 1);
+          end = fileSize - 1;
         }
       }
 

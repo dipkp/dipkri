@@ -2375,6 +2375,8 @@ export class App extends React.Component<AppProps, AppState> {
           paused={this.state.roomPaused}
           videoEl={this.HTMLInterface.getVideoEl()}
           isYouTube={this.usingYoutube()}
+          roomSubtitle={this.state.roomSubtitle}
+          getYoutubeTime={() => this.YouTubeInterface.getCurrentTime()}
         />
         <MobileFloatingReactions
           hide={Boolean(this.state.settingsModalOpen)}

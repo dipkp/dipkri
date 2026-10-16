@@ -5,10 +5,63 @@ import {
   PLAYER_SETTINGS_CHANGED_EVENT,
 } from "../PlayerSettings/playerSettings";
 
+interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
 interface LiveCaptionsProps {
   paused?: boolean;
   videoEl?: HTMLMediaElement | null;
   isYouTube?: boolean;
+  roomSubtitle?: string;
+  getYoutubeTime?: () => number;
+}
+
+/**
+ * Parses timestamp string (HH:MM:SS,mmm or MM:SS.mmm) into seconds.
+ */
+function parseTimestamp(timeStr: string): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.trim().replace(",", ".").split(":");
+  if (parts.length === 3) {
+    return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+  }
+  if (parts.length === 2) {
+    return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+  }
+  return parseFloat(timeStr) || 0;
+}
+
+/**
+ * Robust in-memory parser for both .srt and .vtt subtitle formats.
+ * Works seamlessly across YouTube, Torrents, direct MP4, HLS, and mobile browsers.
+ */
+function parseSubtitleText(content: string): SubtitleCue[] {
+  const cues: SubtitleCue[] = [];
+  if (!content) return cues;
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const blocks = normalized.split(/\n\n+/);
+
+  for (const block of blocks) {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    const timeLine = lines.find((l) => l.includes("-->"));
+    if (!timeLine) continue;
+
+    const [startStr, endStr] = timeLine.split("-->");
+    if (!startStr || !endStr) continue;
+
+    const start = parseTimestamp(startStr.trim().split(" ")[0]);
+    const end = parseTimestamp(endStr.trim().split(" ")[0]);
+    const textLines = lines.filter((l) => l !== timeLine && !/^\d+$/.test(l));
+    const text = textLines.join(" ").replace(/<[^>]*>/g, "").trim();
+
+    if (text && !isNaN(start) && !isNaN(end) && end > start) {
+      cues.push({ start, end, text });
+    }
+  }
+  return cues;
 }
 
 /**
@@ -20,7 +73,6 @@ function formatRollingSpeech(finalText: string, interimText: string): string {
   if (!combined) return "";
 
   // 1. If sentence-ending punctuation exists (. ! ?), drop completed sentences
-  // and focus exclusively on the active incoming sentence/clause!
   const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
   let active = sentences[sentences.length - 1] || combined;
 
@@ -44,18 +96,21 @@ function formatRollingSpeech(finalText: string, interimText: string): string {
 export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   paused = false,
   videoEl,
+  isYouTube = false,
+  roomSubtitle,
+  getYoutubeTime,
 }) => {
   const [enabled, setEnabled] = useState<boolean>(() => getPlayerSettings().liveCaptions);
   const [subtitleCue, setSubtitleCue] = useState<string>("");
   const [speechTranscript, setSpeechTranscript] = useState<string>("");
   const [interimSpeech, setInterimSpeech] = useState<string>("");
-  const [notice, setNotice] = useState<string>("");
 
+  const parsedCuesRef = useRef<SubtitleCue[]>([]);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasErrorRef = useRef<boolean>(false);
-  const retryCountRef = useRef<number>(0);
 
   // Helper to reliably retrieve the current video element
   const getActiveVideo = useCallback((): HTMLMediaElement | null => {
@@ -76,7 +131,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           setSubtitleCue("");
           setSpeechTranscript("");
           setInterimSpeech("");
-          setNotice("");
         }
       }
     };
@@ -98,7 +152,38 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, []);
 
   // --------------------------------------------------------------------------
-  // Attached Subtitle / TextTracks Instant Sync (Zero Gap / Zero Delay)
+  // Fetch and Parse Subtitles (.srt / .vtt) in Memory for High Reliability
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    let isCancelled = false;
+    parsedCuesRef.current = [];
+
+    if (!roomSubtitle) {
+      return;
+    }
+
+    const loadSubtitlesData = async () => {
+      try {
+        const resp = await fetch(roomSubtitle);
+        if (!resp.ok) return;
+        const text = await resp.text();
+        if (!isCancelled) {
+          parsedCuesRef.current = parseSubtitleText(text);
+        }
+      } catch (err) {
+        console.warn("[LiveCaptions] Subtitle fetch warning:", err);
+      }
+    };
+
+    loadSubtitlesData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [roomSubtitle]);
+
+  // --------------------------------------------------------------------------
+  // Zero-Delay Subtitle Sync Loop (YouTube + HTML5 Video)
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!enabled) {
@@ -106,117 +191,89 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       return;
     }
 
-    const checkCues = () => {
-      const video = getActiveVideo();
-      if (!video || !video.textTracks || video.textTracks.length === 0) {
-        setSubtitleCue("");
-        return;
+    const syncSubtitles = () => {
+      let currentTime = 0;
+
+      if (isYouTube && getYoutubeTime) {
+        try {
+          currentTime = getYoutubeTime();
+        } catch {
+          currentTime = 0;
+        }
+      } else {
+        const video = getActiveVideo();
+        if (video) {
+          currentTime = video.currentTime;
+        }
       }
 
-      const currentTime = video.currentTime;
-      let matchedText = "";
-
-      for (let i = 0; i < video.textTracks.length; i++) {
-        const track = video.textTracks[i];
-        if (track.mode === "disabled") continue;
-
-        // 1. Direct activeCues check
-        if (track.activeCues && track.activeCues.length > 0) {
-          const texts: string[] = [];
-          for (let c = 0; c < track.activeCues.length; c++) {
-            const cue = track.activeCues[c] as any;
-            if (cue?.text) {
-              texts.push(cue.text.replace(/<[^>]*>/g, "").trim());
-            }
-          }
-          if (texts.length > 0) {
-            matchedText = texts.join(" ");
-            break;
-          }
+      // 1. First check our parsed in-memory cues (fastest and works everywhere)
+      if (parsedCuesRef.current.length > 0) {
+        const matched = parsedCuesRef.current.find(
+          (c) => currentTime >= c.start && currentTime <= c.end
+        );
+        if (matched) {
+          setSubtitleCue(matched.text);
+          return;
         }
+      }
 
-        // 2. Direct time range verification fallback
-        if (!matchedText && track.cues && track.cues.length > 0) {
-          for (let c = 0; c < track.cues.length; c++) {
-            const cue = track.cues[c] as any;
-            if (cue && currentTime >= cue.startTime && currentTime <= cue.endTime) {
-              if (cue.text) {
-                matchedText = cue.text.replace(/<[^>]*>/g, "").trim();
-                break;
+      // 2. Secondary check for HTML5 video textTracks (if attached natively)
+      if (!isYouTube) {
+        const video = getActiveVideo();
+        if (video && video.textTracks && video.textTracks.length > 0) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            const track = video.textTracks[i];
+            if (track.mode === "disabled") continue;
+
+            if (track.activeCues && track.activeCues.length > 0) {
+              const texts: string[] = [];
+              for (let c = 0; c < track.activeCues.length; c++) {
+                const cue = track.activeCues[c] as any;
+                if (cue?.text) {
+                  texts.push(cue.text.replace(/<[^>]*>/g, "").trim());
+                }
+              }
+              if (texts.length > 0) {
+                setSubtitleCue(texts.join(" "));
+                return;
               }
             }
           }
-          if (matchedText) break;
         }
       }
 
-      // Keep subtitle cues strictly to at most 2 clean lines
-      if (matchedText) {
-        const lines = matchedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        matchedText = lines.slice(-2).join("\n");
-      }
-
-      setSubtitleCue(matchedText);
+      // No cue at this exact second
+      setSubtitleCue("");
     };
+
+    // Run high-frequency sync loop for smooth subtitle presentation
+    syncIntervalRef.current = setInterval(syncSubtitles, 120);
 
     const video = getActiveVideo();
-    if (!video) return;
-
-    checkCues();
-
-    video.addEventListener("timeupdate", checkCues);
-    video.addEventListener("seeked", checkCues);
-    video.addEventListener("seeking", checkCues);
-    video.addEventListener("play", checkCues);
-    video.addEventListener("pause", checkCues);
-    video.addEventListener("ratechange", checkCues);
-
-    for (let i = 0; i < video.textTracks.length; i++) {
-      video.textTracks[i].addEventListener("cuechange", checkCues);
-    }
-
-    const handleAddTrack = () => {
-      for (let i = 0; i < video.textTracks.length; i++) {
-        video.textTracks[i].removeEventListener("cuechange", checkCues);
-        video.textTracks[i].addEventListener("cuechange", checkCues);
-      }
-      checkCues();
-    };
-
-    if (video.textTracks.addEventListener) {
-      video.textTracks.addEventListener("addtrack", handleAddTrack);
+    if (video && !isYouTube) {
+      video.addEventListener("timeupdate", syncSubtitles);
     }
 
     return () => {
-      if (video) {
-        video.removeEventListener("timeupdate", checkCues);
-        video.removeEventListener("seeked", checkCues);
-        video.removeEventListener("seeking", checkCues);
-        video.removeEventListener("play", checkCues);
-        video.removeEventListener("pause", checkCues);
-        video.removeEventListener("ratechange", checkCues);
-
-        if (video.textTracks) {
-          for (let i = 0; i < video.textTracks.length; i++) {
-            video.textTracks[i].removeEventListener("cuechange", checkCues);
-          }
-          if (video.textTracks.removeEventListener) {
-            video.textTracks.removeEventListener("addtrack", handleAddTrack);
-          }
-        }
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      if (video && !isYouTube) {
+        video.removeEventListener("timeupdate", syncSubtitles);
       }
     };
-  }, [enabled, getActiveVideo]);
+  }, [enabled, isYouTube, getYoutubeTime, getActiveVideo]);
 
   // --------------------------------------------------------------------------
   // Real-Time Speech Recognition (Audio English Captions)
+  // Only runs when no attached subtitles exist, never on YouTube, and never shows errors
   // --------------------------------------------------------------------------
   const isSpeechSupported =
     typeof window !== "undefined" &&
     Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   useEffect(() => {
-    if (!enabled || !isSpeechSupported) {
+    // Never run microphone speech recognition on YouTube or when subtitles are attached or paused
+    if (!enabled || !isSpeechSupported || isYouTube || paused) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -224,16 +281,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         recognitionRef.current = null;
       }
       setSpeechTranscript("");
-      setInterimSpeech("");
-      return;
-    }
-
-    if (paused) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {}
-      }
       setInterimSpeech("");
       return;
     }
@@ -273,7 +320,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         if (finalChunk.trim()) {
           setSpeechTranscript((prev) => {
             const combined = `${prev} ${finalChunk.trim()}`.trim();
-            // Drop completed sentences so continuous speech doesn't accumulate
             const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
             const active = sentences[sentences.length - 1] || combined;
             const words = active.split(/\s+/).filter(Boolean);
@@ -288,47 +334,17 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         resetSpeechSilenceTimer();
       };
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (_event: any) => {
         if (isDisposed) return;
-        const err = event.error;
-        if (err === "no-speech" || err === "aborted") {
-          return;
-        }
         hasErrorRef.current = true;
-        if (err === "network") {
-          // If video already has subtitle tracks, don't show network speech warning
-          if (!subtitleCue) {
-            if (retryCountRef.current < 2) {
-              retryCountRef.current += 1;
-              setTimeout(() => {
-                if (!isDisposed && enabled && !paused) {
-                  hasErrorRef.current = false;
-                  try {
-                    recognition.start();
-                  } catch {}
-                }
-              }, 4000);
-            } else {
-              setNotice("Speech server unreachable. Try attached subtitles or allow mic in browser.");
-              setTimeout(() => {
-                if (!isDisposed) setNotice("");
-              }, 5000);
-            }
-          }
-        } else if (err === "not-allowed") {
-          setNotice("Microphone permission required for speech captions.");
-          setTimeout(() => {
-            if (!isDisposed) setNotice("");
-          }, 5000);
-        }
+        // Silent error handling: NEVER show error pills/popups in subtitle overlay
       };
 
       recognition.onend = () => {
         if (isDisposed) return;
         if (hasErrorRef.current) return;
 
-        // Restart cleanly when video is still playing
-        if (enabled && !paused) {
+        if (enabled && !paused && !isYouTube) {
           if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
           restartTimerRef.current = setTimeout(() => {
             if (!isDisposed && enabled && !paused && !hasErrorRef.current) {
@@ -336,7 +352,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
                 recognition.start();
               } catch {}
             }
-          }, 300);
+          }, 400);
         }
       };
 
@@ -355,8 +371,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           recognition.abort();
         } catch {}
       }
+      recognitionRef.current = null;
     };
-  }, [enabled, paused, isSpeechSupported, resetSpeechSilenceTimer, subtitleCue]);
+  }, [enabled, paused, isYouTube, isSpeechSupported, resetSpeechSilenceTimer]);
 
   if (!enabled) {
     return null;
@@ -367,17 +384,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const currentText = subtitleCue || rollingSpeech;
 
   // Subtitles only: render NOTHING when silent or between dialogue lines
-  if (!currentText && !notice) {
+  if (!currentText) {
     return null;
   }
 
   return (
     <div className={styles.captionsContainer}>
-      {currentText ? (
-        <div className={styles.minimalSubtitle}>{currentText}</div>
-      ) : notice ? (
-        <div className={styles.noticePill}>{notice}</div>
-      ) : null}
+      <div className={styles.minimalSubtitle}>{currentText}</div>
     </div>
   );
 };

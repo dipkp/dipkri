@@ -91,30 +91,37 @@ export class YouTube implements Player {
     return (volume ?? 0) / 100;
   };
 
+  private subtitleMode: TextTrackMode = "hidden";
+
   setSubtitleMode = (mode?: TextTrackMode, langOrIndex?: string | number) => {
-    // Show the available options
-    // console.log(this.watchPartyYTPlayer?.getOptions('captions'));
-    if (mode === "showing") {
-      const lang = typeof langOrIndex === "string" ? langOrIndex : "en";
-      console.log(lang);
-      //@ts-expect-error
-      this.watchPartyYTPlayer?.setOption("captions", "reload", true);
-      //@ts-expect-error
-      this.watchPartyYTPlayer?.setOption("captions", "track", {
-        languageCode: lang ?? "en",
-      });
-    }
-    if (mode === "hidden") {
-      // BUG this doesn't actually set the value of track
-      // so we can't determine if subtitles are on or off
-      // need to provide separate menu options
-      //@ts-expect-error
-      this.watchPartyYTPlayer?.setOption("captions", "track", {});
+    try {
+      const player = this.watchPartyYTPlayer as any;
+      if (!player) return;
+      if (mode === "showing") {
+        this.subtitleMode = "showing";
+        if (typeof player.loadModule === "function") {
+          player.loadModule("captions");
+        }
+        const lang = typeof langOrIndex === "string" ? langOrIndex : "en";
+        if (typeof player.setOption === "function") {
+          player.setOption("captions", "reload", true);
+          player.setOption("captions", "track", { languageCode: lang });
+        }
+      } else if (mode === "hidden") {
+        this.subtitleMode = "hidden";
+        if (typeof player.unloadModule === "function") {
+          player.unloadModule("captions");
+        } else if (typeof player.setOption === "function") {
+          player.setOption("captions", "track", {});
+        }
+      }
+    } catch (err) {
+      console.warn("YouTube subtitle toggle warning:", err);
     }
   };
 
   getSubtitleMode = () => {
-    return "hidden" as TextTrackMode;
+    return this.subtitleMode;
   };
 
   isReady = () => {
