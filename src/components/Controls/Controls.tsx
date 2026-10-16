@@ -28,6 +28,7 @@ import {
   WPIconVolumeLow,
   WPIconVolumeOff,
   WPIconMonitor,
+  WPIconSearch,
 } from "../Icons/CustomIcons";
 import {
   IconVideo,
@@ -147,6 +148,7 @@ export const Controls = (props: ControlsProps) => {
   }, []);
 
   const [playerSettingsState, setPlayerSettingsState] = useState<PlayerSettingsState>(() => getPlayerSettings());
+  const [settingsTab, setSettingsTab] = useState<"audio" | "subtitles" | "quality" | "more">("audio");
 
   useEffect(() => {
     const handlePlayerSettingsChange = (e: any) => {
@@ -1185,246 +1187,427 @@ export const Controls = (props: ControlsProps) => {
                   <WPIconSettings size={20} />
                 </div>
               </Menu.Target>
-              <Menu.Dropdown style={{ maxHeight: "75vh", overflowY: "auto", minWidth: 230 }}>
-                {/* 1. Live Captions (Audio - English Only) */}
-                <Menu.Label>Live Captions</Menu.Label>
-                <Menu.Item
-                  leftSection={<WPIconCaptions size={16} />}
-                  onClick={() => {
-                    const next = !playerSettingsState.liveCaptions;
-                    setPlayerSettings({ liveCaptions: next });
-                  }}
-                  rightSection={
-                    playerSettingsState.liveCaptions ? (
-                      <WPIconCheck size={16} color="#34d399" />
-                    ) : null
-                  }
-                >
-                  Live Captions: {playerSettingsState.liveCaptions ? "English (On)" : "Off"}
-                </Menu.Item>
+              <Menu.Dropdown className={styles.compactSettingsDropdown}>
+                {/* Compact Category Tabs */}
+                <div className={styles.settingsTabHeader}>
+                  <button
+                    type="button"
+                    className={`${styles.settingsTabBtn} ${settingsTab === "audio" ? styles.settingsTabBtnActive : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSettingsTab("audio");
+                    }}
+                  >
+                    <WPIconVolumeOn size={13} /> Audio
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.settingsTabBtn} ${settingsTab === "subtitles" ? styles.settingsTabBtnActive : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSettingsTab("subtitles");
+                    }}
+                  >
+                    <WPIconCaptions size={13} /> Subtitles
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.settingsTabBtn} ${settingsTab === "quality" ? styles.settingsTabBtnActive : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSettingsTab("quality");
+                    }}
+                  >
+                    <WPIconMonitor size={13} /> Quality
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.settingsTabBtn} ${settingsTab === "more" ? styles.settingsTabBtnActive : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSettingsTab("more");
+                    }}
+                  >
+                    <WPIconSettings size={13} /> More
+                  </button>
+                </div>
 
-                {/* Attached Subtitles in Player Settings */}
-                {attachedSubtitleTracks.length > 0 && (
-                  <>
-                    <Menu.Divider />
-                    <Menu.Label>Attached Subtitles ({attachedSubtitleTracks.length})</Menu.Label>
-                    <Menu.Item
-                      onClick={() => props.localSetSubtitleMode("hidden")}
-                      rightSection={!subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
-                    >
-                      Subtitles: Off
-                    </Menu.Item>
-                    {attachedSubtitleTracks.map((t) => (
-                      <Menu.Item
-                        key={t.index}
-                        leftSection={<WPIconCaptions size={16} />}
-                        onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
-                        rightSection={t.active ? <WPIconCheck size={16} color="#6366f1" /> : null}
-                      >
-                        {t.label}
-                      </Menu.Item>
-                    ))}
-                  </>
-                )}
-
-                {/* Torrent Download Stats (Moved to Player Settings to eliminate screen interruption) */}
-                {Boolean(props.total || props.convertProgress !== undefined) && (
-                  <>
-                    <Menu.Divider />
-                    <Menu.Label>Torrent Download Stats</Menu.Label>
-                    <div
-                      style={{
-                        padding: "8px 12px",
-                        margin: "4px 8px",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        borderRadius: "8px",
-                        border: "1px solid rgba(255, 255, 255, 0.08)",
-                        fontSize: "12px",
-                        lineHeight: "1.7",
-                      }}
-                    >
-                      {Boolean(props.total) && (
-                        <>
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Downloaded:</span>
-                            <strong style={{ color: "#34d399" }}>
-                              {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
-                            </strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Speed:</span>
-                            <strong>{formatSpeed(props.speed || 0)}</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Peers:</span>
-                            <strong>{props.connections || 0} connections</strong>
-                          </div>
-                        </>
-                      )}
-                      {props.convertProgress !== undefined && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Transcode:</span>
-                          <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
-                        </div>
-                      )}
+                {/* TAB 1: AUDIO & DUAL AUDIO */}
+                {settingsTab === "audio" && (
+                  <div>
+                    {/* Dual Audio / Channel Routing */}
+                    <div className={styles.settingsGroup}>
+                      <div className={styles.settingsHeaderRow}>
+                        <span className={styles.settingsGroupTitle}>Dual Audio / Language</span>
+                        <span className={styles.settingsBadge}>
+                          {playerSettingsState.dualAudioMode === "stereo"
+                            ? "STEREO"
+                            : playerSettingsState.dualAudioMode === "left"
+                            ? "AUDIO 1 (L)"
+                            : "AUDIO 2 (R)"}
+                        </span>
+                      </div>
+                      <div className={styles.settingsHint}>
+                        Isolate left or right language to both speakers
+                      </div>
+                      <div className={styles.settingsPillsRow}>
+                        <button
+                          type="button"
+                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "stereo" ? styles.settingsPillActive : ""}`}
+                          onClick={() => {
+                            setPlayerSettings({ dualAudioMode: "stereo" });
+                            audioEnhancer.setDualAudioMode("stereo");
+                          }}
+                        >
+                          Stereo (Normal)
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "left" ? styles.settingsPillActive : ""}`}
+                          onClick={() => {
+                            setPlayerSettings({ dualAudioMode: "left" });
+                            audioEnhancer.setDualAudioMode("left");
+                          }}
+                        >
+                          Audio 1 (Left)
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "right" ? styles.settingsPillActive : ""}`}
+                          onClick={() => {
+                            setPlayerSettings({ dualAudioMode: "right" });
+                            audioEnhancer.setDualAudioMode("right");
+                          }}
+                        >
+                          Audio 2 (Right)
+                        </button>
+                      </div>
                     </div>
-                    <Menu.Item
-                      onClick={() => {
-                        setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
-                      }}
-                      rightSection={
-                        playerSettingsState.showStatsOverlay ? (
-                          <WPIconCheck size={16} color="#34d399" />
-                        ) : null
-                      }
-                    >
-                      Show On-Screen Badge: {playerSettingsState.showStatsOverlay ? "On" : "Off"}
-                    </Menu.Item>
-                  </>
+
+                    {/* Discrete Multi-Track Selector (if available) */}
+                    {audioTracks.length > 1 && (
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Audio Stream</span>
+                          <span className={styles.settingsBadge}>
+                            {audioTracks.length} TRACKS
+                          </span>
+                        </div>
+                        <div className={styles.settingsList}>
+                          {audioTracks.map((t, idx) => (
+                            <div
+                              key={t.id}
+                              className={`${styles.settingsRowItem} ${playerSettingsState.audioTrack === idx ? styles.settingsRowItemActive : ""}`}
+                              onClick={() => {
+                                setPlayerSettings({ audioTrack: idx });
+                                audioEnhancer.selectTrack(
+                                  idx,
+                                  document.getElementById("leftVideo") as HTMLMediaElement,
+                                );
+                              }}
+                            >
+                              <span>{t.label}</span>
+                              {playerSettingsState.audioTrack === idx && (
+                                <WPIconCheck size={14} color="#6366f1" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dialogue & Volume Boost */}
+                    <div className={styles.settingsGroup}>
+                      <div className={styles.settingsHeaderRow}>
+                        <span className={styles.settingsGroupTitle}>Dialogue Boost</span>
+                        <span className={styles.settingsBadge}>
+                          {playerSettingsState.audioBoost}%
+                        </span>
+                      </div>
+                      <div className={styles.settingsPillsRow}>
+                        {[
+                          { val: 100, label: "100% (Normal)" },
+                          { val: 150, label: "150% (Voice)" },
+                          { val: 200, label: "200% (High)" },
+                          { val: 300, label: "300% (Max)" },
+                        ].map((b) => (
+                          <button
+                            key={b.val}
+                            type="button"
+                            className={`${styles.settingsPill} ${playerSettingsState.audioBoost === b.val ? styles.settingsPillActive : ""}`}
+                            onClick={() => {
+                              setPlayerSettings({ audioBoost: b.val });
+                              audioEnhancer.setBoost(b.val);
+                            }}
+                          >
+                            {b.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                {/* 2. Quality Change Option */}
-                <Menu.Divider />
-                <Menu.Label>
-                  Video Quality ({playerSettingsState.quality.toUpperCase()})
-                  {nativeResolution ? ` • Source: ${nativeResolution}` : ""}
-                </Menu.Label>
-                {QUALITY_PRESETS.map((q) => (
-                  <Menu.Item
-                    key={q.key}
-                    leftSection={<WPIconMonitor size={16} />}
-                    onClick={() => {
-                      setPlayerSettings({ quality: q.key });
-                      qualityManager.applyQuality(q.key, props.isYouTube);
-                    }}
-                    rightSection={
-                      playerSettingsState.quality === q.key ? (
-                        <WPIconCheck size={16} color="#6366f1" />
-                      ) : null
-                    }
-                  >
-                    {q.label} {q.badge ? `(${q.badge})` : ""}
-                  </Menu.Item>
-                ))}
+                {/* TAB 2: SUBTITLES */}
+                {settingsTab === "subtitles" && (
+                  <div>
+                    {/* Subtitle On/Off */}
+                    <div className={styles.settingsGroup}>
+                      <div className={styles.settingsHeaderRow}>
+                        <span className={styles.settingsGroupTitle}>Subtitles</span>
+                        <span className={`${styles.statusBadge} ${props.subtitled ? styles.badgeActive : ""}`}>
+                          {props.subtitled ? "ACTIVE" : "OFF"}
+                        </span>
+                      </div>
+                      <div className={styles.settingsPillsRow}>
+                        <button
+                          type="button"
+                          className={`${styles.settingsPill} ${!props.subtitled ? styles.settingsPillActive : ""}`}
+                          onClick={() => props.localSetSubtitleMode("hidden")}
+                        >
+                          Off
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.settingsPill} ${props.subtitled ? styles.settingsPillActive : ""}`}
+                          onClick={() => props.localSetSubtitleMode("showing")}
+                        >
+                          On {props.roomSubtitle ? "(Room File)" : ""}
+                        </button>
+                      </div>
+                    </div>
 
-                {/* 3. Change Audio Option: Audio Boost & Tracks */}
-                <Menu.Divider />
-                <Menu.Label>Audio & Volume Boost</Menu.Label>
-                {[
-                  { val: 100, label: "Audio Boost: 100% (Normal)" },
-                  { val: 150, label: "Audio Boost: 150% (Voice Boost)" },
-                  { val: 200, label: "Audio Boost: 200% (High Boost)" },
-                  { val: 300, label: "Audio Boost: 300% (Max Boost)" },
-                ].map((b) => (
-                  <Menu.Item
-                    key={b.val}
-                    leftSection={<WPIconVolumeOn size={16} />}
-                    onClick={() => {
-                      setPlayerSettings({ audioBoost: b.val });
-                      audioEnhancer.setBoost(b.val);
-                    }}
-                    rightSection={
-                      playerSettingsState.audioBoost === b.val ? (
-                        <WPIconCheck size={16} color="#34d399" />
-                      ) : null
-                    }
-                  >
-                    {b.label}
-                  </Menu.Item>
-                ))}
+                    {/* Attached Subtitles from Video or YouTube CC */}
+                    {props.isYouTube ? (
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsGroupTitle}>YouTube Captions</div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "hidden", label: "Off", value: "hidden" },
+                            { key: "en", label: "English", value: "showing" },
+                            { key: "es", label: "Spanish", value: "showing" },
+                          ].map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${(props.subtitled && item.key !== "hidden") || (!props.subtitled && item.key === "hidden") ? styles.settingsPillActive : ""}`}
+                              onClick={() => props.localSetSubtitleMode(item.value as TextTrackMode, item.key)}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      attachedSubtitleTracks.length > 0 && (
+                        <div className={styles.settingsGroup}>
+                          <div className={styles.settingsHeaderRow}>
+                            <span className={styles.settingsGroupTitle}>Attached Tracks</span>
+                            <span className={styles.settingsBadge}>{attachedSubtitleTracks.length}</span>
+                          </div>
+                          <div className={styles.settingsList}>
+                            {attachedSubtitleTracks.map((t) => (
+                              <div
+                                key={t.index}
+                                className={`${styles.settingsRowItem} ${t.active ? styles.settingsRowItemActive : ""}`}
+                                onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
+                              >
+                                <span>{t.label}</span>
+                                {t.active && <WPIconCheck size={14} color="#6366f1" />}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
 
-                {/* Audio Tracks Selection if multi-track */}
-                {audioTracks.length > 1 && (
-                  <>
-                    <Menu.Divider />
-                    <Menu.Label>Select Audio Track</Menu.Label>
-                    {audioTracks.map((t, idx) => (
-                      <Menu.Item
-                        key={t.id}
-                        leftSection={<WPIconVolumeLow size={16} />}
+                    {/* Load External Subtitle */}
+                    <div className={styles.settingsGroup}>
+                      <button
+                        type="button"
+                        className={styles.settingsActionBtn}
                         onClick={() => {
-                          setPlayerSettings({ audioTrack: idx });
-                          audioEnhancer.selectTrack(
-                            idx,
-                            document.getElementById("leftVideo") as HTMLMediaElement,
-                          );
+                          props.localSubtitleModal();
+                          setIsMenuOpen(false);
                         }}
-                        rightSection={
-                          playerSettingsState.audioTrack === idx ? (
-                            <WPIconCheck size={16} color="#6366f1" />
-                          ) : null
-                        }
                       >
-                        {t.label}
-                      </Menu.Item>
-                    ))}
-                  </>
+                        <WPIconSearch size={14} /> Search & Auto-Load Subtitles (.srt)...
+                      </button>
+                    </div>
+
+                    {/* Live Speech Transcribe */}
+                    <div className={styles.settingsGroup}>
+                      <div
+                        className={`${styles.settingsRowItem} ${playerSettingsState.liveCaptions ? styles.settingsRowItemActive : ""}`}
+                        onClick={() => {
+                          const next = !playerSettingsState.liveCaptions;
+                          setPlayerSettings({ liveCaptions: next });
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600 }}>Live Audio Transcribe</div>
+                          <div className={styles.settingsHint}>On-device speech-to-text (English)</div>
+                        </div>
+                        {playerSettingsState.liveCaptions ? (
+                          <span className={styles.badgeActiveText}>ON</span>
+                        ) : (
+                          <span className={styles.badgeOffText}>OFF</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Subtitle Style Notice */}
+                    <div className={styles.settingsSubtitleStyleBox}>
+                      <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>
+                      <div className={styles.settingsSubtitlePreviewPill}>
+                        100% Transparent • White Shadowed Borders
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                {/* 4. Webcam Bubbles */}
-                <Menu.Divider />
-                <Menu.Label>Webcam Bubbles</Menu.Label>
-                {/* Drag Unlock Toggle */}
-                <Menu.Item
-                  onClick={() => {
-                    setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked });
-                  }}
-                  rightSection={
-                    webcamState.dragUnlocked ? (
-                      <WPIconCheck size={16} color="#6366f1" />
-                    ) : null
-                  }
-                >
-                  {webcamState.dragUnlocked ? "Dragging: Unlocked (Movable)" : "Dragging: Locked (Clean Video)"}
-                </Menu.Item>
+                {/* TAB 3: QUALITY */}
+                {settingsTab === "quality" && (
+                  <div>
+                    <div className={styles.settingsGroup}>
+                      <div className={styles.settingsHeaderRow}>
+                        <span className={styles.settingsGroupTitle}>Playback Quality</span>
+                        {nativeResolution && (
+                          <span className={styles.settingsBadge}>Source: {nativeResolution}</span>
+                        )}
+                      </div>
+                      <div className={styles.settingsPillsRow}>
+                        {QUALITY_PRESETS.map((q) => (
+                          <button
+                            key={q.key}
+                            type="button"
+                            className={`${styles.settingsPill} ${playerSettingsState.quality === q.key ? styles.settingsPillActive : ""}`}
+                            onClick={() => {
+                              setPlayerSettings({ quality: q.key });
+                              qualityManager.applyQuality(q.key, props.isYouTube);
+                            }}
+                          >
+                            {q.label} {q.badge ? `(${q.badge})` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                {/* Size presets */}
-                {[
-                  { key: "min", label: "Bubble: Minimum (48px)" },
-                  { key: "small", label: "Bubble: Small (70px)" },
-                  { key: "medium", label: "Bubble: Medium (95px)" },
-                  { key: "max", label: "Bubble: Maximum (145px)" },
-                ].map((item) => (
-                  <Menu.Item
-                    key={item.key}
-                    onClick={() => {
-                      setWebcamSettings({ size: item.key as BubbleSize });
-                    }}
-                    rightSection={
-                      webcamState.size === item.key ? (
-                        <WPIconCheck size={16} color="#6366f1" />
-                      ) : null
-                    }
-                  >
-                    {item.label}
-                  </Menu.Item>
-                ))}
+                {/* TAB 4: MORE */}
+                {settingsTab === "more" && (
+                  <div>
+                    {/* Webcam Bubbles */}
+                    <div className={styles.settingsGroup}>
+                      <div className={styles.settingsGroupTitle}>Webcam Bubbles</div>
+                      <div
+                        className={styles.settingsRowItem}
+                        onClick={() => setWebcamSettings({ visible: !webcamState.visible })}
+                      >
+                        <span>Display Bubbles</span>
+                        <span className={webcamState.visible ? styles.badgeActiveText : styles.badgeOffText}>
+                          {webcamState.visible ? "Visible" : "Hidden"}
+                        </span>
+                      </div>
+                      <div
+                        className={styles.settingsRowItem}
+                        onClick={() => setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked })}
+                      >
+                        <span>Draggable</span>
+                        <span className={webcamState.dragUnlocked ? styles.badgeActiveText : styles.badgeOffText}>
+                          {webcamState.dragUnlocked ? "Unlocked (Movable)" : "Locked (Clean Video)"}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <div className={styles.settingsHint} style={{ marginBottom: 4 }}>
+                          Bubble Size:
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "min", label: "48px" },
+                            { key: "small", label: "70px" },
+                            { key: "medium", label: "95px" },
+                            { key: "max", label: "145px" },
+                          ].map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${webcamState.size === item.key ? styles.settingsPillActive : ""}`}
+                              onClick={() => setWebcamSettings({ size: item.key as BubbleSize })}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Show / Hide Bubbles */}
-                <Menu.Item
-                  onClick={() => {
-                    setWebcamSettings({ visible: !webcamState.visible });
-                  }}
-                  rightSection={
-                    webcamState.visible ? (
-                      <WPIconCheck size={16} color="#6366f1" />
-                    ) : null
-                  }
-                >
-                  {webcamState.visible ? "Webcam Bubbles: Visible" : "Webcam Bubbles: Hidden"}
-                </Menu.Item>
+                    {/* Torrent Stats Overlay */}
+                    {Boolean(props.total || props.convertProgress !== undefined) && (
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsGroupTitle}>Torrent & Transcode</div>
+                        <div
+                          style={{
+                            padding: "6px 8px",
+                            background: "rgba(255, 255, 255, 0.04)",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            lineHeight: "1.6",
+                          }}
+                        >
+                          {Boolean(props.total) && (
+                            <>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Downloaded:</span>
+                                <strong style={{ color: "#34d399" }}>
+                                  {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
+                                </strong>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Speed:</span>
+                                <strong>{formatSpeed(props.speed || 0)}</strong>
+                              </div>
+                            </>
+                          )}
+                          {props.convertProgress !== undefined && (
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Transcode:</span>
+                              <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={styles.settingsRowItem}
+                          style={{ marginTop: 4 }}
+                          onClick={() => {
+                            setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
+                          }}
+                        >
+                          <span>On-Screen Badge</span>
+                          <span className={playerSettingsState.showStatsOverlay ? styles.badgeActiveText : styles.badgeOffText}>
+                            {playerSettingsState.showStatsOverlay ? "ON" : "OFF"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
-                {/* 5. Link to all room settings */}
-                {props.onOpenSettings && (
-                  <>
-                    <Menu.Divider />
-                    <Menu.Item
-                      leftSection={<WPIconSettings size={16} />}
-                      onClick={props.onOpenSettings}
-                    >
-                      All Room Settings...
-                    </Menu.Item>
-                  </>
+                    {/* Room Settings */}
+                    {props.onOpenSettings && (
+                      <div className={styles.settingsGroup}>
+                        <button
+                          type="button"
+                          className={styles.settingsActionBtn}
+                          onClick={() => {
+                            props.onOpenSettings!();
+                            setIsMenuOpen(false);
+                          }}
+                        >
+                          <WPIconSettings size={14} /> All Room Settings...
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </Menu.Dropdown>
             </Menu>

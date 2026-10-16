@@ -1,11 +1,14 @@
 // playerSettings.ts - Centralized reactive settings for Live Captions, Video Quality, and Audio Tracks/Boost
 import { getCurrentSettings, updateSettings } from "../Settings/LocalSettings";
 
+export type DualAudioMode = "stereo" | "left" | "right";
+
 export interface PlayerSettingsState {
   liveCaptions: boolean;
   quality: string; // "auto" | "1080p" | "720p" | "480p" | "360p"
   audioTrack: number; // 0, 1, 2...
   audioBoost: number; // 100, 150, 200, 300 (%)
+  dualAudioMode: DualAudioMode; // "stereo" | "left" | "right"
   audioMode: "stereo" | "mono";
   showStatsOverlay: boolean;
 }
@@ -17,6 +20,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
   let quality = "auto";
   let audioTrack = 0;
   let audioBoost = 100;
+  let dualAudioMode: DualAudioMode = "stereo";
   let audioMode: "stereo" | "mono" = "stereo";
   let showStatsOverlay = false;
 
@@ -44,6 +48,11 @@ export const getPlayerSettings = (): PlayerSettingsState => {
         if (savedB) audioBoost = Number(savedB) || 100;
       }
 
+      const savedDual = localStorage.getItem("dipkri-dual-audio-mode");
+      if (savedDual === "left" || savedDual === "right" || savedDual === "stereo") {
+        dualAudioMode = savedDual;
+      }
+
       if (local.audioMode) {
         audioMode = local.audioMode;
       } else {
@@ -59,7 +68,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
     } catch {}
   }
 
-  return { liveCaptions, quality, audioTrack, audioBoost, audioMode, showStatsOverlay };
+  return { liveCaptions, quality, audioTrack, audioBoost, dualAudioMode, audioMode, showStatsOverlay };
 };
 
 export const setPlayerSettings = (
@@ -84,6 +93,9 @@ export const setPlayerSettings = (
       }
       if (partial.audioBoost !== undefined) {
         localStorage.setItem("dipkri-audio-boost", String(partial.audioBoost));
+      }
+      if (partial.dualAudioMode !== undefined) {
+        localStorage.setItem("dipkri-dual-audio-mode", partial.dualAudioMode);
       }
       if (partial.audioMode !== undefined) {
         localStorage.setItem("dipkri-audio-mode", partial.audioMode);

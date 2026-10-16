@@ -1,4 +1,5 @@
-// audioEnhancer.ts - Web Audio API Gain & Channel Controller for Video Players
+import { DualAudioMode, getPlayerSettings } from "./playerSettings";
+
 export interface AudioTrackInfo {
   id: string | number;
   label: string;
@@ -15,6 +16,7 @@ class AudioEnhancerManager {
   private currentVideoEl: HTMLMediaElement | null = null;
   private isMonoMode: boolean = false;
   private currentBoost: number = 100;
+  private currentDualAudioMode: DualAudioMode = "stereo";
 
   /**
    * Safely attach Web Audio nodes to the HTML video element once
@@ -47,11 +49,20 @@ class AudioEnhancerManager {
       // In browser, createMediaElementSource can only be called ONCE per element
       if (!this.sourceNode) {
         this.sourceNode = this.ctx.createMediaElementSource(element);
+        this.splitterNode = this.ctx.createChannelSplitter(2);
+        this.mergerNode = this.ctx.createChannelMerger(2);
         this.gainNode = this.ctx.createGain();
         this.gainNode.gain.value = this.currentBoost / 100;
 
-        // Connect source -> gain -> destination
-        this.sourceNode.connect(this.gainNode);
+        // Connect source -> splitter
+        this.sourceNode.connect(this.splitterNode);
+
+        // Apply saved or default dual audio routing
+        this.currentDualAudioMode = getPlayerSettings().dualAudioMode || "stereo";
+        this.applyRouting(this.currentDualAudioMode);
+
+        // Connect merger -> gain -> destination
+        this.mergerNode.connect(this.gainNode);
         this.gainNode.connect(this.ctx.destination);
       }
 
@@ -86,12 +97,40 @@ class AudioEnhancerManager {
   }
 
   /**
+   * Set Dual Audio Channel Mode (Stereo, Left Channel / Audio 1, Right Channel / Audio 2)
+   */
+  public setDualAudioMode(mode: DualAudioMode) {
+    this.currentDualAudioMode = mode;
+    this.applyRouting(mode);
+  }
+
+  private applyRouting(mode: DualAudioMode) {
+    if (!this.splitterNode || !this.mergerNode) return;
+    try {
+      this.splitterNode.disconnect();
+      if (mode === "left") {
+        // Dual Audio: Language 1 (Left channel routed to both L and R outputs)
+        this.splitterNode.connect(this.mergerNode, 0, 0);
+        this.splitterNode.connect(this.mergerNode, 0, 1);
+      } else if (mode === "right") {
+        // Dual Audio: Language 2 (Right channel routed to both L and R outputs)
+        this.splitterNode.connect(this.mergerNode, 1, 0);
+        this.splitterNode.connect(this.mergerNode, 1, 1);
+      } else {
+        // Normal Stereo: L->L, R->R
+        this.splitterNode.connect(this.mergerNode, 0, 0);
+        this.splitterNode.connect(this.mergerNode, 1, 1);
+      }
+    } catch (e) {
+      console.warn("AudioEnhancer applyRouting error:", e);
+    }
+  }
+
+  /**
    * Toggle Stereo / Mono (useful for centering dialogue on unbalanced audio)
    */
   public setAudioMode(mode: "stereo" | "mono") {
     this.isMonoMode = mode === "mono";
-    // If Web Audio API is hooked up and mono is desired, we can re-route channels
-    // For general compatibility, GainNode ensures dialogue is boosted cleanly
   }
 
   /**
