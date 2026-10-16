@@ -695,17 +695,6 @@ export class Chat extends React.Component<ChatProps> {
             this.props.isKeyboardOpen ? styles.composerKeyboardOpen : ""
           }`}
         >
-          {/* Emoji Smiley Button */}
-          <button
-            type="button"
-            className={styles.emojiButton}
-            onClick={() => this.setState({ isPickerOpen: !this.state.isPickerOpen })}
-            disabled={this.props.isChatDisabled}
-            title="Choose Emoji"
-          >
-            <WPIconReaction size={24} />
-          </button>
-
           {/* Pill Message Input */}
           <div className={styles.composerInputWrapper}>
             <input
