@@ -199,6 +199,7 @@ interface AppState {
   convertEnabled: boolean;
   isMobileView: boolean;
   isKeyboardOpen: boolean;
+  isTyping: boolean;
   incomingReaction: { emoji: string; ts: number; senderId?: string } | null;
 }
 
@@ -236,6 +237,7 @@ export class App extends React.Component<AppProps, AppState> {
     state: "starting",
     isMobileView: checkIsMobileDevice(),
     isKeyboardOpen: false,
+    isTyping: false,
     roomMedia: "",
     roomPaused: false,
     roomSubtitle: "",
@@ -337,12 +339,15 @@ export class App extends React.Component<AppProps, AppState> {
 
   chatRef = React.createRef<Chat>();
 
+  initialScreenHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+
   updateViewportMetrics = () => {
     if (typeof window === "undefined") return;
     const vv = window.visualViewport;
     const height = vv ? vv.height : window.innerHeight;
-    const keyboardHeight = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-    const isKeyboardOpen = keyboardHeight > 80;
+    const heightDiff = this.initialScreenHeight - height;
+    const isKeyboardOpen = heightDiff > 120 || this.state.isTyping;
+    const keyboardHeight = Math.max(0, heightDiff);
 
     document.documentElement.style.setProperty(
       "--visual-viewport-height",
@@ -2626,7 +2631,9 @@ export class App extends React.Component<AppProps, AppState> {
             {/* Slim 44px Top Bar (dipkri Title only) - auto-hides when typing to maximize video & chat room */}
             <header
               className={`${styles.mobileHeader} ${
-                this.state.isKeyboardOpen ? styles.mobileHeaderKeyboardOpen : ""
+                this.state.isKeyboardOpen || this.state.isTyping
+                  ? styles.mobileHeaderKeyboardOpen
+                  : ""
               }`}
             >
               <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -2640,7 +2647,9 @@ export class App extends React.Component<AppProps, AppState> {
             {/* Fixed 16:9 Video Player (Top pinned, zero scroll with on-video controls) */}
             <div
               className={`${styles.mobileVideoWrapper} ${
-                this.state.isKeyboardOpen ? styles.mobileVideoWrapperKeyboardOpen : ""
+                this.state.isKeyboardOpen || this.state.isTyping
+                  ? styles.mobileVideoWrapperKeyboardOpen
+                  : ""
               }`}
             >
               {renderPlayerBox(true)}
@@ -2670,11 +2679,9 @@ export class App extends React.Component<AppProps, AppState> {
                   ref={this.chatRef}
                   hide={this.state.currentTab !== "chat"}
                   videoPaused={this.state.roomPaused}
-                  isKeyboardOpen={this.state.isKeyboardOpen}
+                  isKeyboardOpen={this.state.isKeyboardOpen || this.state.isTyping}
                   onKeyboardToggle={(open) => {
-                    if (this.state.isKeyboardOpen !== open) {
-                      this.setState({ isKeyboardOpen: open });
-                    }
+                    this.setState({ isTyping: open, isKeyboardOpen: open });
                   }}
                 />
               </div>
@@ -2880,12 +2887,9 @@ export class App extends React.Component<AppProps, AppState> {
               )}
             </div>
 
-            {/* Smartphone Native Bottom Navigation Bar - hidden when typing on keyboard so typing box sits directly on top of keypad */}
-            <nav
-              className={`${styles.mobileBottomNav} ${
-                this.state.isKeyboardOpen ? styles.mobileBottomNavHidden : ""
-              }`}
-            >
+            {/* Smartphone Native Bottom Navigation Bar - completely hidden while typing */}
+            {!this.state.isKeyboardOpen && !this.state.isTyping && (
+              <nav className={styles.mobileBottomNav}>
               <button
                 type="button"
                 className={`${styles.bottomNavTab} ${
@@ -2952,6 +2956,7 @@ export class App extends React.Component<AppProps, AppState> {
                 <span className={styles.tabLabel}>Settings</span>
               </button>
             </nav>
+            )}
           </div>
         ) : (
           <React.Fragment>

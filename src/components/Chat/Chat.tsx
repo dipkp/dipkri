@@ -178,6 +178,8 @@ export class Chat extends React.Component<ChatProps> {
   chatInputRef = React.createRef<HTMLInputElement>();
   ambientSamplerInterval?: number;
   sampleCanvas?: HTMLCanvasElement;
+  lastSendTime = 0;
+  blurTimeout: any = null;
 
   async componentDidMount() {
     this.scrollToBottom();
@@ -189,6 +191,9 @@ export class Chat extends React.Component<ChatProps> {
   componentWillUnmount() {
     if (this.ambientSamplerInterval) {
       clearInterval(this.ambientSamplerInterval);
+    }
+    if (this.blurTimeout) {
+      clearTimeout(this.blurTimeout);
     }
     this.messagesRef.current?.removeEventListener("scroll", this.onScroll);
   }
@@ -345,24 +350,38 @@ export class Chat extends React.Component<ChatProps> {
   };
 
   sendChatMsg = () => {
-    if (!this.state.chatMsg.trim()) {
+    const now = Date.now();
+    if (now - this.lastSendTime < 200) {
+      return;
+    }
+    this.lastSendTime = now;
+    const text = this.state.chatMsg.trim();
+    if (!text) {
       return;
     }
     if (this.chatTooLong()) {
       return;
     }
+
     if (this.state.replyTo?.id && this.state.replyTo.timestamp) {
       const chatPayload: ChatPayload = {
-        msg: this.state.chatMsg,
+        msg: text,
         replyToId: this.state.replyTo.id,
         replyToTimestamp: this.state.replyTo.timestamp,
       };
       this.props.socket.emit("CMD:chatV2", chatPayload);
-      this.setState({ chatMsg: "", replyTo: undefined });
+      this.setState({ chatMsg: "", replyTo: undefined }, () => {
+        this.chatInputRef.current?.focus();
+      });
+      this.chatInputRef.current?.focus();
       return;
     }
-    this.setState({ chatMsg: "", replyTo: undefined });
-    this.props.socket.emit("CMD:chat", this.state.chatMsg);
+
+    this.setState({ chatMsg: "", replyTo: undefined }, () => {
+      this.chatInputRef.current?.focus();
+    });
+    this.props.socket.emit("CMD:chat", text);
+    this.chatInputRef.current?.focus();
   };
 
   setReplyTo = (id: string, timestamp: string, msg?: string) => {
@@ -508,6 +527,12 @@ export class Chat extends React.Component<ChatProps> {
         <div
           className={styles.chatContainer}
           ref={this.messagesRef}
+          onTouchStart={() => {
+            if (document.activeElement === this.chatInputRef.current) {
+              this.chatInputRef.current?.blur();
+              this.props.onKeyboardToggle?.(false);
+            }
+          }}
         >
           {this.props.chat.map((msg, index) => {
             const currentDate = formatWhatsAppDate(msg.timestamp);
@@ -676,17 +701,25 @@ export class Chat extends React.Component<ChatProps> {
               value={this.state.chatMsg}
               onChange={this.updateChatMsg}
               onFocus={() => {
+                if (this.blurTimeout) {
+                  clearTimeout(this.blurTimeout);
+                  this.blurTimeout = null;
+                }
                 this.props.onKeyboardToggle?.(true);
                 if (typeof window !== "undefined") {
+                  window.scrollTo(0, 0);
+                  document.body.scrollTop = 0;
                   setTimeout(() => {
-                    window.scrollTo(0, 0);
-                    document.body.scrollTop = 0;
                     this.scrollToBottom();
                   }, 60);
                 }
               }}
               onBlur={() => {
-                this.props.onKeyboardToggle?.(false);
+                this.blurTimeout = setTimeout(() => {
+                  if (document.activeElement !== this.chatInputRef.current) {
+                    this.props.onKeyboardToggle?.(false);
+                  }
+                }, 160);
                 if (typeof window !== "undefined") {
                   setTimeout(() => {
                     window.scrollTo(0, 0);
@@ -716,7 +749,19 @@ export class Chat extends React.Component<ChatProps> {
             className={`${styles.sendButton} ${
               this.state.chatMsg.trim() ? styles.sendActive : styles.sendDisabled
             }`}
-            onClick={this.sendChatMsg}
+            onMouseDown={(e) => {
+              // Crucial: Prevent mouse click from stealing focus from input
+              e.preventDefault();
+            }}
+            onTouchStart={(e) => {
+              // Crucial on mobile: Prevent touch from stealing focus so keyboard never drops
+              e.preventDefault();
+              this.sendChatMsg();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              this.sendChatMsg();
+            }}
             disabled={this.props.isChatDisabled || !this.state.chatMsg.trim()}
             title="Send (Enter)"
           >
