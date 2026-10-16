@@ -185,7 +185,7 @@ export const SettingsModal = ({
             toggle
             updateTS={updateTS}
             name="Live Audio Captions (English Only)"
-            description="Transcribe English audio in real-time with on-screen closed captions powered by Web Speech API."
+            description="Transcribes live English audio on screen. Note: Browser speech recognition uses your microphone (best for speakers). When wearing earbuds or headphones, use attached subtitles or turn on Chrome's native Live Caption (chrome://settings/accessibility) to capture earbud audio directly."
             label="English only"
             checked={Boolean(getPlayerSettings().liveCaptions)}
             disabled={false}
