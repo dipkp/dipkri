@@ -158,6 +158,31 @@
   padding: 4px 0;
 }
 
+.errorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.retryButton {
+  background: rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.retryButton:hover {
+  background: rgba(99, 102, 241, 0.45);
+}
+
 @media only screen and (max-width: 600px) {
   .captionsWrapper {
     bottom: 52px;

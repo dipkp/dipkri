@@ -5,7 +5,7 @@ import {
   setPlayerSettings,
   PLAYER_SETTINGS_CHANGED_EVENT,
 } from "../PlayerSettings/playerSettings";
-import { WPIconClose, WPIconCaptions } from "../Icons/CustomIcons";
+import { WPIconClose, WPIconCaptions, WPIconSync } from "../Icons/CustomIcons";
 
 interface LiveCaptionsProps {
   paused?: boolean;
@@ -23,10 +23,14 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const [interim, setInterim] = useState<string>("");
   const [isListening, setIsListening] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<"network" | "permission" | "device" | "service" | null>(null);
   const [positionOffset, setPositionOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [retryKey, setRetryKey] = useState<number>(0);
 
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasErrorRef = useRef<boolean>(false);
   const isDraggingRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number }>({
     startX: 0,
@@ -46,6 +50,11 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       const detail = (e as CustomEvent).detail;
       if (detail && detail.liveCaptions !== undefined) {
         setEnabled(detail.liveCaptions);
+        if (detail.liveCaptions) {
+          hasErrorRef.current = false;
+          setErrorMsg(null);
+          setErrorType(null);
+        }
       }
     };
     window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handleSettingsChange);
@@ -54,7 +63,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     };
   }, []);
 
-  // Reset silence timer: clear captions after 3.5 seconds of silence
+  // Reset silence timer: clear captions after 3.8 seconds of silence
   const resetSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
@@ -64,6 +73,60 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       setInterim("");
     }, 3800);
   }, []);
+
+  // Subtitle track fallback: if video has active subtitle cues, mirror them in the caption card
+  useEffect(() => {
+    if (!videoEl || !videoEl.textTracks) return;
+
+    const handleCueChange = () => {
+      for (let i = 0; i < videoEl.textTracks.length; i++) {
+        const track = videoEl.textTracks[i];
+        if (track.mode === "showing" && track.activeCues && track.activeCues.length > 0) {
+          const cue = track.activeCues[0] as any;
+          if (cue?.text) {
+            setTranscript(cue.text);
+            setInterim("");
+            resetSilenceTimer();
+            return;
+          }
+        }
+      }
+    };
+
+    for (let i = 0; i < videoEl.textTracks.length; i++) {
+      videoEl.textTracks[i].addEventListener("cuechange", handleCueChange);
+    }
+
+    return () => {
+      if (videoEl && videoEl.textTracks) {
+        for (let i = 0; i < videoEl.textTracks.length; i++) {
+          videoEl.textTracks[i].removeEventListener("cuechange", handleCueChange);
+        }
+      }
+    };
+  }, [videoEl, resetSilenceTimer]);
+
+  // Request mic permission cleanly if needed
+  const requestAudioPermission = async () => {
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Stop the tracks immediately after permission check
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {
+      console.warn("Audio permission check:", e);
+    }
+  };
+
+  // Safe retry handler
+  const handleRetry = async () => {
+    hasErrorRef.current = false;
+    setErrorMsg(null);
+    setErrorType(null);
+    await requestAudioPermission();
+    setRetryKey((k) => k + 1);
+  };
 
   // Initialize and control SpeechRecognition
   useEffect(() => {
@@ -78,11 +141,11 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       setTranscript("");
       setInterim("");
       setErrorMsg(null);
+      setErrorType(null);
       return;
     }
 
     if (paused) {
-      // Pause speech recognition while video is paused
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -95,7 +158,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    let recognition: any;
+    let recognition: any = null;
+    let isDisposed = false;
+
     try {
       recognition = new SpeechRecognitionClass();
       recognition.continuous = true;
@@ -104,11 +169,15 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       recognition.lang = "en-US"; // English only audio captions
 
       recognition.onstart = () => {
+        if (isDisposed) return;
         setIsListening(true);
+        hasErrorRef.current = false;
         setErrorMsg(null);
+        setErrorType(null);
       };
 
       recognition.onresult = (event: any) => {
+        if (isDisposed) return;
         let finalChunk = "";
         let currentInterim = "";
 
@@ -124,7 +193,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         if (finalChunk.trim()) {
           setTranscript((prev) => {
             const combined = `${prev} ${finalChunk.trim()}`.trim();
-            // Keep the last 15-20 words for clean closed caption display
             const words = combined.split(" ");
             if (words.length > 18) {
               return words.slice(-16).join(" ");
@@ -138,29 +206,63 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       };
 
       recognition.onerror = (event: any) => {
+        if (isDisposed) return;
         console.warn("SpeechRecognition event error:", event.error);
-        if (event.error === "not-allowed") {
-          setErrorMsg("Audio input access required. Click to enable mic/loopback.");
-          setIsListening(false);
-        } else if (event.error === "network") {
-          // Retry automatically after network hiccup
-          setTimeout(() => {
-            if (enabled && !paused) {
-              try {
-                recognition.start();
-              } catch {}
-            }
-          }, 1000);
+        const err = event.error;
+
+        if (err === "no-speech") {
+          // Harmless timeout when silent; do NOT treat as fatal
+          return;
+        }
+
+        if (err === "aborted") {
+          // Normal manual stop or unmount
+          return;
+        }
+
+        // Set error state and prevent infinite restart loop
+        hasErrorRef.current = true;
+        setIsListening(false);
+
+        if (err === "network") {
+          setErrorType("network");
+          setErrorMsg("Speech recognition server connection issue. Please check internet or click Retry.");
+        } else if (err === "not-allowed") {
+          setErrorType("permission");
+          setErrorMsg("Microphone permission required for audio capture. Please allow access in browser URL bar.");
+        } else if (err === "audio-capture") {
+          setErrorType("device");
+          setErrorMsg("No microphone or audio input hardware detected on your device.");
+        } else if (err === "service-not-allowed") {
+          setErrorType("service");
+          setErrorMsg("Speech service restricted by browser policy or network firewall.");
+        } else {
+          setErrorType("service");
+          setErrorMsg(`Live Captions service notice: ${err}`);
         }
       };
 
       recognition.onend = () => {
+        if (isDisposed) return;
         setIsListening(false);
-        // If enabled and still watching, automatically keep listening
+
+        // DO NOT restart if there was a fatal/network error to prevent infinite error loops!
+        if (hasErrorRef.current) {
+          return;
+        }
+
+        // Only restart if still enabled, not paused, and no errors occurred
         if (enabled && !paused) {
-          try {
-            recognition.start();
-          } catch {}
+          if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = setTimeout(() => {
+            if (!isDisposed && enabled && !paused && !hasErrorRef.current) {
+              try {
+                recognition.start();
+              } catch (e) {
+                console.warn("SpeechRecognition safe restart note:", e);
+              }
+            }
+          }, 350);
         }
       };
 
@@ -168,10 +270,16 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       recognitionRef.current = recognition;
     } catch (err: any) {
       console.warn("Failed to initialize SpeechRecognition:", err);
-      setErrorMsg("Failed to start Live Captions");
+      hasErrorRef.current = true;
+      setErrorType("service");
+      setErrorMsg("Unable to start browser Speech Recognition service.");
     }
 
     return () => {
+      isDisposed = true;
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+      }
       if (recognition) {
         try {
           recognition.abort();
@@ -181,11 +289,10 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         clearTimeout(silenceTimerRef.current);
       }
     };
-  }, [enabled, paused, isSpeechSupported, resetSilenceTimer]);
+  }, [enabled, paused, isSpeechSupported, resetSilenceTimer, retryKey]);
 
   // Drag-to-reposition logic
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only drag on card body, not buttons
     if ((e.target as HTMLElement).closest("button")) return;
     isDraggingRef.current = true;
     dragStartRef.current = {
@@ -239,6 +346,8 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             <span className={styles.listeningLabel}>
               {paused
                 ? "Video Paused"
+                : errorMsg
+                ? "Notice"
                 : isListening
                 ? "Transcribing English Audio..."
                 : "Connecting..."}
@@ -256,8 +365,17 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         </div>
 
         {errorMsg ? (
-          <div className={styles.warningBox}>
-            <span>⚠️ {errorMsg}</span>
+          <div className={styles.errorRow}>
+            <div className={styles.warningBox}>
+              <span>⚠️ {errorMsg}</span>
+            </div>
+            <button
+              className={styles.retryButton}
+              onClick={handleRetry}
+              title="Retry Live Captions"
+            >
+              Retry
+            </button>
           </div>
         ) : !isSpeechSupported ? (
           <div className={styles.warningBox}>
