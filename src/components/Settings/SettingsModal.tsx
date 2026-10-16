@@ -17,7 +17,16 @@ import { Socket } from "socket.io-client";
 import {
   WPIconSettings,
   WPIconTrash,
+  WPIconCaptions,
+  WPIconMonitor,
+  WPIconVolumeOn,
 } from "../Icons/CustomIcons";
+import {
+  getPlayerSettings,
+  setPlayerSettings,
+} from "../PlayerSettings/playerSettings";
+import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
+import { qualityManager } from "../PlayerSettings/qualityManager";
 import styles from "./Settings.module.css";
 
 interface SettingsModalProps {
@@ -169,6 +178,88 @@ export const SettingsModal = ({
               );
               setUpdateTS(Date.now());
             }}
+          />
+
+          {/* Live Audio Captions (English Only) */}
+          <SettingRow
+            toggle
+            updateTS={updateTS}
+            name="Live Audio Captions (English Only)"
+            description="Transcribe English audio in real-time with on-screen closed captions powered by Web Speech API."
+            label="English only"
+            checked={Boolean(getPlayerSettings().liveCaptions)}
+            disabled={false}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setPlayerSettings({ liveCaptions: checked });
+              setUpdateTS(Date.now());
+            }}
+          />
+
+          {/* Player Quality & Audio Controls Card */}
+          <SettingRow
+            disabled={false}
+            content={
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", padding: "4px 0" }}>
+                {/* 1. Video Playback Quality */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ maxWidth: "340px" }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5", display: "flex", alignItems: "center", gap: 6 }}>
+                      <WPIconMonitor size={16} color="#6366f1" />
+                      Video Quality
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                      Select playback streaming resolution (Auto adaptive or fixed HD/SD).
+                    </div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getPlayerSettings().quality}
+                    onChange={(val) => {
+                      setPlayerSettings({ quality: val });
+                      qualityManager.applyQuality(val);
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "Auto", value: "auto" },
+                      { label: "1080p", value: "1080p" },
+                      { label: "720p", value: "720p" },
+                      { label: "480p", value: "480p" },
+                      { label: "360p", value: "360p" },
+                    ]}
+                  />
+                </div>
+
+                {/* 2. Audio Volume Boost */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ maxWidth: "340px" }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5", display: "flex", alignItems: "center", gap: 6 }}>
+                      <WPIconVolumeOn size={16} color="#34d399" />
+                      Audio Boost & Voice Clarity
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                      Amplify quiet audio and enhance spoken dialogue volume beyond 100%.
+                    </div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={String(getPlayerSettings().audioBoost)}
+                    onChange={(val) => {
+                      const boostNum = Number(val) || 100;
+                      setPlayerSettings({ audioBoost: boostNum });
+                      audioEnhancer.setBoost(boostNum);
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "100%", value: "100" },
+                      { label: "150% Voice", value: "150" },
+                      { label: "200% High", value: "200" },
+                      { label: "300% Max", value: "300" },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
           />
 
           {/* SECTION 2.5: Floating Webcam Bubbles Controls */}

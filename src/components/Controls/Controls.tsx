@@ -26,6 +26,7 @@ import {
   WPIconVolumeOn,
   WPIconVolumeLow,
   WPIconVolumeOff,
+  WPIconMonitor,
 } from "../Icons/CustomIcons";
 import {
   IconVideo,
@@ -38,6 +39,14 @@ import {
   setWebcamSettings,
   BubbleSize,
 } from "../VideoChat/webcamSettings";
+import {
+  getPlayerSettings,
+  setPlayerSettings,
+  PLAYER_SETTINGS_CHANGED_EVENT,
+  PlayerSettingsState,
+} from "../PlayerSettings/playerSettings";
+import { qualityManager, QUALITY_PRESETS } from "../PlayerSettings/qualityManager";
+import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import { Chat } from "../Chat/Chat";
 
 interface ControlsProps {
@@ -126,6 +135,26 @@ export const Controls = (props: ControlsProps) => {
       window.removeEventListener("dipkri-webcam-settings-changed", handleWebcamChange);
     };
   }, []);
+
+  const [playerSettingsState, setPlayerSettingsState] = useState<PlayerSettingsState>(() => getPlayerSettings());
+
+  useEffect(() => {
+    const handlePlayerSettingsChange = (e: any) => {
+      if (e?.detail) {
+        setPlayerSettingsState((prev) => ({ ...prev, ...e.detail }));
+      }
+    };
+    window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handlePlayerSettingsChange);
+    return () => {
+      window.removeEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handlePlayerSettingsChange);
+    };
+  }, []);
+
+  const audioTracks = useMemo(() => {
+    return audioEnhancer.getAvailableTracks(
+      typeof document !== "undefined" ? (document.getElementById("leftVideo") as HTMLMediaElement) : null,
+    );
+  }, [props.video, isMenuOpen]);
 
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
@@ -1029,6 +1058,21 @@ export const Controls = (props: ControlsProps) => {
                     >
                       Search & Upload Subtitles...
                     </Menu.Item>
+                    <Menu.Divider />
+                    <Menu.Item
+                      leftSection={<WPIconCaptions size={16} />}
+                      onClick={() => {
+                        const next = !playerSettingsState.liveCaptions;
+                        setPlayerSettings({ liveCaptions: next });
+                      }}
+                      rightSection={
+                        playerSettingsState.liveCaptions ? (
+                          <WPIconCheck size={16} color="#34d399" />
+                        ) : null
+                      }
+                    >
+                      Live Audio Captions: {playerSettingsState.liveCaptions ? "English (On)" : "Off"}
+                    </Menu.Item>
                   </>
                 )}
               </Menu.Dropdown>
@@ -1127,9 +1171,103 @@ export const Controls = (props: ControlsProps) => {
                   <WPIconSettings size={20} />
                 </div>
               </Menu.Target>
-              <Menu.Dropdown>
+              <Menu.Dropdown style={{ maxHeight: "75vh", overflowY: "auto", minWidth: 230 }}>
+                {/* 1. Live Captions (Audio - English Only) */}
+                <Menu.Label>Live Captions</Menu.Label>
+                <Menu.Item
+                  leftSection={<WPIconCaptions size={16} />}
+                  onClick={() => {
+                    const next = !playerSettingsState.liveCaptions;
+                    setPlayerSettings({ liveCaptions: next });
+                  }}
+                  rightSection={
+                    playerSettingsState.liveCaptions ? (
+                      <WPIconCheck size={16} color="#34d399" />
+                    ) : null
+                  }
+                >
+                  Live Captions: {playerSettingsState.liveCaptions ? "English (On)" : "Off"}
+                </Menu.Item>
+
+                {/* 2. Quality Change Option */}
+                <Menu.Divider />
+                <Menu.Label>Video Quality ({playerSettingsState.quality.toUpperCase()})</Menu.Label>
+                {QUALITY_PRESETS.map((q) => (
+                  <Menu.Item
+                    key={q.key}
+                    leftSection={<WPIconMonitor size={16} />}
+                    onClick={() => {
+                      setPlayerSettings({ quality: q.key });
+                      qualityManager.applyQuality(q.key, props.isYouTube);
+                    }}
+                    rightSection={
+                      playerSettingsState.quality === q.key ? (
+                        <WPIconCheck size={16} color="#6366f1" />
+                      ) : null
+                    }
+                  >
+                    {q.label} {q.badge ? `(${q.badge})` : ""}
+                  </Menu.Item>
+                ))}
+
+                {/* 3. Change Audio Option: Audio Boost & Tracks */}
+                <Menu.Divider />
+                <Menu.Label>Audio & Volume Boost</Menu.Label>
+                {[
+                  { val: 100, label: "Audio Boost: 100% (Normal)" },
+                  { val: 150, label: "Audio Boost: 150% (Voice Boost)" },
+                  { val: 200, label: "Audio Boost: 200% (High Boost)" },
+                  { val: 300, label: "Audio Boost: 300% (Max Boost)" },
+                ].map((b) => (
+                  <Menu.Item
+                    key={b.val}
+                    leftSection={<WPIconVolumeOn size={16} />}
+                    onClick={() => {
+                      setPlayerSettings({ audioBoost: b.val });
+                      audioEnhancer.setBoost(b.val);
+                    }}
+                    rightSection={
+                      playerSettingsState.audioBoost === b.val ? (
+                        <WPIconCheck size={16} color="#34d399" />
+                      ) : null
+                    }
+                  >
+                    {b.label}
+                  </Menu.Item>
+                ))}
+
+                {/* Audio Tracks Selection if multi-track */}
+                {audioTracks.length > 1 && (
+                  <>
+                    <Menu.Divider />
+                    <Menu.Label>Select Audio Track</Menu.Label>
+                    {audioTracks.map((t, idx) => (
+                      <Menu.Item
+                        key={t.id}
+                        leftSection={<WPIconVolumeLow size={16} />}
+                        onClick={() => {
+                          setPlayerSettings({ audioTrack: idx });
+                          audioEnhancer.selectTrack(
+                            idx,
+                            document.getElementById("leftVideo") as HTMLMediaElement,
+                          );
+                        }}
+                        rightSection={
+                          playerSettingsState.audioTrack === idx ? (
+                            <WPIconCheck size={16} color="#6366f1" />
+                          ) : null
+                        }
+                      >
+                        {t.label}
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
+
+                {/* 4. Webcam Bubbles */}
+                <Menu.Divider />
                 <Menu.Label>Webcam Bubbles</Menu.Label>
-                {/* 1. Drag Unlock Toggle */}
+                {/* Drag Unlock Toggle */}
                 <Menu.Item
                   onClick={() => {
                     setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked });
@@ -1143,14 +1281,12 @@ export const Controls = (props: ControlsProps) => {
                   {webcamState.dragUnlocked ? "Dragging: Unlocked (Movable)" : "Dragging: Locked (Clean Video)"}
                 </Menu.Item>
 
-                {/* 2. Size presets */}
-                <Menu.Divider />
-                <Menu.Label>Bubble Size</Menu.Label>
+                {/* Size presets */}
                 {[
-                  { key: "min", label: "Minimum (48px)" },
-                  { key: "small", label: "Small (70px)" },
-                  { key: "medium", label: "Medium (95px)" },
-                  { key: "max", label: "Maximum (145px)" },
+                  { key: "min", label: "Bubble: Minimum (48px)" },
+                  { key: "small", label: "Bubble: Small (70px)" },
+                  { key: "medium", label: "Bubble: Medium (95px)" },
+                  { key: "max", label: "Bubble: Maximum (145px)" },
                 ].map((item) => (
                   <Menu.Item
                     key={item.key}
@@ -1167,8 +1303,7 @@ export const Controls = (props: ControlsProps) => {
                   </Menu.Item>
                 ))}
 
-                <Menu.Divider />
-                {/* 3. Show / Hide Bubbles */}
+                {/* Show / Hide Bubbles */}
                 <Menu.Item
                   onClick={() => {
                     setWebcamSettings({ visible: !webcamState.visible });
@@ -1182,7 +1317,7 @@ export const Controls = (props: ControlsProps) => {
                   {webcamState.visible ? "Webcam Bubbles: Visible" : "Webcam Bubbles: Hidden"}
                 </Menu.Item>
 
-                {/* 4. Link to all room settings */}
+                {/* 5. Link to all room settings */}
                 {props.onOpenSettings && (
                   <>
                     <Menu.Divider />

@@ -88,6 +88,9 @@ import {
   MobileFloatingReactions,
   MobileTabBar,
 } from "../Mobile/MobileEnhancements";
+import { LiveCaptions } from "../LiveCaptions/LiveCaptions";
+import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
+import { getPlayerSettings } from "../PlayerSettings/playerSettings";
 import { InviteButton } from "../InviteButton/InviteButton";
 import type WebTorrent from "webtorrent";
 import type Hls from "hls.js";
@@ -643,6 +646,13 @@ export class App extends React.Component<AppProps, AppState> {
             "canplay",
             () => {
               this.setLoadingFalse();
+              if (leftVideo) {
+                audioEnhancer.attachToElement(leftVideo);
+                const currentSettings = getPlayerSettings();
+                if (currentSettings.audioBoost) {
+                  audioEnhancer.setBoost(currentSettings.audioBoost);
+                }
+              }
               let ts = undefined;
               // Torrent streams, WebTorrent, Hls and Dash reset position back to 0 so set it back here
               if (
@@ -2327,6 +2337,11 @@ export class App extends React.Component<AppProps, AppState> {
           </div>
         )}
         {this.state.roomMedia && controls}
+        <LiveCaptions
+          paused={this.state.roomPaused}
+          videoEl={this.HTMLInterface.getVideoEl()}
+          isYouTube={this.usingYoutube()}
+        />
         <MobileFloatingReactions
           hide={Boolean(this.state.settingsModalOpen)}
           onSendReaction={(emoji: string) => {

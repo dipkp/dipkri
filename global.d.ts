@@ -53,6 +53,10 @@ interface Settings {
   webcamBubbleSize?: BubbleSize;
   webcamDragUnlocked?: boolean;
   webcamBubblesVisible?: boolean;
+  liveCaptions?: boolean;
+  playbackQuality?: string;
+  audioBoost?: number;
+  audioMode?: "stereo" | "mono";
 }
 
 interface PlaylistVideo {
