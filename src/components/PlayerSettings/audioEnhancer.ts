@@ -1,10 +1,106 @@
 import { DualAudioMode, getPlayerSettings } from "./playerSettings";
 
+const LANG_MAP: Record<string, string> = {
+  hin: "Hindi",
+  hi: "Hindi",
+  hindi: "Hindi",
+  eng: "English",
+  en: "English",
+  english: "English",
+  tam: "Tamil",
+  ta: "Tamil",
+  tamil: "Tamil",
+  tel: "Telugu",
+  te: "Telugu",
+  telugu: "Telugu",
+  mal: "Malayalam",
+  ml: "Malayalam",
+  kan: "Kannada",
+  kn: "Kannada",
+  ben: "Bengali",
+  bn: "Bengali",
+  mar: "Marathi",
+  mr: "Marathi",
+  guj: "Gujarati",
+  gu: "Gujarati",
+  pan: "Punjabi",
+  pa: "Punjabi",
+  urd: "Urdu",
+  ur: "Urdu",
+  jpn: "Japanese",
+  ja: "Japanese",
+  japanese: "Japanese",
+  kor: "Korean",
+  ko: "Korean",
+  korean: "Korean",
+  chi: "Chinese",
+  zho: "Chinese",
+  zh: "Chinese",
+  chinese: "Chinese",
+  spa: "Spanish",
+  es: "Spanish",
+  spanish: "Spanish",
+  fre: "French",
+  fra: "French",
+  fr: "French",
+  french: "French",
+  ger: "German",
+  deu: "German",
+  de: "German",
+  german: "German",
+  ita: "Italian",
+  it: "Italian",
+  italian: "Italian",
+  rus: "Russian",
+  ru: "Russian",
+  russian: "Russian",
+  por: "Portuguese",
+  pt: "Portuguese",
+  portuguese: "Portuguese",
+  ara: "Arabic",
+  ar: "Arabic",
+  arabic: "Arabic",
+};
+
+export const formatAudioLanguageLabel = (
+  rawLabel?: string,
+  rawLang?: string,
+  index: number = 0,
+): string => {
+  const normLang = (rawLang || "").toLowerCase().trim();
+  const normLabel = (rawLabel || "").toLowerCase().trim();
+
+  // 1. Check if rawLang is in LANG_MAP
+  if (normLang && LANG_MAP[normLang]) {
+    const langName = LANG_MAP[normLang];
+    return rawLabel && rawLabel.trim() && !rawLabel.toLowerCase().includes(normLang)
+      ? `${langName} - ${rawLabel}`
+      : `${langName} (${rawLang})`;
+  }
+
+  // 2. Search inside rawLabel for known language names or keys
+  for (const [key, val] of Object.entries(LANG_MAP)) {
+    if (normLabel === key || normLabel.startsWith(`${key} `) || normLabel.includes(`(${key})`)) {
+      return `${val} Audio`;
+    }
+    if (normLabel.includes(val.toLowerCase())) {
+      return rawLabel && rawLabel.trim() ? rawLabel : `${val} Audio`;
+    }
+  }
+
+  // 3. Fallback
+  if (rawLabel && rawLabel.trim()) {
+    return rawLabel;
+  }
+  return `Audio Track ${index + 1}`;
+};
+
 export interface AudioTrackInfo {
   id: string | number;
   label: string;
   language?: string;
   enabled: boolean;
+  isAttached?: boolean;
 }
 
 class AudioEnhancerManager {
@@ -134,6 +230,19 @@ class AudioEnhancerManager {
   }
 
   /**
+   * Check if multiple discrete audio streams are attached to the video
+   */
+  public hasMultiAudioStreams(videoEl?: HTMLMediaElement | null): boolean {
+    if (videoEl && (videoEl as any).audioTracks && (videoEl as any).audioTracks.length > 1) {
+      return true;
+    }
+    if (typeof window !== "undefined" && window.watchparty?.hls?.audioTracks && window.watchparty.hls.audioTracks.length > 1) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Get list of audio tracks available from HTML5 video, HLS, or YouTube
    */
   public getAvailableTracks(videoEl?: HTMLMediaElement | null): AudioTrackInfo[] {
@@ -146,9 +255,10 @@ class AudioEnhancerManager {
         const t = nativeTracks[i];
         tracks.push({
           id: i,
-          label: t.label || t.language || `Audio Track ${i + 1}`,
+          label: formatAudioLanguageLabel(t.label, t.language, i),
           language: t.language || undefined,
           enabled: t.enabled,
+          isAttached: true,
         });
       }
       if (tracks.length > 0) return tracks;
@@ -161,9 +271,10 @@ class AudioEnhancerManager {
       hlsTracks.forEach((t, idx) => {
         tracks.push({
           id: idx,
-          label: t.name || t.lang || `Audio Track ${idx + 1}`,
+          label: formatAudioLanguageLabel(t.name, t.lang, idx),
           language: t.lang || undefined,
           enabled: currentTrack === idx,
+          isAttached: true,
         });
       });
       if (tracks.length > 0) return tracks;
@@ -172,8 +283,9 @@ class AudioEnhancerManager {
     // 3. Fallback: Default Primary Stereo Track
     tracks.push({
       id: 0,
-      label: "Stereo (Default Audio)",
+      label: "Default Audio (Stream 1)",
       enabled: true,
+      isAttached: true,
     });
 
     return tracks;

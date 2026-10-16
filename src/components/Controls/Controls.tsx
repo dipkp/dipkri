@@ -168,6 +168,12 @@ export const Controls = (props: ControlsProps) => {
     );
   }, [props.video, isMenuOpen]);
 
+  const hasMultipleAudioTracks = useMemo(() => {
+    return audioEnhancer.hasMultiAudioStreams(
+      typeof document !== "undefined" ? (document.getElementById("leftVideo") as HTMLMediaElement) : null,
+    );
+  }, [props.video, isMenuOpen]);
+
   const attachedSubtitleTracks = useMemo(() => {
     if (typeof document === "undefined") return [];
     const video = document.getElementById("leftVideo") as HTMLVideoElement;
@@ -220,33 +226,70 @@ export const Controls = (props: ControlsProps) => {
   } = props;
 
   // Auto-hide controls logic
-  const resetHideTimer = useCallback(() => {
-    setVisible(true);
+  const isMenuOpenRef = useRef(isMenuOpen);
+  isMenuOpenRef.current = isMenuOpen;
+  const isDrawerOpenRef = useRef(isChatDrawerOpen || isVideoDrawerOpen);
+  isDrawerOpenRef.current = isChatDrawerOpen || isVideoDrawerOpen;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+
+  const scheduleHide = useCallback((delay = 3200) => {
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
     }
-    if (!paused && !isMenuOpen) {
-      hideTimerRef.current = setTimeout(() => {
-        setVisible(false);
-      }, 3500);
-    }
-  }, [paused, isMenuOpen]);
-
-  useEffect(() => {
-    if (paused) {
+    // Don't auto-hide while a dropdown menu or video/chat drawer is open
+    if (isMenuOpenRef.current || isDrawerOpenRef.current) {
       setVisible(true);
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
-    } else {
-      resetHideTimer();
+      return;
     }
+    hideTimerRef.current = setTimeout(() => {
+      if (!isMenuOpenRef.current && !isDrawerOpenRef.current) {
+        setVisible(false);
+      }
+    }, delay);
+  }, []);
+
+  const resetHideTimer = useCallback(() => {
+    setVisible(true);
+    scheduleHide(pausedRef.current ? 4500 : 3200);
+  }, [scheduleHide]);
+
+  // Global activity listener on window / player
+  useEffect(() => {
+    resetHideTimer();
+
+    const onUserActivity = () => {
+      resetHideTimer();
+    };
+
+    window.addEventListener("mousemove", onUserActivity, { passive: true });
+    window.addEventListener("pointermove", onUserActivity, { passive: true });
+    window.addEventListener("touchstart", onUserActivity, { passive: true });
+    window.addEventListener("keydown", onUserActivity, { passive: true });
+
     return () => {
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
       }
+      window.removeEventListener("mousemove", onUserActivity);
+      window.removeEventListener("pointermove", onUserActivity);
+      window.removeEventListener("touchstart", onUserActivity);
+      window.removeEventListener("keydown", onUserActivity);
     };
-  }, [paused, resetHideTimer]);
+  }, [resetHideTimer]);
+
+  useEffect(() => {
+    if (isMenuOpen || isChatDrawerOpen || isVideoDrawerOpen) {
+      setVisible(true);
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    } else {
+      scheduleHide(paused ? 4500 : 3200);
+    }
+  }, [isMenuOpen, isChatDrawerOpen, isVideoDrawerOpen, paused, scheduleHide]);
 
   // Universal mobile/tablet & desktop landscape detection listener
   useEffect(() => {
@@ -448,8 +491,16 @@ export const Controls = (props: ControlsProps) => {
       } else {
         // Single tap -> toggle controls overlay
         lastTapRef.current = { time: now, x: relativeX };
-        setVisible((prev) => !prev);
-        resetHideTimer();
+        setVisible((prev) => {
+          const next = !prev;
+          if (next) {
+            scheduleHide(3200);
+          } else if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = null;
+          }
+          return next;
+        });
       }
     } catch (err) {
       console.warn("Video gesture handling error:", err);
@@ -507,11 +558,11 @@ export const Controls = (props: ControlsProps) => {
     );
   });
 
-  const isControlsVisible = visible || paused;
+  const isControlsVisible = visible;
 
   return (
     <div
-      className={styles.playerOverlayWrapper}
+      className={`${styles.playerOverlayWrapper} ${isControlsVisible ? styles.controlsVisible : styles.controlsHidden}`}
       onClick={handleVideoGesture}
       onMouseMove={resetHideTimer}
       onTouchStart={resetHideTimer}
@@ -1232,65 +1283,19 @@ export const Controls = (props: ControlsProps) => {
                   </button>
                 </div>
 
-                {/* TAB 1: AUDIO & DUAL AUDIO */}
-                {settingsTab === "audio" && (
-                  <div>
-                    {/* Dual Audio / Channel Routing */}
-                    <div className={styles.settingsGroup}>
-                      <div className={styles.settingsHeaderRow}>
-                        <span className={styles.settingsGroupTitle}>Dual Audio / Language</span>
-                        <span className={styles.settingsBadge}>
-                          {playerSettingsState.dualAudioMode === "stereo"
-                            ? "STEREO"
-                            : playerSettingsState.dualAudioMode === "left"
-                            ? "AUDIO 1 (L)"
-                            : "AUDIO 2 (R)"}
-                        </span>
-                      </div>
-                      <div className={styles.settingsHint}>
-                        Isolate left or right language to both speakers
-                      </div>
-                      <div className={styles.settingsPillsRow}>
-                        <button
-                          type="button"
-                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "stereo" ? styles.settingsPillActive : ""}`}
-                          onClick={() => {
-                            setPlayerSettings({ dualAudioMode: "stereo" });
-                            audioEnhancer.setDualAudioMode("stereo");
-                          }}
-                        >
-                          Stereo (Normal)
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "left" ? styles.settingsPillActive : ""}`}
-                          onClick={() => {
-                            setPlayerSettings({ dualAudioMode: "left" });
-                            audioEnhancer.setDualAudioMode("left");
-                          }}
-                        >
-                          Audio 1 (Left)
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "right" ? styles.settingsPillActive : ""}`}
-                          onClick={() => {
-                            setPlayerSettings({ dualAudioMode: "right" });
-                            audioEnhancer.setDualAudioMode("right");
-                          }}
-                        >
-                          Audio 2 (Right)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Discrete Multi-Track Selector (if available) */}
-                    {audioTracks.length > 1 && (
+                {/* Fixed-Size Stable Tab Content Container */}
+                <div className={styles.settingsTabContent}>
+                  {/* TAB 1: AUDIO & DUAL AUDIO */}
+                  {settingsTab === "audio" && (
+                    <div>
+                      {/* Audio Tracks / Discrete Language Detection */}
                       <div className={styles.settingsGroup}>
                         <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Audio Stream</span>
-                          <span className={styles.settingsBadge}>
-                            {audioTracks.length} TRACKS
+                          <span className={styles.settingsGroupTitle}>Audio Tracks</span>
+                          <span className={`${styles.statusBadge} ${hasMultipleAudioTracks ? styles.badgeActive : ""}`}>
+                            {hasMultipleAudioTracks
+                              ? `🟢 ${audioTracks.length} Attached`
+                              : "1 Track Attached"}
                           </span>
                         </div>
                         <div className={styles.settingsList}>
@@ -1306,309 +1311,368 @@ export const Controls = (props: ControlsProps) => {
                                 );
                               }}
                             >
-                              <span>{t.label}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden" }}>
+                                <WPIconVolumeLow size={13} style={{ flexShrink: 0 }} />
+                                <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                  {t.label}
+                                </span>
+                              </div>
                               {playerSettingsState.audioTrack === idx && (
-                                <WPIconCheck size={14} color="#6366f1" />
+                                <WPIconCheck size={13} color="#6366f1" style={{ flexShrink: 0 }} />
                               )}
                             </div>
                           ))}
                         </div>
+                        {!hasMultipleAudioTracks && (
+                          <div className={styles.settingsHint}>
+                            1 audio stream detected. For dual-language files with Left/Right channels (Hindi & English), use Channel Switch below.
+                          </div>
+                        )}
                       </div>
-                    )}
 
-                    {/* Dialogue & Volume Boost */}
-                    <div className={styles.settingsGroup}>
-                      <div className={styles.settingsHeaderRow}>
-                        <span className={styles.settingsGroupTitle}>Dialogue Boost</span>
-                        <span className={styles.settingsBadge}>
-                          {playerSettingsState.audioBoost}%
-                        </span>
-                      </div>
-                      <div className={styles.settingsPillsRow}>
-                        {[
-                          { val: 100, label: "100% (Normal)" },
-                          { val: 150, label: "150% (Voice)" },
-                          { val: 200, label: "200% (High)" },
-                          { val: 300, label: "300% (Max)" },
-                        ].map((b) => (
-                          <button
-                            key={b.val}
-                            type="button"
-                            className={`${styles.settingsPill} ${playerSettingsState.audioBoost === b.val ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              setPlayerSettings({ audioBoost: b.val });
-                              audioEnhancer.setBoost(b.val);
-                            }}
-                          >
-                            {b.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 2: SUBTITLES */}
-                {settingsTab === "subtitles" && (
-                  <div>
-                    {/* Subtitle On/Off */}
-                    <div className={styles.settingsGroup}>
-                      <div className={styles.settingsHeaderRow}>
-                        <span className={styles.settingsGroupTitle}>Subtitles</span>
-                        <span className={`${styles.statusBadge} ${props.subtitled ? styles.badgeActive : ""}`}>
-                          {props.subtitled ? "ACTIVE" : "OFF"}
-                        </span>
-                      </div>
-                      <div className={styles.settingsPillsRow}>
-                        <button
-                          type="button"
-                          className={`${styles.settingsPill} ${!props.subtitled ? styles.settingsPillActive : ""}`}
-                          onClick={() => props.localSetSubtitleMode("hidden")}
-                        >
-                          Off
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.settingsPill} ${props.subtitled ? styles.settingsPillActive : ""}`}
-                          onClick={() => props.localSetSubtitleMode("showing")}
-                        >
-                          On {props.roomSubtitle ? "(Room File)" : ""}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Attached Subtitles from Video or YouTube CC */}
-                    {props.isYouTube ? (
+                      {/* Dual-Audio Channel Switcher */}
                       <div className={styles.settingsGroup}>
-                        <div className={styles.settingsGroupTitle}>YouTube Captions</div>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Dual Audio (Channel Switch)</span>
+                          <span className={styles.settingsBadge}>
+                            {playerSettingsState.dualAudioMode === "stereo"
+                              ? "STEREO"
+                              : playerSettingsState.dualAudioMode === "left"
+                              ? "L CHANNEL"
+                              : "R CHANNEL"}
+                          </span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          <button
+                            type="button"
+                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "stereo" ? styles.settingsPillActive : ""}`}
+                            onClick={() => {
+                              setPlayerSettings({ dualAudioMode: "stereo" });
+                              audioEnhancer.setDualAudioMode("stereo");
+                            }}
+                            title="Normal Stereo (Both channels)"
+                          >
+                            Stereo
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "left" ? styles.settingsPillActive : ""}`}
+                            onClick={() => {
+                              setPlayerSettings({ dualAudioMode: "left" });
+                              audioEnhancer.setDualAudioMode("left");
+                            }}
+                            title="Audio 1 (Left Channel - e.g. Hindi)"
+                          >
+                            Audio 1 (Left)
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "right" ? styles.settingsPillActive : ""}`}
+                            onClick={() => {
+                              setPlayerSettings({ dualAudioMode: "right" });
+                              audioEnhancer.setDualAudioMode("right");
+                            }}
+                            title="Audio 2 (Right Channel - e.g. English)"
+                          >
+                            Audio 2 (Right)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Dialogue Boost */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Dialogue Boost</span>
+                          <span className={styles.settingsBadge}>
+                            {playerSettingsState.audioBoost}%
+                          </span>
+                        </div>
                         <div className={styles.settingsPillsRow}>
                           {[
-                            { key: "hidden", label: "Off", value: "hidden" },
-                            { key: "en", label: "English", value: "showing" },
-                            { key: "es", label: "Spanish", value: "showing" },
-                          ].map((item) => (
+                            { val: 100, label: "100%" },
+                            { val: 150, label: "150%" },
+                            { val: 200, label: "200%" },
+                            { val: 300, label: "300%" },
+                          ].map((b) => (
                             <button
-                              key={item.key}
+                              key={b.val}
                               type="button"
-                              className={`${styles.settingsPill} ${(props.subtitled && item.key !== "hidden") || (!props.subtitled && item.key === "hidden") ? styles.settingsPillActive : ""}`}
-                              onClick={() => props.localSetSubtitleMode(item.value as TextTrackMode, item.key)}
+                              className={`${styles.settingsPill} ${playerSettingsState.audioBoost === b.val ? styles.settingsPillActive : ""}`}
+                              onClick={() => {
+                                setPlayerSettings({ audioBoost: b.val });
+                                audioEnhancer.setBoost(b.val);
+                              }}
                             >
-                              {item.label}
+                              {b.label}
                             </button>
                           ))}
                         </div>
                       </div>
-                    ) : (
-                      attachedSubtitleTracks.length > 0 && (
+                    </div>
+                  )}
+
+                  {/* TAB 2: SUBTITLES */}
+                  {settingsTab === "subtitles" && (
+                    <div>
+                      {/* Subtitle On/Off */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Subtitles</span>
+                          <span className={`${styles.statusBadge} ${props.subtitled ? styles.badgeActive : ""}`}>
+                            {props.subtitled ? "ACTIVE" : "OFF"}
+                          </span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          <button
+                            type="button"
+                            className={`${styles.settingsPill} ${!props.subtitled ? styles.settingsPillActive : ""}`}
+                            onClick={() => props.localSetSubtitleMode("hidden")}
+                          >
+                            Off
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.settingsPill} ${props.subtitled ? styles.settingsPillActive : ""}`}
+                            onClick={() => props.localSetSubtitleMode("showing")}
+                          >
+                            On {props.roomSubtitle ? "(Room File)" : ""}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Attached Subtitles from Video or YouTube CC */}
+                      {props.isYouTube ? (
                         <div className={styles.settingsGroup}>
-                          <div className={styles.settingsHeaderRow}>
-                            <span className={styles.settingsGroupTitle}>Attached Tracks</span>
-                            <span className={styles.settingsBadge}>{attachedSubtitleTracks.length}</span>
-                          </div>
-                          <div className={styles.settingsList}>
-                            {attachedSubtitleTracks.map((t) => (
-                              <div
-                                key={t.index}
-                                className={`${styles.settingsRowItem} ${t.active ? styles.settingsRowItemActive : ""}`}
-                                onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
+                          <div className={styles.settingsGroupTitle}>YouTube Captions</div>
+                          <div className={styles.settingsPillsRow}>
+                            {[
+                              { key: "hidden", label: "Off", value: "hidden" },
+                              { key: "en", label: "English", value: "showing" },
+                              { key: "es", label: "Spanish", value: "showing" },
+                            ].map((item) => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                className={`${styles.settingsPill} ${(props.subtitled && item.key !== "hidden") || (!props.subtitled && item.key === "hidden") ? styles.settingsPillActive : ""}`}
+                                onClick={() => props.localSetSubtitleMode(item.value as TextTrackMode, item.key)}
                               >
-                                <span>{t.label}</span>
-                                {t.active && <WPIconCheck size={14} color="#6366f1" />}
-                              </div>
+                                {item.label}
+                              </button>
                             ))}
                           </div>
                         </div>
-                      )
-                    )}
-
-                    {/* Load External Subtitle */}
-                    <div className={styles.settingsGroup}>
-                      <button
-                        type="button"
-                        className={styles.settingsActionBtn}
-                        onClick={() => {
-                          props.localSubtitleModal();
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <WPIconSearch size={14} /> Search & Auto-Load Subtitles (.srt)...
-                      </button>
-                    </div>
-
-                    {/* Live Speech Transcribe */}
-                    <div className={styles.settingsGroup}>
-                      <div
-                        className={`${styles.settingsRowItem} ${playerSettingsState.liveCaptions ? styles.settingsRowItemActive : ""}`}
-                        onClick={() => {
-                          const next = !playerSettingsState.liveCaptions;
-                          setPlayerSettings({ liveCaptions: next });
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600 }}>Live Audio Transcribe</div>
-                          <div className={styles.settingsHint}>On-device speech-to-text (English)</div>
-                        </div>
-                        {playerSettingsState.liveCaptions ? (
-                          <span className={styles.badgeActiveText}>ON</span>
-                        ) : (
-                          <span className={styles.badgeOffText}>OFF</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Subtitle Style Notice */}
-                    <div className={styles.settingsSubtitleStyleBox}>
-                      <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>
-                      <div className={styles.settingsSubtitlePreviewPill}>
-                        100% Transparent • White Shadowed Borders
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 3: QUALITY */}
-                {settingsTab === "quality" && (
-                  <div>
-                    <div className={styles.settingsGroup}>
-                      <div className={styles.settingsHeaderRow}>
-                        <span className={styles.settingsGroupTitle}>Playback Quality</span>
-                        {nativeResolution && (
-                          <span className={styles.settingsBadge}>Source: {nativeResolution}</span>
-                        )}
-                      </div>
-                      <div className={styles.settingsPillsRow}>
-                        {QUALITY_PRESETS.map((q) => (
-                          <button
-                            key={q.key}
-                            type="button"
-                            className={`${styles.settingsPill} ${playerSettingsState.quality === q.key ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              setPlayerSettings({ quality: q.key });
-                              qualityManager.applyQuality(q.key, props.isYouTube);
-                            }}
-                          >
-                            {q.label} {q.badge ? `(${q.badge})` : ""}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 4: MORE */}
-                {settingsTab === "more" && (
-                  <div>
-                    {/* Webcam Bubbles */}
-                    <div className={styles.settingsGroup}>
-                      <div className={styles.settingsGroupTitle}>Webcam Bubbles</div>
-                      <div
-                        className={styles.settingsRowItem}
-                        onClick={() => setWebcamSettings({ visible: !webcamState.visible })}
-                      >
-                        <span>Display Bubbles</span>
-                        <span className={webcamState.visible ? styles.badgeActiveText : styles.badgeOffText}>
-                          {webcamState.visible ? "Visible" : "Hidden"}
-                        </span>
-                      </div>
-                      <div
-                        className={styles.settingsRowItem}
-                        onClick={() => setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked })}
-                      >
-                        <span>Draggable</span>
-                        <span className={webcamState.dragUnlocked ? styles.badgeActiveText : styles.badgeOffText}>
-                          {webcamState.dragUnlocked ? "Unlocked (Movable)" : "Locked (Clean Video)"}
-                        </span>
-                      </div>
-                      <div style={{ marginTop: 4 }}>
-                        <div className={styles.settingsHint} style={{ marginBottom: 4 }}>
-                          Bubble Size:
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { key: "min", label: "48px" },
-                            { key: "small", label: "70px" },
-                            { key: "medium", label: "95px" },
-                            { key: "max", label: "145px" },
-                          ].map((item) => (
-                            <button
-                              key={item.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${webcamState.size === item.key ? styles.settingsPillActive : ""}`}
-                              onClick={() => setWebcamSettings({ size: item.key as BubbleSize })}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Torrent Stats Overlay */}
-                    {Boolean(props.total || props.convertProgress !== undefined) && (
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsGroupTitle}>Torrent & Transcode</div>
-                        <div
-                          style={{
-                            padding: "6px 8px",
-                            background: "rgba(255, 255, 255, 0.04)",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                            lineHeight: "1.6",
-                          }}
-                        >
-                          {Boolean(props.total) && (
-                            <>
-                              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Downloaded:</span>
-                                <strong style={{ color: "#34d399" }}>
-                                  {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
-                                </strong>
-                              </div>
-                              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Speed:</span>
-                                <strong>{formatSpeed(props.speed || 0)}</strong>
-                              </div>
-                            </>
-                          )}
-                          {props.convertProgress !== undefined && (
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Transcode:</span>
-                              <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
+                      ) : (
+                        attachedSubtitleTracks.length > 0 && (
+                          <div className={styles.settingsGroup}>
+                            <div className={styles.settingsHeaderRow}>
+                              <span className={styles.settingsGroupTitle}>Attached Tracks</span>
+                              <span className={styles.settingsBadge}>{attachedSubtitleTracks.length}</span>
                             </div>
-                          )}
-                        </div>
-                        <div
-                          className={styles.settingsRowItem}
-                          style={{ marginTop: 4 }}
-                          onClick={() => {
-                            setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
-                          }}
-                        >
-                          <span>On-Screen Badge</span>
-                          <span className={playerSettingsState.showStatsOverlay ? styles.badgeActiveText : styles.badgeOffText}>
-                            {playerSettingsState.showStatsOverlay ? "ON" : "OFF"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                            <div className={styles.settingsList}>
+                              {attachedSubtitleTracks.map((t) => (
+                                <div
+                                  key={t.index}
+                                  className={`${styles.settingsRowItem} ${t.active ? styles.settingsRowItemActive : ""}`}
+                                  onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
+                                >
+                                  <span>{t.label}</span>
+                                  {t.active && <WPIconCheck size={14} color="#6366f1" />}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      )}
 
-                    {/* Room Settings */}
-                    {props.onOpenSettings && (
+                      {/* Load External Subtitle */}
                       <div className={styles.settingsGroup}>
                         <button
                           type="button"
                           className={styles.settingsActionBtn}
                           onClick={() => {
-                            props.onOpenSettings!();
+                            props.localSubtitleModal();
                             setIsMenuOpen(false);
                           }}
                         >
-                          <WPIconSettings size={14} /> All Room Settings...
+                          <WPIconSearch size={14} /> Search & Auto-Load Subtitles (.srt)...
                         </button>
                       </div>
-                    )}
-                  </div>
-                )}
+
+                      {/* Live Speech Transcribe */}
+                      <div className={styles.settingsGroup}>
+                        <div
+                          className={`${styles.settingsRowItem} ${playerSettingsState.liveCaptions ? styles.settingsRowItemActive : ""}`}
+                          onClick={() => {
+                            const next = !playerSettingsState.liveCaptions;
+                            setPlayerSettings({ liveCaptions: next });
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600 }}>Live Audio Transcribe</div>
+                            <div className={styles.settingsHint}>On-device speech-to-text (English)</div>
+                          </div>
+                          {playerSettingsState.liveCaptions ? (
+                            <span className={styles.badgeActiveText}>ON</span>
+                          ) : (
+                            <span className={styles.badgeOffText}>OFF</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subtitle Style Notice */}
+                      <div className={styles.settingsSubtitleStyleBox}>
+                        <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>
+                        <div className={styles.settingsSubtitlePreviewPill}>
+                          100% Transparent • White Shadowed Borders
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: QUALITY */}
+                  {settingsTab === "quality" && (
+                    <div>
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Playback Quality</span>
+                          {nativeResolution && (
+                            <span className={styles.settingsBadge}>Source: {nativeResolution}</span>
+                          )}
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {QUALITY_PRESETS.map((q) => (
+                            <button
+                              key={q.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${playerSettingsState.quality === q.key ? styles.settingsPillActive : ""}`}
+                              onClick={() => {
+                                setPlayerSettings({ quality: q.key });
+                                qualityManager.applyQuality(q.key, props.isYouTube);
+                              }}
+                            >
+                              {q.label} {q.badge ? `(${q.badge})` : ""}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4: MORE */}
+                  {settingsTab === "more" && (
+                    <div>
+                      {/* Webcam Bubbles */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsGroupTitle}>Webcam Bubbles</div>
+                        <div
+                          className={styles.settingsRowItem}
+                          onClick={() => setWebcamSettings({ visible: !webcamState.visible })}
+                        >
+                          <span>Display Bubbles</span>
+                          <span className={webcamState.visible ? styles.badgeActiveText : styles.badgeOffText}>
+                            {webcamState.visible ? "Visible" : "Hidden"}
+                          </span>
+                        </div>
+                        <div
+                          className={styles.settingsRowItem}
+                          onClick={() => setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked })}
+                        >
+                          <span>Draggable</span>
+                          <span className={webcamState.dragUnlocked ? styles.badgeActiveText : styles.badgeOffText}>
+                            {webcamState.dragUnlocked ? "Unlocked (Movable)" : "Locked (Clean Video)"}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          <div className={styles.settingsHint} style={{ marginBottom: 4 }}>
+                            Bubble Size:
+                          </div>
+                          <div className={styles.settingsPillsRow}>
+                            {[
+                              { key: "min", label: "48px" },
+                              { key: "small", label: "70px" },
+                              { key: "medium", label: "95px" },
+                              { key: "max", label: "145px" },
+                            ].map((item) => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                className={`${styles.settingsPill} ${webcamState.size === item.key ? styles.settingsPillActive : ""}`}
+                                onClick={() => setWebcamSettings({ size: item.key as BubbleSize })}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Torrent Stats Overlay */}
+                      {Boolean(props.total || props.convertProgress !== undefined) && (
+                        <div className={styles.settingsGroup}>
+                          <div className={styles.settingsGroupTitle}>Torrent & Transcode</div>
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              background: "rgba(255, 255, 255, 0.04)",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              lineHeight: "1.6",
+                            }}
+                          >
+                            {Boolean(props.total) && (
+                              <>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Downloaded:</span>
+                                  <strong style={{ color: "#34d399" }}>
+                                    {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
+                                  </strong>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Speed:</span>
+                                  <strong>{formatSpeed(props.speed || 0)}</strong>
+                                </div>
+                              </>
+                            )}
+                            {props.convertProgress !== undefined && (
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Transcode:</span>
+                                <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className={styles.settingsRowItem}
+                            style={{ marginTop: 4 }}
+                            onClick={() => {
+                              setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
+                            }}
+                          >
+                            <span>On-Screen Badge</span>
+                            <span className={playerSettingsState.showStatsOverlay ? styles.badgeActiveText : styles.badgeOffText}>
+                              {playerSettingsState.showStatsOverlay ? "ON" : "OFF"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Room Settings */}
+                      {props.onOpenSettings && (
+                        <div className={styles.settingsGroup}>
+                          <button
+                            type="button"
+                            className={styles.settingsActionBtn}
+                            onClick={() => {
+                              props.onOpenSettings!();
+                              setIsMenuOpen(false);
+                            }}
+                          >
+                            <WPIconSettings size={14} /> All Room Settings...
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Menu.Dropdown>
             </Menu>
 
