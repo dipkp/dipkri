@@ -1124,13 +1124,7 @@ export const Controls = (props: ControlsProps) => {
                         ) : null
                       }
                     >
-                      Live Audio Captions (Mic): {playerSettingsState.liveCaptions ? "On" : "Off"}
-                    </Menu.Item>
-                    <Menu.Item
-                      onClick={localSubtitleModal}
-                      style={{ fontSize: "11px", color: "#818cf8" }}
-                    >
-                      🎧 Wearing Earbuds? Click for Captions Guide
+                      Live Audio Transcribe: {playerSettingsState.liveCaptions ? "On" : "Off"}
                     </Menu.Item>
                   </>
                 )}

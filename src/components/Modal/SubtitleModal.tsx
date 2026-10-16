@@ -315,28 +315,6 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
             </div>
           )}
 
-          {/* Earbuds & Mobile Live Caption Tip Banner */}
-          <div
-            style={{
-              background: "rgba(99, 102, 241, 0.08)",
-              border: "1px solid rgba(99, 102, 241, 0.2)",
-              borderRadius: "8px",
-              padding: "8px 12px",
-              fontSize: "12px",
-              color: "#c7d2fe",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              margin: "6px 0 10px 0",
-              lineHeight: 1.4,
-            }}
-          >
-            <span style={{ fontSize: "16px" }}>🎧</span>
-            <span>
-              <strong>Using Earbuds / Headphones?</strong> Search and pick a synced subtitle below for 100% accurate earbud captions. On Android / iPhone, you can also press your phone's <strong>Volume Button</strong> and tap the <strong>Caption icon</strong> for instant device-level live captions!
-            </span>
-          </div>
-
           {/* Search OpenSubtitles Section */}
           <div className={styles.searchSection}>
             <div className={styles.searchBarRow}>

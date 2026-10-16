@@ -70,32 +70,30 @@ function parseSubtitleText(content: string): SubtitleCue[] {
 }
 
 /**
- * Keeps speech captions concise, readable, and strictly limited to 1-2 lines (max 6-8 words)
- * during continuous conversation so subtitles never grow into a giant paragraph.
+ * Real-time fast speech stream formatter.
+ * Transcribes live incoming audio with ultra-low latency,
+ * keeping text strictly to 5-7 words so it stays synchronized with the speaker.
  */
-function formatRollingSpeech(finalText: string, interimText: string): string {
-  const combined = interimText ? `${finalText} ${interimText}`.trim() : finalText.trim();
-  if (!combined) return "";
+function formatLiveSpeech(finalText: string, interimText: string): string {
+  const active = interimText.trim() || finalText.trim();
+  if (!active) return "";
 
-  // 1. If sentence-ending punctuation exists (. ! ?), drop completed sentences
-  const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
-  let active = sentences[sentences.length - 1] || combined;
+  const cleaned = active
+    .replace(/<[^>]*>/g, "")
+    .replace(/\{[^}]*\}/g, "")
+    .replace(/&lrm;|&rlm;/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  // 2. If the active clause is still long and has a comma, take the latest clause
-  if (active.includes(",") && active.split(/\s+/).length > 7) {
-    const clauses = active.split(/,\s+/).filter(Boolean);
-    if (clauses.length > 1) {
-      active = clauses[clauses.length - 1];
-    }
-  }
+  // If punctuation exists, focus on active clause
+  const clauses = cleaned.split(/(?<=[.?!,])\s+/).filter(Boolean);
+  const latest = clauses[clauses.length - 1] || cleaned;
 
-  // 3. Keep strictly the most recent 6 to 7 words for clean, cinematic subtitle delivery
-  const words = active.split(/\s+/).filter(Boolean);
+  const words = latest.split(" ").filter(Boolean);
   if (words.length > 7) {
-    active = words.slice(-6).join(" ");
+    return words.slice(-6).join(" ");
   }
-
-  return active;
+  return latest;
 }
 
 export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
@@ -115,7 +113,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const hasErrorRef = useRef<boolean>(false);
 
   // Helper to reliably retrieve the current video element
   const getActiveVideo = useCallback((): HTMLMediaElement | null => {
@@ -145,7 +142,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     };
   }, []);
 
-  // Quick silence timer: fades speech subtitle cleanly after 1.4s of quiet
+  // Quick silence timer: fades speech subtitle cleanly after 1s of quiet
   const resetSpeechSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
@@ -153,7 +150,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     silenceTimerRef.current = setTimeout(() => {
       setSpeechTranscript("");
       setInterimSpeech("");
-    }, 1400);
+    }, 1000);
   }, []);
 
   // --------------------------------------------------------------------------
@@ -236,7 +233,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
               for (let c = 0; c < track.activeCues.length; c++) {
                 const cue = track.activeCues[c] as any;
                 if (cue?.text) {
-                  texts.push(cue.text.replace(/<[^>]*>/g, "").trim());
+                  texts.push(
+                    cue.text
+                      .replace(/<[^>]*>/g, "")
+                      .replace(/\{[^}]*\}/g, "")
+                      .replace(/&lrm;|&rlm;/g, "")
+                      .trim()
+                  );
                 }
               }
               if (texts.length > 0) {
@@ -269,16 +272,15 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [enabled, isYouTube, getYoutubeTime, getActiveVideo]);
 
   // --------------------------------------------------------------------------
-  // Real-Time Speech Recognition (Audio English Captions)
-  // Only runs when no attached subtitles exist, never on YouTube, and never shows errors
+  // Real-Time High-Speed Speech Recognition (Mic / Audio Transcribe)
+  // Low-latency, unbroken auto-restart, and zero error banners
   // --------------------------------------------------------------------------
   const isSpeechSupported =
     typeof window !== "undefined" &&
     Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   useEffect(() => {
-    // Never run microphone speech recognition on YouTube or when subtitles are attached or paused
-    if (!enabled || !isSpeechSupported || isYouTube || paused) {
+    if (!enabled || !isSpeechSupported || paused) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -296,75 +298,96 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     let recognition: any = null;
     let isDisposed = false;
 
-    try {
-      recognition = new SpeechRecognitionClass();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-      recognition.lang = "en-US";
+    const startRecognition = () => {
+      if (isDisposed) return;
+      try {
+        recognition = new SpeechRecognitionClass();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        recognition.lang = "en-US";
 
-      recognition.onstart = () => {
-        if (isDisposed) return;
-        hasErrorRef.current = false;
-      };
+        recognition.onstart = () => {
+          if (isDisposed) return;
+        };
 
-      recognition.onresult = (event: any) => {
-        if (isDisposed) return;
-        let finalChunk = "";
-        let currentInterim = "";
+        recognition.onresult = (event: any) => {
+          if (isDisposed) return;
+          let latestFinal = "";
+          let latestInterim = "";
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item.isFinal) {
-            finalChunk += item[0].transcript;
-          } else {
-            currentInterim += item[0].transcript;
-          }
-        }
-
-        if (finalChunk.trim()) {
-          setSpeechTranscript((prev) => {
-            const combined = `${prev} ${finalChunk.trim()}`.trim();
-            const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
-            const active = sentences[sentences.length - 1] || combined;
-            const words = active.split(/\s+/).filter(Boolean);
-            if (words.length > 7) {
-              return words.slice(-6).join(" ");
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const item = event.results[i];
+            if (item.isFinal) {
+              latestFinal = item[0].transcript;
+            } else {
+              latestInterim += item[0].transcript;
             }
-            return active;
-          });
-        }
+          }
 
-        setInterimSpeech(currentInterim.trim());
-        resetSpeechSilenceTimer();
-      };
+          if (latestFinal.trim()) {
+            setSpeechTranscript(latestFinal.trim());
+          }
+          setInterimSpeech(latestInterim.trim());
+          resetSpeechSilenceTimer();
+        };
 
-      recognition.onerror = (_event: any) => {
-        if (isDisposed) return;
-        hasErrorRef.current = true;
-        // Silent error handling: NEVER show error pills/popups in subtitle overlay
-      };
-
-      recognition.onend = () => {
-        if (isDisposed) return;
-        if (hasErrorRef.current) return;
-
-        if (enabled && !paused && !isYouTube) {
-          if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-          restartTimerRef.current = setTimeout(() => {
-            if (!isDisposed && enabled && !paused && !hasErrorRef.current) {
+        recognition.onerror = (event: any) => {
+          if (isDisposed) return;
+          const err = event?.error;
+          // "no-speech" and "aborted" are standard lifecycle events, not fatal errors
+          if (err === "no-speech" || err === "aborted") {
+            return;
+          }
+          // On transient network or audio capture glitches, retry in 800ms
+          setTimeout(() => {
+            if (!isDisposed && enabled && !paused) {
               try {
-                recognition.start();
+                recognition?.start();
               } catch {}
             }
-          }, 400);
-        }
-      };
+          }, 800);
+        };
 
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch {
-      hasErrorRef.current = true;
+        recognition.onend = () => {
+          if (isDisposed) return;
+          // Lightning-fast restart within 60ms for unbroken live audio transcription
+          if (enabled && !paused) {
+            if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+            restartTimerRef.current = setTimeout(() => {
+              if (!isDisposed && enabled && !paused) {
+                try {
+                  recognition?.start();
+                } catch {}
+              }
+            }, 60);
+          }
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch {
+        setTimeout(() => {
+          if (!isDisposed && enabled && !paused) {
+            startRecognition();
+          }
+        }, 1000);
+      }
+    };
+
+    // Ensure audio permission is active for speech recognition
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach((track) => track.stop());
+          startRecognition();
+        })
+        .catch(() => {
+          startRecognition();
+        });
+    } else {
+      startRecognition();
     }
 
     return () => {
@@ -378,15 +401,15 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       }
       recognitionRef.current = null;
     };
-  }, [enabled, paused, isYouTube, isSpeechSupported, resetSpeechSilenceTimer]);
+  }, [enabled, paused, isSpeechSupported, resetSpeechSilenceTimer]);
 
   if (!enabled) {
     return null;
   }
 
-  // Format rolling speech during continuous conversations (strictly 6-7 words max)
-  const rollingSpeech = formatRollingSpeech(speechTranscript, interimSpeech);
-  const currentText = subtitleCue || rollingSpeech;
+  // Format real-time live speech with low latency
+  const liveSpeech = formatLiveSpeech(speechTranscript, interimSpeech);
+  const currentText = subtitleCue || liveSpeech;
 
   // Subtitles only: render NOTHING when silent or between dialogue lines
   if (!currentText) {

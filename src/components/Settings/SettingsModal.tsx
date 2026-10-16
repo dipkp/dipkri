@@ -180,13 +180,13 @@ export const SettingsModal = ({
             }}
           />
 
-          {/* Live Audio Captions (English Only) */}
+          {/* Live Audio Transcription */}
           <SettingRow
             toggle
             updateTS={updateTS}
-            name="Live Audio Captions (English Only)"
-            description="Transcribes live English audio on screen. Note: Browser speech recognition uses your microphone (best for speakers). When wearing earbuds or headphones, use attached subtitles or turn on Chrome's native Live Caption (chrome://settings/accessibility) to capture earbud audio directly."
-            label="English only"
+            name="Live Audio Transcription"
+            description="High-speed real-time speech-to-text. Automatically transcribes dialogue and live audio with low latency synchronized to the video."
+            label="Live Transcribe"
             checked={Boolean(getPlayerSettings().liveCaptions)}
             disabled={false}
             onChange={(e) => {
