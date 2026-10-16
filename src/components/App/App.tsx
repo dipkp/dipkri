@@ -383,9 +383,6 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   async componentDidMount() {
-    if (this.state.isMobileView && typeof document !== "undefined") {
-      document.body.classList.add("room-active");
-    }
     document.onfullscreenchange = this.onFullScreenChange;
     document.onkeydown = this.onKeydown;
     window.addEventListener("resize", this.handleResize);
@@ -423,9 +420,6 @@ export class App extends React.Component<AppProps, AppState> {
   }
 
   componentWillUnmount() {
-    if (typeof document !== "undefined") {
-      document.body.classList.remove("room-active");
-    }
     document.removeEventListener("fullscreenchange", this.onFullScreenChange);
     document.removeEventListener("keydown", this.onKeydown);
     window.removeEventListener("resize", this.handleResize);
@@ -444,13 +438,6 @@ export class App extends React.Component<AppProps, AppState> {
     const isMobileView = checkIsMobileDevice();
     if (isMobileView !== this.state.isMobileView) {
       this.setState({ isMobileView });
-      if (typeof document !== "undefined") {
-        if (isMobileView) {
-          document.body.classList.add("room-active");
-        } else {
-          document.body.classList.remove("room-active");
-        }
-      }
     }
     this.updateViewportMetrics();
   };
