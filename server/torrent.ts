@@ -33,6 +33,21 @@ const DEFAULT_TRACKERS = [
 const pendingTorrents = new Map<string, Promise<WebTorrent.Torrent>>();
 
 /**
+ * Extracts 40-char hex or 32-char base32 infoHash from a magnet link or raw hash.
+ */
+export function extractInfoHash(magnetUri: string): string | null {
+  if (!magnetUri) return null;
+  const match = magnetUri.match(/xt=urn:btih:([a-zA-Z0-9]+)/i);
+  if (match) {
+    return match[1].toLowerCase();
+  }
+  if (/^[a-fA-F0-9]{40}$/.test(magnetUri.trim())) {
+    return magnetUri.trim().toLowerCase();
+  }
+  return null;
+}
+
+/**
  * Extracts the full magnet link from the request query or raw URL,
  * safely preserving all tracker parameters even if unencoded.
  */
@@ -62,55 +77,99 @@ export function extractMagnetFromRequest(req: any): string {
 /**
  * Retrieves an existing torrent from the client or adds a new one.
  * Resolves once the torrent metadata ('ready' event) is available.
+ * Handles duplicate add race conditions smoothly without throwing 500 errors.
  */
 export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Torrent> {
   const client = getClient();
-  const existing = (await client.get(magnetUri)) as WebTorrent.Torrent | undefined;
+  const infoHash = extractInfoHash(magnetUri);
+
+  // 1. Check existing torrents in client.torrents first
+  let existing: WebTorrent.Torrent | undefined = undefined;
+  if (infoHash) {
+    existing = client.torrents.find(
+      (t) => t.infoHash && t.infoHash.toLowerCase() === infoHash
+    );
+  }
+  if (!existing) {
+    existing = client.torrents.find((t) => t.magnetURI === magnetUri);
+  }
+  if (!existing) {
+    try {
+      existing = (client.get(infoHash || magnetUri) as unknown as WebTorrent.Torrent) || undefined;
+    } catch {}
+  }
+
   if (existing) {
     if (existing.ready) {
       return existing;
     }
     return new Promise((resolve) => {
-      existing.once("ready", () => resolve(existing));
+      existing!.once("ready", () => resolve(existing!));
     });
   }
 
-  if (pendingTorrents.has(magnetUri)) {
-    return pendingTorrents.get(magnetUri)!;
+  // 2. Check pending promises by infoHash or magnetUri
+  const cacheKey = infoHash || magnetUri;
+  if (pendingTorrents.has(cacheKey)) {
+    return pendingTorrents.get(cacheKey)!;
   }
 
+  // 3. Add torrent safely
   const promise = new Promise<WebTorrent.Torrent>((resolve, reject) => {
     try {
+      // Re-check right before adding in case of concurrent execution
+      const doubleCheck = infoHash
+        ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash)
+        : client.torrents.find((t) => t.magnetURI === magnetUri);
+
+      if (doubleCheck) {
+        pendingTorrents.delete(cacheKey);
+        if (doubleCheck.ready) {
+          return resolve(doubleCheck);
+        }
+        return doubleCheck.once("ready", () => resolve(doubleCheck));
+      }
+
       const torrent = client.add(magnetUri, {
         announce: DEFAULT_TRACKERS,
         destroyStoreOnDestroy: true,
       });
 
       const timeout = setTimeout(() => {
-        pendingTorrents.delete(magnetUri);
+        pendingTorrents.delete(cacheKey);
         if (!torrent.ready && torrent.numPeers === 0) {
           console.warn("[WebTorrent] Waiting for peers timed out for infoHash:", torrent.infoHash);
         }
-      }, 35000);
+      }, 45000);
 
-      torrent.on("ready", () => {
+      torrent.once("ready", () => {
         clearTimeout(timeout);
-        pendingTorrents.delete(magnetUri);
+        pendingTorrents.delete(cacheKey);
         resolve(torrent);
       });
 
-      torrent.on("error", (err) => {
+      torrent.once("error", (err) => {
         clearTimeout(timeout);
-        pendingTorrents.delete(magnetUri);
+        pendingTorrents.delete(cacheKey);
         reject(err);
       });
-    } catch (err) {
-      pendingTorrents.delete(magnetUri);
+    } catch (err: any) {
+      pendingTorrents.delete(cacheKey);
+      // Gracefully recover if duplicate torrent was added
+      if (err?.message?.includes("duplicate") || err?.message?.includes("already exists")) {
+        const found = infoHash
+          ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash)
+          : client.torrents.find((t) => t.magnetURI === magnetUri);
+        if (found) {
+          if (found.ready) return resolve(found);
+          return found.once("ready", () => resolve(found));
+        }
+      }
       reject(err);
     }
   });
 
-  pendingTorrents.set(magnetUri, promise);
+  pendingTorrents.set(cacheKey, promise);
   return promise;
 }
 
@@ -195,7 +254,11 @@ export async function handleTorrentProgress(req: any, res: any) {
   }
 
   const client = getClient();
-  const torrent = (await client.get(magnetUri)) as WebTorrent.Torrent | undefined;
+  const infoHash = extractInfoHash(magnetUri);
+  const torrent = infoHash
+    ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === infoHash)
+    : client.torrents.find((t) => t.magnetURI === magnetUri);
+
   if (!torrent) {
     return res.json({
       downloaded: 0,
@@ -218,6 +281,7 @@ export async function handleTorrentProgress(req: any, res: any) {
 /**
  * GET /stream?torrent=...&fileIndex=...
  * Streams the torrent's video directly over HTTP with full Range / seek support.
+ * Optimized for jumping into the middle of the video without server errors.
  */
 export async function handleTorrentStream(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -240,7 +304,7 @@ export async function handleTorrentStream(req: any, res: any) {
     }
 
     if (!targetFile) {
-      return res.status(404).send("No video file found in torrent");
+      return res.status(404).send("No playable file found in torrent");
     }
 
     const fileSize = targetFile.length;
@@ -248,22 +312,64 @@ export async function handleTorrentStream(req: any, res: any) {
     const contentType = getMimeType(targetFile.name);
 
     if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = end - start + 1;
+      let start: number;
+      let end: number;
+
+      const bytesRange = range.replace(/bytes=/, "").trim();
+      const [startStr, endStr] = bytesRange.split("-");
+
+      if (!startStr && endStr) {
+        // Suffix byte range: bytes=-500000 (last 500KB of file e.g. for MP4 moov atom)
+        const suffixLength = parseInt(endStr, 10);
+        start = Math.max(0, fileSize - suffixLength);
+        end = fileSize - 1;
+      } else {
+        start = parseInt(startStr, 10) || 0;
+        if (endStr) {
+          end = parseInt(endStr, 10);
+        } else {
+          // Seeking in middle: request in 16MB chunks for lightning-fast piece prioritization
+          const MAX_CHUNK = 16 * 1024 * 1024;
+          end = Math.min(start + MAX_CHUNK - 1, fileSize - 1);
+        }
+      }
+
+      // Check range validity according to RFC 7233
+      if (isNaN(start) || isNaN(end) || start >= fileSize || start < 0) {
+        res.setHeader("Content-Range", `bytes */${fileSize}`);
+        return res.status(416).end();
+      }
+
+      end = Math.min(end, fileSize - 1);
+      const chunkSize = end - start + 1;
 
       res.writeHead(206, {
         "Content-Range": `bytes ${start}-${end}/${fileSize}`,
         "Accept-Ranges": "bytes",
-        "Content-Length": chunksize,
+        "Content-Length": chunkSize,
         "Content-Type": contentType,
       });
 
       const stream = targetFile.createReadStream({ start, end });
-      req.on("close", () => {
-        (stream as any)?.destroy?.();
+
+      stream.on("error", (err: any) => {
+        // Handle read stream errors or socket aborts cleanly without crashing
+        if (!res.headersSent) {
+          res.status(500).end();
+        } else {
+          res.end();
+        }
       });
+
+      const cleanup = () => {
+        try {
+          (stream as any)?.destroy?.();
+        } catch {}
+      };
+
+      req.on("close", cleanup);
+      res.on("close", cleanup);
+
       stream.pipe(res);
     } else {
       res.writeHead(200, {
@@ -273,9 +379,24 @@ export async function handleTorrentStream(req: any, res: any) {
       });
 
       const stream = targetFile.createReadStream();
-      req.on("close", () => {
-        (stream as any)?.destroy?.();
+
+      stream.on("error", (err: any) => {
+        if (!res.headersSent) {
+          res.status(500).end();
+        } else {
+          res.end();
+        }
       });
+
+      const cleanup = () => {
+        try {
+          (stream as any)?.destroy?.();
+        } catch {}
+      };
+
+      req.on("close", cleanup);
+      res.on("close", cleanup);
+
       stream.pipe(res);
     }
   } catch (err: any) {

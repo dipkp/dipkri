@@ -554,6 +554,26 @@ export class App extends React.Component<AppProps, AppState> {
           }
           if (data.subtitle) {
             this.Player().loadSubtitles(data.subtitle);
+          } else if (currentMedia && currentMedia.includes("/stream?torrent=")) {
+            // Auto-detect and attach any .srt or .vtt subtitle file found inside the torrent
+            try {
+              const dataUrl = currentMedia.replace("/stream?", "/data?");
+              fetch(dataUrl)
+                .then((r) => r.json())
+                .then((meta) => {
+                  if (meta?.files && Array.isArray(meta.files)) {
+                    const subFile = meta.files.find((f: any) =>
+                      f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
+                    );
+                    if (subFile) {
+                      const base = currentMedia.split("&fileIndex=")[0];
+                      const subUrl = `${base}&fileIndex=${subFile.index}`;
+                      this.Player().loadSubtitles(subUrl);
+                    }
+                  }
+                })
+                .catch(() => {});
+            } catch {}
           }
           if (data.playbackRate) {
             this.Player().setPlaybackRate(data.playbackRate);

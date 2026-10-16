@@ -19,11 +19,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const [subtitleCue, setSubtitleCue] = useState<string>("");
   const [speechTranscript, setSpeechTranscript] = useState<string>("");
   const [interimSpeech, setInterimSpeech] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
 
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasErrorRef = useRef<boolean>(false);
+  const retryCountRef = useRef<number>(0);
 
   // Helper to reliably retrieve the current video element
   const getActiveVideo = useCallback((): HTMLMediaElement | null => {
@@ -258,8 +260,33 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         if (err === "no-speech" || err === "aborted") {
           return;
         }
-        // Mark error so we don't restart in an infinite loop
         hasErrorRef.current = true;
+        if (err === "network") {
+          // If we have subtitle tracks from video, do not alarm user with network error
+          if (!subtitleCue) {
+            if (retryCountRef.current < 2) {
+              retryCountRef.current += 1;
+              setTimeout(() => {
+                if (!isDisposed && enabled && !paused) {
+                  hasErrorRef.current = false;
+                  try {
+                    recognition.start();
+                  } catch {}
+                }
+              }, 4000);
+            } else {
+              setNotice("Speech server unreachable. Try attached subtitles or check mic permissions.");
+              setTimeout(() => {
+                if (!isDisposed) setNotice("");
+              }, 5000);
+            }
+          }
+        } else if (err === "not-allowed") {
+          setNotice("Microphone permission required for speech captions.");
+          setTimeout(() => {
+            if (!isDisposed) setNotice("");
+          }, 5000);
+        }
       };
 
       recognition.onend = () => {
@@ -295,7 +322,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         } catch {}
       }
     };
-  }, [enabled, paused, isSpeechSupported, resetSpeechSilenceTimer]);
+  }, [enabled, paused, isSpeechSupported, resetSpeechSilenceTimer, subtitleCue]);
 
   if (!enabled) {
     return null;
@@ -306,14 +333,19 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     subtitleCue ||
     (speechTranscript ? `${speechTranscript} ${interimSpeech}`.trim() : interimSpeech);
 
-  // If no subtitles or speech are active, render NOTHING (clean minimalist view)
-  if (!currentText) {
+  // If neither subtitles nor a brief notice are active, render nothing
+  if (!currentText && !notice) {
     return null;
   }
 
   return (
     <div className={styles.captionsContainer}>
-      <div className={styles.minimalSubtitle}>{currentText}</div>
+      {currentText ? (
+        <div className={styles.minimalSubtitle}>{currentText}</div>
+      ) : notice ? (
+        <div className={styles.noticePill}>{notice}</div>
+      ) : null}
     </div>
   );
 };
+
