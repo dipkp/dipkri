@@ -44,6 +44,8 @@ function getFriendlyErrorMessage(err: any, isRegistering: boolean): string {
       return "Too many failed attempts. Please try again in a few minutes or reset your password.";
     case "auth/popup-closed-by-user":
       return "";
+    case "auth/unauthorized-domain":
+      return "This domain/IP is not authorized for Google OAuth. Please open the app using http://localhost:8080 or add this domain in Firebase Console (Authentication > Settings > Authorized domains).";
     case "auth/operation-not-allowed":
       return "This sign-in provider is not enabled in Firebase.";
     default:
