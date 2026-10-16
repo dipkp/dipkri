@@ -755,8 +755,11 @@ app.get("/favicon.svg", (_req, res) => {
 });
 
 app.use(express.static(config.BUILD_DIRECTORY));
-// Send index.html for all other requests (SPA)
+// Send index.html for all other requests (SPA) with no-cache so users always receive latest bundle
 app.use("/*splat", (_req, res) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
   res.sendFile(
     path.resolve(
       import.meta.dirname + `/../${config.BUILD_DIRECTORY}/index.html`,

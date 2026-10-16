@@ -11,6 +11,36 @@ interface LiveCaptionsProps {
   isYouTube?: boolean;
 }
 
+/**
+ * Keeps speech captions concise, readable, and strictly limited to 1-2 lines (max 6-8 words)
+ * during continuous conversation so subtitles never grow into a giant paragraph.
+ */
+function formatRollingSpeech(finalText: string, interimText: string): string {
+  const combined = interimText ? `${finalText} ${interimText}`.trim() : finalText.trim();
+  if (!combined) return "";
+
+  // 1. If sentence-ending punctuation exists (. ! ?), drop completed sentences
+  // and focus exclusively on the active incoming sentence/clause!
+  const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
+  let active = sentences[sentences.length - 1] || combined;
+
+  // 2. If the active clause is still long and has a comma, take the latest clause
+  if (active.includes(",") && active.split(/\s+/).length > 7) {
+    const clauses = active.split(/,\s+/).filter(Boolean);
+    if (clauses.length > 1) {
+      active = clauses[clauses.length - 1];
+    }
+  }
+
+  // 3. Keep strictly the most recent 6 to 7 words for clean, cinematic subtitle delivery
+  const words = active.split(/\s+/).filter(Boolean);
+  if (words.length > 7) {
+    active = words.slice(-6).join(" ");
+  }
+
+  return active;
+}
+
 export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   paused = false,
   videoEl,
@@ -46,6 +76,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           setSubtitleCue("");
           setSpeechTranscript("");
           setInterimSpeech("");
+          setNotice("");
         }
       }
     };
@@ -119,17 +150,20 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
       }
 
-      // Update cue immediately - 0 delay when entering or leaving a dialogue cue
+      // Keep subtitle cues strictly to at most 2 clean lines
+      if (matchedText) {
+        const lines = matchedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        matchedText = lines.slice(-2).join("\n");
+      }
+
       setSubtitleCue(matchedText);
     };
 
     const video = getActiveVideo();
     if (!video) return;
 
-    // Check immediately upon mount or video change
     checkCues();
 
-    // Attach high-frequency and responsive video events
     video.addEventListener("timeupdate", checkCues);
     video.addEventListener("seeked", checkCues);
     video.addEventListener("seeking", checkCues);
@@ -137,12 +171,10 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     video.addEventListener("pause", checkCues);
     video.addEventListener("ratechange", checkCues);
 
-    // Attach cuechange to all current tracks
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].addEventListener("cuechange", checkCues);
     }
 
-    // Also listen for newly uploaded or attached subtitle tracks
     const handleAddTrack = () => {
       for (let i = 0; i < video.textTracks.length; i++) {
         video.textTracks[i].removeEventListener("cuechange", checkCues);
@@ -241,12 +273,14 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         if (finalChunk.trim()) {
           setSpeechTranscript((prev) => {
             const combined = `${prev} ${finalChunk.trim()}`.trim();
-            const words = combined.split(" ");
-            // Keep clean 1-2 line subtitle length (latest 8 to 10 words)
-            if (words.length > 10) {
-              return words.slice(-8).join(" ");
+            // Drop completed sentences so continuous speech doesn't accumulate
+            const sentences = combined.split(/(?<=[.?!])\s+/).filter(Boolean);
+            const active = sentences[sentences.length - 1] || combined;
+            const words = active.split(/\s+/).filter(Boolean);
+            if (words.length > 7) {
+              return words.slice(-6).join(" ");
             }
-            return combined;
+            return active;
           });
         }
 
@@ -262,7 +296,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
         hasErrorRef.current = true;
         if (err === "network") {
-          // If we have subtitle tracks from video, do not alarm user with network error
+          // If video already has subtitle tracks, don't show network speech warning
           if (!subtitleCue) {
             if (retryCountRef.current < 2) {
               retryCountRef.current += 1;
@@ -275,7 +309,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
                 }
               }, 4000);
             } else {
-              setNotice("Speech server unreachable. Try attached subtitles or check mic permissions.");
+              setNotice("Speech server unreachable. Try attached subtitles or allow mic in browser.");
               setTimeout(() => {
                 if (!isDisposed) setNotice("");
               }, 5000);
@@ -328,12 +362,11 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return null;
   }
 
-  // Subtitle cue takes precedence over live speech if present
-  const currentText =
-    subtitleCue ||
-    (speechTranscript ? `${speechTranscript} ${interimSpeech}`.trim() : interimSpeech);
+  // Format rolling speech during continuous conversations (strictly 6-7 words max)
+  const rollingSpeech = formatRollingSpeech(speechTranscript, interimSpeech);
+  const currentText = subtitleCue || rollingSpeech;
 
-  // If neither subtitles nor a brief notice are active, render nothing
+  // Subtitles only: render NOTHING when silent or between dialogue lines
   if (!currentText && !notice) {
     return null;
   }
@@ -348,4 +381,3 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     </div>
   );
 };
-
