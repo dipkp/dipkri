@@ -19,13 +19,10 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
-/* In landscape, desktop, or fullscreen, dock safely on bottom-left away from right-side chat and videocall drawers */
-@media (orientation: landscape), (min-width: 768px) {
+@media (min-width: 601px) {
   .floatingReactionsBar {
-    top: auto;
-    bottom: 60px;
-    left: 14px;
-    right: auto;
+    top: 12px;
+    right: 12px;
     padding: 3px 8px;
     gap: 4px;
   }
@@ -33,10 +30,8 @@
 
 :global(:fullscreen) .floatingReactionsBar,
 :global(:-webkit-full-screen) .floatingReactionsBar {
-  top: auto;
-  bottom: 60px;
-  left: 14px;
-  right: auto;
+  top: 14px;
+  right: 14px;
 }
 
 .reactionBtn {

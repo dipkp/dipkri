@@ -87,7 +87,7 @@ export const MobileFloatingReactions = ({
     if (flyingEmojis.length === 0) return;
     const timer = setTimeout(() => {
       setFlyingEmojis([]);
-    }, 2800);
+    }, 3400);
     return () => clearTimeout(timer);
   }, [flyingEmojis]);
 
