@@ -37,27 +37,7 @@ export const MobileFloatingReactions = ({
 }) => {
   const [flyingEmojis, setFlyingEmojis] = useState<FlyingEmoji[]>([]);
   const [activeBtn, setActiveBtn] = useState<string | null>(null);
-  const [isLandscapeOrFullscreen, setIsLandscapeOrFullscreen] = useState(false);
   const lastIncomingTsRef = useRef<number>(0);
-
-  // Monitor landscape and fullscreen modes so reaction buttons never overlay other features
-  useEffect(() => {
-    const checkState = () => {
-      if (typeof window === "undefined") return;
-      const isFs = Boolean(document.fullscreenElement);
-      const isLand = window.innerWidth > window.innerHeight;
-      setIsLandscapeOrFullscreen(isFs || isLand);
-    };
-    checkState();
-    window.addEventListener("resize", checkState);
-    window.addEventListener("orientationchange", checkState);
-    document.addEventListener("fullscreenchange", checkState);
-    return () => {
-      window.removeEventListener("resize", checkState);
-      window.removeEventListener("orientationchange", checkState);
-      document.removeEventListener("fullscreenchange", checkState);
-    };
-  }, []);
 
   // High-energy multi-emoji burst fountain
   const spawnFountain = useCallback((emoji: string) => {
@@ -147,8 +127,8 @@ export const MobileFloatingReactions = ({
         </button>
       )}
 
-      {/* Quick Reaction Bar - Strictly hidden in full and landscape mode, and when modals/drawers open */}
-      {!isLandscapeOrFullscreen && !hide && (
+      {/* Quick Reaction Bar */}
+      {!hide && (
         <div className={styles.floatingReactionsBar}>
           {REACTION_EMOJIS.map((emoji) => (
             <button

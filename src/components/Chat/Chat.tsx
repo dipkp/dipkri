@@ -3,6 +3,7 @@ import {
   HoverCard,
 } from "@mantine/core";
 import Picker from "@emoji-mart/react";
+import data from "@emoji-mart/data";
 import { init } from "emoji-mart";
 //@ts-expect-error
 import Linkify from "react-linkify";
@@ -180,7 +181,7 @@ export class Chat extends React.Component<ChatProps> {
     this.scrollToBottom();
     this.messagesRef.current?.addEventListener("scroll", this.onScroll);
     this.startAmbientSampler();
-    init({});
+    init({ data });
   }
 
   componentWillUnmount() {
@@ -556,44 +557,60 @@ export class Chat extends React.Component<ChatProps> {
           )}
         </div>
 
-        {/* Emoji Picker Popup */}
+        {/* Emoji Picker Popup & Outside click backdrop */}
         {this.state.isPickerOpen && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "64px",
-              left: "10px",
-              maxWidth: "calc(100vw - 20px)",
-              zIndex: 100,
-              boxShadow: "0 12px 36px rgba(0, 0, 0, 0.7)",
-              borderRadius: "12px",
-              overflow: "hidden",
-            }}
-          >
-            <Picker
-              theme="dark"
-              previewPosition="none"
-              maxFrequentRows={1}
-              onEmojiSelect={(emoji: any) => {
-                if (
-                  this.state.targetReactionMsg?.id &&
-                  this.state.targetReactionMsg?.timestamp
-                ) {
-                  this.handleReactionClick(
-                    emoji.native,
-                    this.state.targetReactionMsg.id,
-                    this.state.targetReactionMsg.timestamp,
-                  );
-                  this.setState({ isPickerOpen: false, targetReactionMsg: null });
-                } else {
-                  this.addEmoji(emoji);
-                }
-              }}
-              onClickOutside={() =>
+          <>
+            <div
+              className={styles.reactionBackdrop}
+              onClick={() =>
+                this.setState({ isPickerOpen: false, targetReactionMsg: null })
+              }
+              onTouchStart={() =>
                 this.setState({ isPickerOpen: false, targetReactionMsg: null })
               }
             />
-          </div>
+            <div
+              style={{
+                position: "absolute",
+                bottom: "64px",
+                left: "8px",
+                right: "8px",
+                maxWidth: "360px",
+                zIndex: 1000,
+                boxShadow: "0 12px 36px rgba(0, 0, 0, 0.7)",
+                borderRadius: "12px",
+                overflow: "hidden",
+              }}
+            >
+              <Picker
+                data={data}
+                theme="dark"
+                dynamicWidth={true}
+                previewPosition="none"
+                skinTonePosition="search"
+                navPosition="top"
+                maxFrequentRows={1}
+                onEmojiSelect={(emoji: any) => {
+                  if (
+                    this.state.targetReactionMsg?.id &&
+                    this.state.targetReactionMsg?.timestamp
+                  ) {
+                    this.handleReactionClick(
+                      emoji.native,
+                      this.state.targetReactionMsg.id,
+                      this.state.targetReactionMsg.timestamp,
+                    );
+                    this.setState({ isPickerOpen: false, targetReactionMsg: null });
+                  } else {
+                    this.addEmoji(emoji);
+                  }
+                }}
+                onClickOutside={() =>
+                  this.setState({ isPickerOpen: false, targetReactionMsg: null })
+                }
+              />
+            </div>
+          </>
         )}
 
         {/* Outside click backdrop for reaction pill */}

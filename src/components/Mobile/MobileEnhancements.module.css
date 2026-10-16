@@ -19,26 +19,24 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
-@media (min-width: 601px) {
+/* In landscape, desktop, or fullscreen, dock safely on bottom-left away from right-side chat and videocall drawers */
+@media (orientation: landscape), (min-width: 768px) {
   .floatingReactionsBar {
-    top: 12px;
-    right: 12px;
+    top: auto;
+    bottom: 60px;
+    left: 14px;
+    right: auto;
     padding: 3px 8px;
     gap: 4px;
   }
 }
 
-/* Hide floating reaction buttons in landscape or short screens */
-@media (orientation: landscape), (max-height: 580px) {
-  .floatingReactionsBar {
-    display: none !important;
-  }
-}
-
-/* Hide floating reaction buttons in fullscreen mode */
 :global(:fullscreen) .floatingReactionsBar,
 :global(:-webkit-full-screen) .floatingReactionsBar {
-  display: none !important;
+  top: auto;
+  bottom: 60px;
+  left: 14px;
+  right: auto;
 }
 
 .reactionBtn {
