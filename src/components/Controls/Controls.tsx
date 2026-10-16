@@ -252,7 +252,7 @@ export const Controls = (props: ControlsProps) => {
     const latest = validMsgs[validMsgs.length - 1];
     const currentLen = props.chat.length;
 
-    // Trigger when new message arrives, or show recent message when entering landscape/fullscreen mode
+    // Trigger immediately when new message arrives, or show recent message when entering landscape/fullscreen mode
     if (currentLen > lastChatLenRef.current || (!activeStripMsg && canShowMessageStrip)) {
       setActiveStripMsg(latest);
       if (stripTimerRef.current) {
@@ -260,7 +260,7 @@ export const Controls = (props: ControlsProps) => {
       }
       stripTimerRef.current = setTimeout(() => {
         setActiveStripMsg(null);
-      }, 14000);
+      }, 8000);
     }
     lastChatLenRef.current = currentLen;
   }, [props.chat, canShowMessageStrip]);
@@ -482,27 +482,21 @@ export const Controls = (props: ControlsProps) => {
         </div>
       )}
 
-      {/* Live Breaking News Headline Ribbon in Landscape / Fullscreen */}
+      {/* Live In-Video Message Overlay (Instant, Transparent Background, Crisp White Font with Shadow) */}
       {canShowMessageStrip && activeStripMsg && (
         <div
           className={`${styles.fullscreenMsgStrip} ${isControlsVisible ? styles.msgStripControlsVisible : styles.msgStripControlsHidden}`}
         >
-          <div className={styles.newsHeadlineBadge}>
-            <span className={styles.newsPulseDot} />
-            <span>BREAKING</span>
-          </div>
-          <div className={styles.newsHeadlineTrack}>
-            <div
-              key={activeStripMsg.id + activeStripMsg.timestamp}
-              className={styles.fullscreenMsgItem}
-            >
-              <span className={styles.fullscreenMsgAuthor}>
-                {nameMap?.[activeStripMsg.id] || "Friend"}:
-              </span>
-              <span className={styles.fullscreenMsgBody}>
-                {activeStripMsg.msg}
-              </span>
-            </div>
+          <div
+            key={activeStripMsg.id + activeStripMsg.timestamp}
+            className={styles.fullscreenMsgItem}
+          >
+            <span className={styles.fullscreenMsgAuthor}>
+              {nameMap?.[activeStripMsg.id] || "Friend"}:
+            </span>
+            <span className={styles.fullscreenMsgBody}>
+              {activeStripMsg.msg}
+            </span>
           </div>
         </div>
       )}
