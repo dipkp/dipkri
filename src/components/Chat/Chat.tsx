@@ -10,7 +10,6 @@ import Linkify from "react-linkify";
 import { SecureLink } from "react-secure-link";
 import styles from "./Chat.module.css";
 import {
-  WPIconReaction,
   WPIconReply,
   WPIconSend,
   WPIconDoubleCheck,
@@ -161,10 +160,6 @@ export class Chat extends React.Component<ChatProps> {
       | undefined,
     isNearBottom: true,
     isPickerOpen: false,
-    ambientGlow: "rgba(99, 102, 241, 0.28)",
-    ambientGlowSecondary: "rgba(6, 182, 212, 0.22)",
-    ambientDark: "rgba(6, 8, 11, 0.65)",
-    ambientBorder: "rgba(99, 102, 241, 0.32)",
     targetReactionMsg: null as { id: string; timestamp: string } | null,
     reactionMenu: {
       isOpen: false,
@@ -176,8 +171,6 @@ export class Chat extends React.Component<ChatProps> {
   };
   messagesRef = React.createRef<HTMLDivElement>();
   chatInputRef = React.createRef<HTMLInputElement>();
-  ambientSamplerInterval?: number;
-  sampleCanvas?: HTMLCanvasElement;
   lastSendTime = 0;
   blurTimeout: any = null;
   isSending = false;
@@ -185,112 +178,15 @@ export class Chat extends React.Component<ChatProps> {
   async componentDidMount() {
     this.scrollToBottom();
     this.messagesRef.current?.addEventListener("scroll", this.onScroll);
-    this.startAmbientSampler();
     init({ data });
   }
 
   componentWillUnmount() {
-    if (this.ambientSamplerInterval) {
-      clearInterval(this.ambientSamplerInterval);
-    }
     if (this.blurTimeout) {
       clearTimeout(this.blurTimeout);
     }
     this.messagesRef.current?.removeEventListener("scroll", this.onScroll);
   }
-
-  startAmbientSampler = () => {
-    if (this.ambientSamplerInterval) return;
-    this.ambientSamplerInterval = window.setInterval(() => {
-      if (this.props.videoPaused) return;
-      try {
-        const video = document.getElementById("leftVideo") as HTMLVideoElement | null;
-        if (!video || video.paused || video.ended || video.readyState < 2) return;
-
-        if (!this.sampleCanvas) {
-          this.sampleCanvas = document.createElement("canvas");
-          this.sampleCanvas.width = 32;
-          this.sampleCanvas.height = 18;
-        }
-        const ctx = this.sampleCanvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) return;
-        ctx.drawImage(video, 0, 0, 32, 18);
-        const data = ctx.getImageData(0, 0, 32, 18).data;
-
-        // Sample with chroma/saturation weighting & luminance filtering
-        let rTop = 0, gTop = 0, bTop = 0, topWeight = 0;
-        let rBottom = 0, gBottom = 0, bBottom = 0, bottomWeight = 0;
-
-        for (let y = 0; y < 18; y++) {
-          for (let x = 0; x < 32; x++) {
-            const idx = (y * 32 + x) * 4;
-            const rVal = data[idx];
-            const gVal = data[idx + 1];
-            const bVal = data[idx + 2];
-
-            const max = Math.max(rVal, gVal, bVal);
-            const min = Math.min(rVal, gVal, bVal);
-
-            // Filter out black letterbox bars (max < 22) and blown-out pure white highlights (min > 245)
-            if (max < 22 || min > 245) continue;
-
-            const chroma = max - min;
-            // Boost saturated colors so true dominant tones shine through
-            const weight = Math.max(1, Math.round((chroma * chroma) / 10));
-
-            if (y < 9) {
-              rTop += rVal * weight;
-              gTop += gVal * weight;
-              bTop += bVal * weight;
-              topWeight += weight;
-            } else {
-              rBottom += rVal * weight;
-              gBottom += gVal * weight;
-              bBottom += bVal * weight;
-              bottomWeight += weight;
-            }
-          }
-        }
-
-        if (topWeight > 0) {
-          const r1 = Math.round(rTop / topWeight);
-          const g1 = Math.round(gTop / topWeight);
-          const b1 = Math.round(bTop / topWeight);
-
-          // Darkish tint scaling: keep colors deep, luxurious and darkish
-          const darkR1 = Math.round(r1 * 0.55);
-          const darkG1 = Math.round(g1 * 0.55);
-          const darkB1 = Math.round(b1 * 0.55);
-
-          let r2 = r1, g2 = g1, b2 = b1;
-          if (bottomWeight > 0) {
-            r2 = Math.round(rBottom / bottomWeight);
-            g2 = Math.round(gBottom / bottomWeight);
-            b2 = Math.round(bBottom / bottomWeight);
-          }
-          const darkR2 = Math.round(r2 * 0.5);
-          const darkG2 = Math.round(g2 * 0.5);
-          const darkB2 = Math.round(b2 * 0.5);
-
-          const glowColor = `rgba(${darkR1}, ${darkG1}, ${darkB1}, 0.28)`;
-          const glowColorSecondary = `rgba(${darkR2}, ${darkG2}, ${darkB2}, 0.22)`;
-          const darkBase = `rgba(${Math.round(darkR1 * 0.3)}, ${Math.round(darkG1 * 0.3)}, ${Math.round(darkB1 * 0.3)}, 0.45)`;
-          const borderColor = `rgba(${r1}, ${g1}, ${b1}, 0.32)`;
-
-          if (glowColor !== this.state.ambientGlow) {
-            this.setState({
-              ambientGlow: glowColor,
-              ambientGlowSecondary: glowColorSecondary,
-              ambientDark: darkBase,
-              ambientBorder: borderColor,
-            });
-          }
-        }
-      } catch {
-        // Fallback for tainted cross-origin canvas
-      }
-    }, 600);
-  };
 
   componentDidUpdate(prevProps: ChatProps) {
     if (this.props.scrollTimestamp !== prevProps.scrollTimestamp) {
@@ -526,22 +422,11 @@ export class Chat extends React.Component<ChatProps> {
 
     return (
       <div
-        className={`${styles.whatsappChatWrapper} ${!this.props.videoPaused ? styles.videoActiveGlow : ""} ${this.props.className || ""}`}
-        style={
-          {
-            display: this.props.hide ? "none" : "flex",
-            "--chat-ambient-glow": this.state.ambientGlow,
-            "--chat-ambient-glow-secondary": this.state.ambientGlowSecondary,
-            "--chat-ambient-dark": this.state.ambientDark,
-            "--chat-ambient-border": this.state.ambientBorder,
-          } as React.CSSProperties
-        }
+        className={`${styles.whatsappChatWrapper} ${this.props.className || ""}`}
+        style={{
+          display: this.props.hide ? "none" : "flex",
+        }}
       >
-        {/* Dynamic Dark Ambient Glow Layer according to Video playback */}
-        <div
-          className={`${styles.ambientGlowLayer} ${!this.props.videoPaused ? styles.ambientActive : ""}`}
-        />
-
         {/* WhatsApp Chat Message Feed */}
         <div
           className={styles.chatContainer}
@@ -862,6 +747,7 @@ const ChatMessageItem = ({
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
+  const isMouseDownRef = useRef(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -879,7 +765,7 @@ const ChatMessageItem = ({
           navigator.vibrate(30);
         } catch {}
       }
-    }, 380);
+    }, 350);
   };
 
   const cancelLongPress = () => {
@@ -894,7 +780,6 @@ const ChatMessageItem = ({
     const touch = e.touches[0];
     touchStartXRef.current = touch.clientX;
     touchStartYRef.current = touch.clientY;
-    setIsSwiping(true);
     startLongPress(touch.clientX, touch.clientY);
   };
 
@@ -907,19 +792,21 @@ const ChatMessageItem = ({
       cancelLongPress();
     }
 
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      // Swiping right to reply (or left for outgoing)
-      const pull = isMe
-        ? Math.max(-65, Math.min(0, deltaX))
-        : Math.max(0, Math.min(65, deltaX));
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 6) {
+      setIsSwiping(true);
+      let pull = 0;
+      if (deltaX > 0) {
+        pull = Math.min(65, deltaX);
+      } else if (isMe && deltaX < 0) {
+        pull = Math.max(-65, deltaX);
+      }
       setSwipeOffset(pull);
     }
   };
 
   const handleTouchEnd = () => {
     cancelLongPress();
-    setIsSwiping(false);
-    if (Math.abs(swipeOffset) >= 38) {
+    if (Math.abs(swipeOffset) >= 32) {
       onReply(id, timestamp, msg);
       if (typeof navigator !== "undefined" && navigator.vibrate) {
         try {
@@ -927,6 +814,7 @@ const ChatMessageItem = ({
         } catch {}
       }
     }
+    setIsSwiping(false);
     setSwipeOffset(0);
   };
 
@@ -934,15 +822,37 @@ const ChatMessageItem = ({
     if (isChatDisabled || e.button !== 0) return;
     touchStartXRef.current = e.clientX;
     touchStartYRef.current = e.clientY;
+    isMouseDownRef.current = true;
     startLongPress(e.clientX, e.clientY);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDownRef.current) return;
     const deltaX = e.clientX - touchStartXRef.current;
     const deltaY = e.clientY - touchStartYRef.current;
     if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
       cancelLongPress();
     }
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 6) {
+      setIsSwiping(true);
+      let pull = 0;
+      if (deltaX > 0) {
+        pull = Math.min(65, deltaX);
+      } else if (isMe && deltaX < 0) {
+        pull = Math.max(-65, deltaX);
+      }
+      setSwipeOffset(pull);
+    }
+  };
+
+  const handleMouseUp = () => {
+    cancelLongPress();
+    if (isMouseDownRef.current && Math.abs(swipeOffset) >= 32) {
+      onReply(id, timestamp, msg);
+    }
+    isMouseDownRef.current = false;
+    setIsSwiping(false);
+    setSwipeOffset(0);
   };
 
   return (
@@ -956,41 +866,15 @@ const ChatMessageItem = ({
           <div
             className={styles.swipeReplyIndicator}
             style={{
-              opacity: Math.min(1, Math.abs(swipeOffset) / 35),
-              transform: `scale(${Math.min(1, Math.abs(swipeOffset) / 35)})`,
+              left: swipeOffset > 0 ? "6px" : undefined,
+              right: swipeOffset < 0 ? "6px" : undefined,
+              opacity: Math.min(1, Math.abs(swipeOffset) / 30),
+              transform: `scale(${Math.min(1, Math.max(0.4, Math.abs(swipeOffset) / 30))})`,
             }}
           >
             <WPIconReply size={16} />
           </div>
         )}
-
-        {/* Message Actions Bar (Quick React & Reply) */}
-        <div className={`${styles.messageActionBar} ${isMe ? styles.outgoingActions : styles.incomingActions}`}>
-          <button
-            type="button"
-            className={styles.messageActionBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              setReactionMenu(!isReactionMenuOpen, id, timestamp);
-            }}
-            title="React to message"
-            aria-label="React"
-          >
-            <WPIconReaction size={15} />
-          </button>
-          <button
-            type="button"
-            className={styles.messageActionBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              onReply(id, timestamp, msg);
-            }}
-            title="Reply to message"
-            aria-label="Reply"
-          >
-            <WPIconReply size={15} />
-          </button>
-        </div>
 
         <div
           ref={bubbleRef}
@@ -999,6 +883,7 @@ const ChatMessageItem = ({
             transform: swipeOffset !== 0 ? `translateX(${swipeOffset}px)` : undefined,
             transition: isSwiping ? "none" : "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s ease",
             touchAction: "pan-y",
+            userSelect: isSwiping ? "none" : undefined,
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -1006,8 +891,8 @@ const ChatMessageItem = ({
           onTouchCancel={handleTouchEnd}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseUp={cancelLongPress}
-          onMouseLeave={cancelLongPress}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
