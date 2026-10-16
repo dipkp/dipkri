@@ -158,24 +158,11 @@ export const Home = () => {
             />
           </div>
 
-          {/* Animated Badge Pill */}
-          <div className={styles.badgePill}>
-            <span className={styles.badgePulseDot} />
-            <IconSparkles size={14} className={styles.badgeIcon} />
-            <span className={styles.badgeText}>Real-Time Synchronized Streaming • 100% Free</span>
-          </div>
-
           {/* Hero Headline */}
           <h1 className={styles.heroHeadline}>
             Stream Anything Together. <br />
             <span className={styles.heroGradientText}>In Millisecond Sync.</span>
           </h1>
-
-          {/* Hero Subtitle */}
-          <p className={styles.heroSubtitle}>
-            Watch YouTube, 4K movies, local videos, screen shares, and live streams with friends.
-            Complete with floating webcam bubbles, WhatsApp-style live chat, and zero latency.
-          </p>
 
           {/* Hero Action Bar */}
           <div className={styles.heroActionArea}>
