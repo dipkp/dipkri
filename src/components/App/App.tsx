@@ -56,6 +56,12 @@ import config from "../../config";
 import { MetadataContext } from "../../MetadataContext";
 import ChatVideoCard from "../ChatVideoCard/ChatVideoCard";
 import {
+  IconMicrophone,
+  IconMicrophoneOff,
+  IconVideo,
+  IconVideoOff,
+} from "@tabler/icons-react";
+import {
   ActionIcon,
   Badge,
   TextInput,
@@ -201,6 +207,7 @@ interface AppState {
   isKeyboardOpen: boolean;
   isTyping: boolean;
   incomingReaction: { emoji: string; ts: number; senderId?: string } | null;
+  desktopSidebarTab?: "chat" | "people" | "playlist";
 }
 
 const checkIsMobileDevice = () => {
@@ -238,6 +245,7 @@ export class App extends React.Component<AppProps, AppState> {
     isMobileView: checkIsMobileDevice(),
     isKeyboardOpen: false,
     isTyping: false,
+    desktopSidebarTab: "chat",
     roomMedia: "",
     roomPaused: false,
     roomSubtitle: "",
@@ -2968,30 +2976,20 @@ export class App extends React.Component<AppProps, AppState> {
               />
             )}
             <div
-              className={styles.mobileStack}
-              style={{ margin: "0 8px", display: "flex", columnGap: "32px" }}
-            >
-            <div
-              className={
-                (this.state.fullScreen
-                  ? styles.fullHeightColumnFullscreen
-                  : styles.fullHeightColumn) +
-                " " +
-                styles.leftColumn
+              className={styles.desktopLayoutWrapper}
+              style={
+                this.state.fullScreen
+                  ? { height: "100vh", maxHeight: "100vh", padding: 0 }
+                  : undefined
               }
             >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  height: "100%",
-                  position: "relative",
-                  gap: "4px",
-                }}
-              >
+              {/* Left Column: Cinema Media Stage */}
+              <div className={styles.desktopStageColumn}>
+                {/* Cinema Media Bar */}
                 {!this.state.fullScreen && (
-                  <React.Fragment>
-                    <div className={styles.mobileStack}>
+                  <div className={styles.desktopMediaBar}>
+                    {/* Media Search / Link Input */}
+                    <div className={styles.desktopSearchWrapper}>
                       <ComboBox
                         roomSetMedia={this.roomSetMedia}
                         playlistAdd={this.roomPlaylistAdd}
@@ -3001,50 +2999,47 @@ export class App extends React.Component<AppProps, AppState> {
                         disabled={!this.haveLock()}
                       />
                     </div>
-                    <div className={styles.mobileStack}>
-                      {this.localStreamToPublish && (
-                        <Button
-                          color="red"
+
+                    {/* Media Actions */}
+                    <div className={styles.desktopMediaActions}>
+                      {this.localStreamToPublish ? (
+                        <button
+                          type="button"
+                          className={`${styles.desktopPillBtn} ${styles.desktopPillStop}`}
                           onClick={this.stopPublishingLocalStream}
-                          leftSection={<WPIconClose size={18} />}
+                          title="Stop sharing your screen or stream"
                         >
-                          Stop Share
-                        </Button>
-                      )}
-                      {!this.localStreamToPublish &&
+                          <WPIconClose size={15} />
+                          <span>Stop Share</span>
+                        </button>
+                      ) : (
                         !sharer && (
-                          <Button
-                            className={styles.shareButton}
-                            color="blue"
+                          <button
+                            type="button"
+                            className={`${styles.desktopPillBtn} ${styles.desktopPillScreen}`}
                             disabled={!this.haveLock()}
                             onClick={() => this.startScreenShare(false)}
-                            leftSection={<WPIconScreenshare size={18} />}
+                            title="Share your screen with room"
                           >
-                            Screenshare
-                          </Button>
-                        )}
-                      {!this.localStreamToPublish &&
-                        !sharer && (
-                          <Button
-                            className={styles.shareButton}
-                            color="violet"
-                            disabled={!this.haveLock()}
-                            onClick={() => this.setState({ isFileShareModalOpen: true })}
-                            leftSection={<WPIconFile size={18} />}
-                          >
-                            File
-                          </Button>
-                        )}
-                      {false && (
-                        <SearchComponent
-                          setMedia={this.roomSetMedia}
-                          playlistAdd={this.roomPlaylistAdd}
-                          type={"youtube"}
-                          setShowMultiSelect={this.setMultiSelectModal}
-                          setFileSelection={this.setFileSelection}
-                          disabled={!this.haveLock()}
-                        />
+                            <WPIconScreenshare size={15} />
+                            <span>Screenshare</span>
+                          </button>
+                        )
                       )}
+
+                      {!this.localStreamToPublish && !sharer && (
+                        <button
+                          type="button"
+                          className={`${styles.desktopPillBtn} ${styles.desktopPillFile}`}
+                          disabled={!this.haveLock()}
+                          onClick={() => this.setState({ isFileShareModalOpen: true })}
+                          title="Stream a local video file from your computer"
+                        >
+                          <WPIconFile size={15} />
+                          <span>File</span>
+                        </button>
+                      )}
+
                       {Boolean(this.context.streamPath) && (
                         <SearchComponent
                           setMedia={this.roomSetMedia}
@@ -3055,198 +3050,336 @@ export class App extends React.Component<AppProps, AppState> {
                           disabled={!this.haveLock()}
                         />
                       )}
-                      <Menu>
-                        <Menu.Target>
-                          <Button
-                            color="grey"
-                            leftSection={<WPIconPlaylist size={18} />}
-                            rightSection={
-                              <Badge circle>{playlist.length}</Badge>
-                            }
-                            className={styles.shareButton}
-                          >
-                            Playlist
-                          </Button>
-                        </Menu.Target>
-                        <Menu.Dropdown
-                          style={{
-                            overflowY:
-                              playlist.length > 0 ? "scroll" : undefined,
-                            maxHeight: 400,
-                            maxWidth: isMobile() ? 400 : 600,
-                          }}
-                        >
-                          {playlist.length === 0 && (
-                            <Menu.Item disabled>
-                              There are no items in the playlist.
-                            </Menu.Item>
-                          )}
-                          {playlist.map(
-                            (item: PlaylistVideo, index: number) => {
-                              if (Boolean(item.img)) {
-                                item.type = "youtube";
-                              }
-                              return (
-                                <Menu.Item key={index}>
-                                  <ChatVideoCard
-                                    video={item}
-                                    index={index}
-                                    controls
-                                    onPlay={this.roomPlaylistPlay}
-                                    onPlayNext={(index) => {
-                                      this.roomPlaylistMove(index, 0);
-                                    }}
-                                    onRemove={(index) => {
-                                      this.roomPlaylistDelete(index);
-                                    }}
-                                    disabled={!this.haveLock()}
-                                  />
-                                </Menu.Item>
-                              );
-                            },
-                          )}
-                        </Menu.Dropdown>
-                      </Menu>
+
+                      {/* Playlist Quick Switch / Badge */}
+                      <button
+                        type="button"
+                        className={`${styles.desktopPillBtn} ${
+                          this.state.desktopSidebarTab === "playlist" && this.state.showChatColumn
+                            ? styles.desktopPillActive
+                            : ""
+                        }`}
+                        onClick={() => {
+                          this.setState({
+                            showChatColumn: true,
+                            desktopSidebarTab: "playlist",
+                          });
+                        }}
+                        title="View & manage video queue"
+                      >
+                        <WPIconPlaylist size={15} />
+                        <span>Queue</span>
+                        {playlist.length > 0 && (
+                          <span className={styles.desktopPillBadge}>
+                            {playlist.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Optional Transcoder Switch */}
                       {isClientTranscodeSupported() && (
-                        <Tooltip
-                          multiline
-                          w={280}
-                          refProp="rootRef"
-                          label="Use CPU/GPU to convert before playback on your device (use if video or audio doesn't play)"
-                        >
-                          <Switch
-                            label="Convert"
-                            checked={this.state.convertEnabled}
-                            onChange={(e) =>
-                              this.setConvertEnabled(e.currentTarget.checked)
-                            }
-                            style={{ flexShrink: 0, alignSelf: "center" }}
-                          />
-                        </Tooltip>
+                        <div className={styles.desktopConvertSwitch}>
+                          <Tooltip
+                            multiline
+                            w={260}
+                            refProp="rootRef"
+                            label="Convert audio/video in real-time if codec is unsupported"
+                          >
+                            <Switch
+                              size="xs"
+                              label="Convert"
+                              checked={this.state.convertEnabled}
+                              onChange={(e) =>
+                                this.setConvertEnabled(e.currentTarget.checked)
+                              }
+                            />
+                          </Tooltip>
+                        </div>
                       )}
                     </div>
-                  </React.Fragment>
-                )}
-                <div style={{ flexGrow: 1, position: "relative" }}>
-                  {renderPlayerBox(false)}
-                </div>
-                {!isMobile() && (
-                  <div className={styles.expandButton}>
-                    <ActionIcon
-                      onClick={() => {
-                        const newVal = !this.state.showChatColumn;
-                        this.setState({
-                          showChatColumn: newVal,
-                          unreadCount: newVal ? 0 : this.state.unreadCount,
-                        });
-                        window.localStorage.setItem(
-                          "watchparty-showchatcolumn",
-                          Number(newVal).toString(),
-                        );
-                      }}
-                    >
-                      {this.state.showChatColumn ? (
-                        <WPIconChevronRight size={16} />
-                      ) : (
-                        <WPIconChevronLeft size={16} />
-                      )}
-                    </ActionIcon>
                   </div>
                 )}
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                width: this.state.showChatColumn ? 400 : 0,
-                maxWidth: 400,
-                overflow: "hidden",
-                gap: "4px",
-              }}
-              className={`${
-                (this.state.fullScreen
-                  ? styles.fullHeightColumnFullscreen
-                  : styles.fullHeightColumn) +
-                " " +
-                styles.rightColumn
-              }`}
-            >
-              <div style={{ display: "flex", width: "100%", gap: "4px" }}>
-                <TextInput
-                  // description="Name"
-                  style={{
-                    visibility: this.state.showChatColumn
-                      ? undefined
-                      : "hidden",
-                    flexGrow: 1,
-                  }}
-                  value={this.state.myName}
-                  onChange={(e) => {
-                    this.updateName(e.target.value);
-                  }}
-                  onFocus={(e) => e.target.select()}
-                />
-                <InviteButton />
-              </div>
-              <MobileTabBar
-                activeTab={this.state.showPeopleColumn ? "people" : "chat"}
-                onTabChange={(tab) => {
-                  if (tab === "people") {
-                    this.setState({ showPeopleColumn: true });
-                  } else if (tab === "chat") {
-                    this.setState({ showPeopleColumn: false, unreadCount: 0 });
-                  } else if (tab === "playlist") {
-                    document.getElementById("playlist")?.scrollIntoView({ behavior: "smooth" });
-                  }
-                }}
-                participantCount={this.state.participants.length}
-                playlistCount={this.state.playlist.length}
-                onOpenSettings={() => this.setState({ settingsModalOpen: true })}
-                unreadCount={this.state.showPeopleColumn ? this.state.unreadCount : 0}
-              />
-              {this.state.state === "connected" && (
-                <div
-                  style={{
-                    position: "absolute",
-                    background: "rgba(9, 10, 15, 0.95)",
-                    zIndex: 20,
-                    inset: "78px 0 0 0",
-                    display: this.state.showPeopleColumn ? "flex" : "none",
-                    flexDirection: "column",
-                    overflowY: "auto",
-                  }}
-                >
-                  <VideoChat
-                    ref={this.videoChatRef}
-                    socket={this.socket}
-                    participants={this.state.participants}
-                    nameMap={this.state.nameMap}
-                    pictureMap={this.state.pictureMap}
-                    tsMap={this.state.tsMap}
-                    rosterUpdateTS={this.state.rosterUpdateTS}
-                    owner={this.state.owner}
-                    getLeaderTime={this.getLeaderTime}
-                  />
+
+                {/* Player Stage with Theater Toggle Pill */}
+                <div className={styles.desktopPlayerStage}>
+                  {renderPlayerBox(false)}
+
+                  {/* Floating Cinema Theater Pill */}
+                  {!this.state.fullScreen && (
+                    <div className={styles.desktopTheaterPill}>
+                      <button
+                        type="button"
+                        className={styles.desktopTheaterBtn}
+                        onClick={() => {
+                          const newVal = !this.state.showChatColumn;
+                          this.setState({
+                            showChatColumn: newVal,
+                            unreadCount: newVal ? 0 : this.state.unreadCount,
+                          });
+                          window.localStorage.setItem(
+                            "watchparty-showchatcolumn",
+                            Number(newVal).toString(),
+                          );
+                        }}
+                        title={
+                          this.state.showChatColumn
+                            ? "Expand video to Cinema Theater mode"
+                            : "Restore sidebar console"
+                        }
+                      >
+                        {this.state.showChatColumn ? (
+                          <WPIconChevronRight size={18} />
+                        ) : this.state.unreadCount > 0 ? (
+                          <div className={styles.theaterUnreadDot} />
+                        ) : (
+                          <WPIconChevronLeft size={18} />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-              <Chat
-                chat={this.state.chat}
-                nameMap={this.state.nameMap}
-                pictureMap={this.state.pictureMap}
-                socket={this.socket}
-                scrollTimestamp={this.state.scrollTimestamp}
-                getMediaDisplayName={this.getMediaDisplayName}
-                isChatDisabled={this.state.isChatDisabled}
-                owner={this.state.owner}
-                ref={this.chatRef}
-                hide={!this.state.showChatColumn}
-                videoPaused={this.state.roomPaused}
-              />
+              </div>
+
+              {/* Right Column: Desktop Command Center Sidebar (390px) */}
+              <div
+                className={styles.desktopSidebarColumn}
+                style={{
+                  width: this.state.showChatColumn ? 390 : 0,
+                  maxWidth: this.state.showChatColumn ? 390 : 0,
+                  opacity: this.state.showChatColumn ? 1 : 0,
+                  pointerEvents: this.state.showChatColumn ? "auto" : "none",
+                  borderWidth: this.state.showChatColumn ? 1 : 0,
+                  padding: this.state.showChatColumn ? undefined : 0,
+                }}
+              >
+                {/* Sidebar Header: Nickname Pill + Invite */}
+                <div className={styles.desktopSidebarHeader}>
+                  <div
+                    className={styles.desktopUserPill}
+                    title="Click to edit your nickname"
+                  >
+                    <div className={styles.desktopUserAvatar}>
+                      {this.state.myPicture ? (
+                        <img
+                          src={this.state.myPicture}
+                          alt={this.state.myName}
+                        />
+                      ) : (
+                        <WPIconUser size={13} />
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      className={styles.desktopNameInput}
+                      value={this.state.myName}
+                      onChange={(e) => this.updateName(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      placeholder="Your name..."
+                      maxLength={30}
+                    />
+                  </div>
+                  <InviteButton />
+                </div>
+
+                {/* Sidebar Navigation Tabs */}
+                <div className={styles.desktopSidebarNav}>
+                  <button
+                    type="button"
+                    className={`${styles.desktopNavTab} ${
+                      (this.state.desktopSidebarTab ?? "chat") === "chat"
+                        ? styles.desktopNavTabActive
+                        : ""
+                    }`}
+                    onClick={() => {
+                      this.setState({
+                        desktopSidebarTab: "chat",
+                        unreadCount: 0,
+                      });
+                    }}
+                  >
+                    <WPIconChat size={15} />
+                    <span>Chat</span>
+                    {(this.state.desktopSidebarTab ?? "chat") !== "chat" &&
+                      this.state.unreadCount > 0 && (
+                        <span className={styles.desktopNavBadge}>
+                          {this.state.unreadCount}
+                        </span>
+                      )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`${styles.desktopNavTab} ${
+                      this.state.desktopSidebarTab === "people"
+                        ? styles.desktopNavTabActive
+                        : ""
+                    }`}
+                    onClick={() => {
+                      this.setState({ desktopSidebarTab: "people" });
+                    }}
+                  >
+                    <WPIconPeople size={15} />
+                    <span>People</span>
+                    <span className={styles.desktopNavCount}>
+                      {this.state.participants.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`${styles.desktopNavTab} ${
+                      this.state.desktopSidebarTab === "playlist"
+                        ? styles.desktopNavTabActive
+                        : ""
+                    }`}
+                    onClick={() => {
+                      this.setState({ desktopSidebarTab: "playlist" });
+                    }}
+                  >
+                    <WPIconPlaylist size={15} />
+                    <span>Queue</span>
+                    {playlist.length > 0 && (
+                      <span className={styles.desktopNavCount}>
+                        {playlist.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Sidebar Body */}
+                <div className={styles.desktopSidebarBody}>
+                  {/* TAB 1: Chat */}
+                  <div
+                    style={{
+                      display:
+                        (this.state.desktopSidebarTab ?? "chat") === "chat"
+                          ? "flex"
+                          : "none",
+                      flexDirection: "column",
+                      height: "100%",
+                      width: "100%",
+                    }}
+                  >
+                    <Chat
+                      chat={this.state.chat}
+                      nameMap={this.state.nameMap}
+                      pictureMap={this.state.pictureMap}
+                      socket={this.socket}
+                      scrollTimestamp={this.state.scrollTimestamp}
+                      getMediaDisplayName={this.getMediaDisplayName}
+                      isChatDisabled={this.state.isChatDisabled}
+                      owner={this.state.owner}
+                      ref={this.chatRef}
+                      hide={!this.state.showChatColumn}
+                      videoPaused={this.state.roomPaused}
+                    />
+                  </div>
+
+                  {/* TAB 2: People & WebRTC Voice/Video */}
+                  <div
+                    style={{
+                      display:
+                        this.state.desktopSidebarTab === "people"
+                          ? "flex"
+                          : "none",
+                      flexDirection: "column",
+                      height: "100%",
+                      width: "100%",
+                      overflowY: "auto",
+                      padding: "10px",
+                      gap: "10px",
+                    }}
+                  >
+                    {this.state.state === "connected" && (
+                      <VideoChat
+                        ref={this.videoChatRef}
+                        socket={this.socket}
+                        participants={this.state.participants}
+                        nameMap={this.state.nameMap}
+                        pictureMap={this.state.pictureMap}
+                        tsMap={this.state.tsMap}
+                        rosterUpdateTS={this.state.rosterUpdateTS}
+                        owner={this.state.owner}
+                        getLeaderTime={this.getLeaderTime}
+                      />
+                    )}
+                  </div>
+
+                  {/* TAB 3: Video Queue / Playlist */}
+                  <div
+                    style={{
+                      display:
+                        this.state.desktopSidebarTab === "playlist"
+                          ? "flex"
+                          : "none",
+                      flexDirection: "column",
+                      height: "100%",
+                      width: "100%",
+                      overflowY: "auto",
+                      padding: "12px",
+                      gap: "8px",
+                    }}
+                  >
+                    <div className={styles.desktopQueueHeader}>
+                      <span>Upcoming Videos ({playlist.length})</span>
+                      {playlist.length > 0 && (
+                        <button
+                          type="button"
+                          className={styles.queueClearBtn}
+                          disabled={!this.haveLock()}
+                          onClick={() => {
+                            for (let i = playlist.length - 1; i >= 0; i--) {
+                              this.roomPlaylistDelete(i);
+                            }
+                          }}
+                          title="Clear all videos from playlist"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+
+                    {playlist.length === 0 ? (
+                      <div className={styles.desktopEmptyQueue}>
+                        <div className={styles.emptyQueueIcon}>
+                          <WPIconPlaylist size={36} />
+                        </div>
+                        <div className={styles.emptyQueueTitle}>
+                          Queue is Empty
+                        </div>
+                        <div className={styles.emptyQueueSub}>
+                          Paste any YouTube link, magnet, or video URL in the search bar above to queue videos.
+                        </div>
+                      </div>
+                    ) : (
+                      playlist.map((item: PlaylistVideo, index: number) => {
+                        if (Boolean(item.img)) {
+                          item.type = "youtube";
+                        }
+                        return (
+                          <div key={index} className={styles.desktopQueueItem}>
+                            <ChatVideoCard
+                              video={item}
+                              index={index}
+                              controls
+                              onPlay={this.roomPlaylistPlay}
+                              onPlayNext={(idx) => {
+                                this.roomPlaylistMove(idx, 0);
+                              }}
+                              onRemove={(idx) => {
+                                this.roomPlaylistDelete(idx);
+                              }}
+                              disabled={!this.haveLock()}
+                            />
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </React.Fragment>
+          </React.Fragment>
       )}
     </React.Fragment>
     );
