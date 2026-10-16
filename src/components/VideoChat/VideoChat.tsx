@@ -221,8 +221,14 @@ export class VideoChat extends React.Component<VideoChatProps> {
         };
         pc.ontrack = (event: RTCTrackEvent) => {
           // Mount the stream from peer
-          // console.log(stream);
-          videoRefs[id].srcObject = event.streams[0];
+          const stream = event.streams[0];
+          if (!window.watchparty.remoteStreams) {
+            window.watchparty.remoteStreams = {};
+          }
+          window.watchparty.remoteStreams[id] = stream;
+          if (videoRefs[id]) {
+            videoRefs[id].srcObject = stream;
+          }
         };
         pc.oniceconnectionstatechange = () => {
           if (pc.iceConnectionState === "failed") {

@@ -102,6 +102,7 @@ declare global {
       ourStream: MediaStream | undefined;
       videoRefs: HTMLVideoElementDict;
       videoPCs: PCDict;
+      remoteStreams?: { [key: string]: MediaStream };
       webtorrent?: WebTorrent.Instance;
       hls?: Hls;
       dash?: MediaPlayerClass;
@@ -113,6 +114,7 @@ window.watchparty = {
   ourStream: undefined,
   videoRefs: {},
   videoPCs: {},
+  remoteStreams: {},
 };
 
 const clientId = getOrCreateClientId();
@@ -2198,6 +2200,13 @@ export class App extends React.Component<AppProps, AppState> {
         roomSubtitle={this.state.roomSubtitle}
         unreadCount={this.state.unreadCount}
         onClearUnread={() => this.setState({ unreadCount: 0 })}
+        participants={this.state.participants}
+        onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+        onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+        onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+        onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+        isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+        isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
       />
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (

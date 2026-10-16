@@ -326,9 +326,16 @@
 
 @media (max-width: 950px) and (orientation: landscape), (max-height: 520px) and (orientation: landscape) {
   .mobileHeader,
-  .mobileBottomNav,
-  .mobileContentArea {
+  .mobileBottomNav {
     display: none !important;
+  }
+  .mobileContentArea {
+    visibility: hidden !important;
+    position: absolute !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
   }
   .mobileVideoWrapper {
     width: 100vw !important;

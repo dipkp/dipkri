@@ -207,6 +207,41 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     return { x: 16, y: 70 };
   });
 
+  // Clamps coordinates when rotated into landscape mode so bubbles never disappear off-screen
+  useEffect(() => {
+    const clampToViewport = () => {
+      if (typeof window === "undefined") return;
+      const diameter = SIZE_PRESETS[sizePreset] || SIZE_PRESETS.medium;
+      const isLandscape = window.innerWidth > window.innerHeight;
+      const maxRight = Math.max(8, window.innerWidth - (diameter + 16));
+      // In mobile landscape (height <= 520px), ensure bubbles stay visible within the short viewport
+      const maxTop = Math.max(8, window.innerHeight - (diameter + 16));
+
+      setPosition((prev) => {
+        const nextX = Math.max(8, Math.min(maxRight, prev.x));
+        const nextY = Math.max(8, Math.min(maxTop, prev.y));
+        if (nextX !== prev.x || nextY !== prev.y) {
+          try {
+            localStorage.setItem(
+              "dipkri-webcam-pos",
+              JSON.stringify({ x: nextX, y: nextY }),
+            );
+          } catch {}
+          return { x: nextX, y: nextY };
+        }
+        return prev;
+      });
+    };
+
+    clampToViewport();
+    window.addEventListener("resize", clampToViewport);
+    window.addEventListener("orientationchange", clampToViewport);
+    return () => {
+      window.removeEventListener("resize", clampToViewport);
+      window.removeEventListener("orientationchange", clampToViewport);
+    };
+  }, [sizePreset]);
+
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef<{
     mouseX: number;
@@ -434,20 +469,37 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     );
   }
 
-  // Get stream for user
+  // Get stream for user with multiple resilient fallbacks
   const getUserStream = (userId: string): MediaStream | null => {
     if (typeof window === "undefined" || !window.watchparty) return null;
     if (userId === selfId) {
       return window.watchparty.ourStream || null;
     }
+    // 1. Persistent remote streams dictionary (always survives tab switches and orientation changes)
+    if (window.watchparty.remoteStreams?.[userId]) {
+      return window.watchparty.remoteStreams[userId];
+    }
+    // 2. Video reference srcObject
     const ref = window.watchparty.videoRefs?.[userId];
     if (ref && ref.srcObject instanceof MediaStream) {
       return ref.srcObject;
     }
+    // 3. Active RTCPeerConnection receivers
     const pc = window.watchparty.videoPCs?.[userId] as any;
-    if (pc && typeof pc.getRemoteStreams === "function") {
-      const streams = pc.getRemoteStreams();
-      if (streams && streams.length > 0) return streams[0];
+    if (pc) {
+      if (typeof pc.getReceivers === "function") {
+        const tracks = pc.getReceivers().map((r: any) => r.track).filter(Boolean);
+        if (tracks.length > 0) {
+          const stream = new MediaStream(tracks);
+          if (!window.watchparty.remoteStreams) window.watchparty.remoteStreams = {};
+          window.watchparty.remoteStreams[userId] = stream;
+          return stream;
+        }
+      }
+      if (typeof pc.getRemoteStreams === "function") {
+        const streams = pc.getRemoteStreams();
+        if (streams && streams.length > 0) return streams[0];
+      }
     }
     return null;
   };

@@ -1,6 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Badge, Menu, Progress } from "@mantine/core";
-import { formatTimestamp } from "../../utils/utils";
+import {
+  formatTimestamp,
+  getDefaultPicture,
+  getColorForStringHex,
+} from "../../utils/utils";
 import styles from "./Controls.module.css";
 import {
   WPIconPlay,
@@ -20,6 +24,12 @@ import {
   WPIconClose,
   WPIconSettings,
 } from "../Icons/CustomIcons";
+import {
+  IconVideo,
+  IconVideoOff,
+  IconMicrophone,
+  IconMicrophoneOff,
+} from "@tabler/icons-react";
 import {
   getWebcamSettings,
   setWebcamSettings,
@@ -72,6 +82,13 @@ interface ControlsProps {
   roomSubtitle?: string;
   unreadCount?: number;
   onClearUnread?: () => void;
+  participants?: User[];
+  onJoinVideo?: () => void;
+  onLeaveVideo?: () => void;
+  onToggleVideo?: () => void;
+  onToggleAudio?: () => void;
+  isVideoMuted?: boolean;
+  isAudioMuted?: boolean;
 }
 
 export const Controls = (props: ControlsProps) => {
@@ -87,9 +104,13 @@ export const Controls = (props: ControlsProps) => {
   const [isPipSupported, setIsPipSupported] = useState(false);
   const [doubleTapRipple, setDoubleTapRipple] = useState<"rewind" | "forward" | "play" | "pause" | null>(null);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [isVideoDrawerOpen, setIsVideoDrawerOpen] = useState(false);
   const [activeStripMsg, setActiveStripMsg] = useState<ChatMessage | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [webcamState, setWebcamState] = useState(() => getWebcamSettings());
+
+  const videoUsersCount = (props.participants || []).filter((p) => p.isVideoChat).length;
+  const hasOurStream = Boolean(typeof window !== "undefined" && window.watchparty?.ourStream);
 
   useEffect(() => {
     const handleWebcamChange = (e: any) => {
@@ -520,6 +541,188 @@ export const Controls = (props: ControlsProps) => {
         </div>
       )}
 
+      {/* Floating Webcams & Voice Drawer Backdrop */}
+      {isVideoDrawerOpen && (
+        <div
+          className={styles.fullscreenChatBackdrop}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsVideoDrawerOpen(false);
+          }}
+        />
+      )}
+
+      {/* Floating Webcams & Voice Drawer (For Landscape & Fullscreen Mode) */}
+      {isVideoDrawerOpen && (
+        <div
+          className={styles.fullscreenChatDrawer}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className={styles.fullscreenChatHeader}>
+            <div className={styles.drawerTitleGroup} style={{ color: "#10b981" }}>
+              <IconVideo size={16} />
+              <span>Voice & Webcams ({videoUsersCount})</span>
+            </div>
+            <button
+              type="button"
+              className={styles.drawerCloseBtn}
+              onClick={() => setIsVideoDrawerOpen(false)}
+              title="Close drawer"
+            >
+              <WPIconClose size={18} />
+            </button>
+          </div>
+          <div
+            className={styles.fullscreenChatContent}
+            style={{ padding: "14px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}
+          >
+            {/* Quick Call Action Bar */}
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {!hasOurStream ? (
+                <button
+                  type="button"
+                  style={{
+                    flex: 1,
+                    padding: "9px 14px",
+                    borderRadius: "10px",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    border: "none",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+                  }}
+                  onClick={() => props.onJoinVideo && props.onJoinVideo()}
+                >
+                  <IconVideo size={16} />
+                  <span>Join Video Call</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      borderRadius: "10px",
+                      background: props.isVideoMuted ? "rgba(239, 68, 68, 0.25)" : "rgba(16, 185, 129, 0.25)",
+                      border: props.isVideoMuted ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid rgba(16, 185, 129, 0.5)",
+                      color: props.isVideoMuted ? "#f87171" : "#34d399",
+                      fontWeight: 700,
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "5px",
+                    }}
+                    onClick={() => props.onToggleVideo && props.onToggleVideo()}
+                  >
+                    {props.isVideoMuted ? <IconVideoOff size={14} /> : <IconVideo size={14} />}
+                    <span>{props.isVideoMuted ? "Cam Off" : "Cam On"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      borderRadius: "10px",
+                      background: props.isAudioMuted ? "rgba(239, 68, 68, 0.25)" : "rgba(16, 185, 129, 0.25)",
+                      border: props.isAudioMuted ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid rgba(16, 185, 129, 0.5)",
+                      color: props.isAudioMuted ? "#f87171" : "#34d399",
+                      fontWeight: 700,
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "5px",
+                    }}
+                    onClick={() => props.onToggleAudio && props.onToggleAudio()}
+                  >
+                    {props.isAudioMuted ? <IconMicrophoneOff size={14} /> : <IconMicrophone size={14} />}
+                    <span>{props.isAudioMuted ? "Muted" : "Unmuted"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "10px",
+                      background: "rgba(239, 68, 68, 0.2)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#ef4444",
+                      fontWeight: 700,
+                      fontSize: "11px",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => props.onLeaveVideo && props.onLeaveVideo()}
+                  >
+                    Leave
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* List of active participants */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px" }}>
+              {props.participants?.map((p) => {
+                const isSelf = p.id === props.clientId;
+                const displayName = props.nameMap?.[p.id] || (isSelf ? "You" : "User");
+                const avatar = props.pictureMap?.[p.id] || getDefaultPicture(displayName, getColorForStringHex(p.id));
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      padding: "10px 8px",
+                      borderRadius: "10px",
+                      background: "rgba(255, 255, 255, 0.04)",
+                      border: p.isVideoChat ? "1.5px solid rgba(16, 185, 129, 0.5)" : "1px solid rgba(255, 255, 255, 0.07)",
+                      textAlign: "center",
+                      position: "relative",
+                    }}
+                  >
+                    <img
+                      src={avatar}
+                      alt={displayName}
+                      style={{ width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover" }}
+                    />
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#f0f0f5",
+                        maxWidth: "90%",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {displayName} {isSelf ? "(You)" : ""}
+                    </div>
+                    {p.isVideoChat && (
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                        <IconVideo size={12} color="#10b981" />
+                        <IconMicrophone size={12} color={p.isMuted ? "#ef4444" : "#10b981"} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Controls Bar (Streamlined: Scrubber + Play/Pause + Speed + Captions + PiP + Theater + Chat + Fullscreen) */}
       <div
         className={`${styles.controlsContainer} ${isControlsVisible ? styles.visible : styles.hidden}`}
@@ -787,6 +990,28 @@ export const Controls = (props: ControlsProps) => {
                 {Boolean(props.unreadCount && props.unreadCount > 0 && !isChatDrawerOpen) && (
                   <span className={styles.chatBadge}>
                     {(props.unreadCount ?? 0) > 99 ? "99+" : props.unreadCount}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* In-Video Voice & Webcams Button (Available in Full-Bleed / Landscape / Fullscreen) */}
+            {Boolean(isFullBleedVideo || props.participants) && (
+              <div
+                className={`${styles.action} ${styles.fullscreenChatBtn} ${isVideoDrawerOpen ? styles.activeFeature : ""}`}
+                onClick={() => {
+                  setIsVideoDrawerOpen((prev) => !prev);
+                  if (!isVideoDrawerOpen) {
+                    setIsChatDrawerOpen(false);
+                  }
+                }}
+                title={isVideoDrawerOpen ? "Close Webcams" : "Voice & Webcams"}
+                style={{ position: "relative" }}
+              >
+                <IconVideo size={20} color={hasOurStream ? "#10b981" : undefined} />
+                {videoUsersCount > 0 && (
+                  <span className={styles.chatBadge} style={{ background: "#10b981" }}>
+                    {videoUsersCount}
                   </span>
                 )}
               </div>
