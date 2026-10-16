@@ -36,6 +36,29 @@
   text-decoration: none;
 }
 
+.topbarArtLogo {
+  height: 38px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease;
+  user-select: none;
+}
+
+.brandLink:hover .topbarArtLogo {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 14px rgba(253, 230, 138, 0.35));
+}
+
+@media only screen and (max-width: 600px) {
+  .topbarArtLogo {
+    height: 32px;
+    max-width: 110px;
+  }
+}
+
 .brandLogo {
   width: 40px;
   height: 40px;

@@ -2644,11 +2644,23 @@ export class App extends React.Component<AppProps, AppState> {
                   : ""
               }`}
             >
-              <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <DipkriLogo size={20} />
-                <span className={styles.mobileTitle}>
-                  {this.state.roomTitle || "dipkri"}
-                </span>
+              <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <a
+                  href="/"
+                  style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+                  title="Dypkri Home"
+                >
+                  <img
+                    src="/dypkri-art.png"
+                    alt="Dypkri"
+                    style={{ height: "26px", width: "auto", objectFit: "contain", display: "block" }}
+                  />
+                </a>
+                {this.state.roomTitle && (
+                  <span className={styles.mobileTitle}>
+                    {this.state.roomTitle}
+                  </span>
+                )}
               </div>
             </header>
 

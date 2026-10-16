@@ -117,6 +117,91 @@
   }
 }
 
+/* ==========================================================================
+   Hero Brand Art Centerpiece
+   ========================================================================== */
+
+.heroArtWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 28px;
+  max-width: 540px;
+  width: 90%;
+}
+
+.heroArtGlow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 460px;
+  height: 230px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(253, 230, 138, 0.22) 0%,
+    rgba(99, 102, 241, 0.18) 40%,
+    rgba(6, 182, 212, 0.08) 65%,
+    transparent 75%
+  );
+  filter: blur(48px);
+  pointer-events: none;
+  z-index: 0;
+  animation: artGlowPulse 5s ease-in-out infinite alternate;
+}
+
+@keyframes artGlowPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.95);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 1;
+  }
+}
+
+.heroArtImage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.7))
+    drop-shadow(0 0 25px rgba(253, 230, 138, 0.3));
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+  user-select: none;
+}
+
+.heroArtImage:hover {
+  transform: scale(1.02) translateY(-2px);
+  filter: drop-shadow(0 8px 30px rgba(0, 0, 0, 0.8))
+    drop-shadow(0 0 35px rgba(253, 230, 138, 0.45));
+}
+
+@media (max-width: 768px) {
+  .heroArtWrapper {
+    max-width: 380px;
+    margin-bottom: 20px;
+  }
+  .heroArtImage {
+    max-height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroArtWrapper {
+    max-width: 290px;
+    margin-bottom: 16px;
+  }
+  .heroArtImage {
+    max-height: 140px;
+  }
+}
+
 /* Animated Badge Pill */
 .badgePill {
   display: inline-flex;
@@ -1343,4 +1428,26 @@
   background: rgba(6, 182, 212, 0.22) !important;
   border-color: rgba(6, 182, 212, 0.7) !important;
   transform: translateY(-2px);
+}
+
+.ctaArtWrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.ctaArtImage {
+  height: 56px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 0 16px rgba(253, 230, 138, 0.3));
+}
+
+@media (max-width: 600px) {
+  .ctaArtImage {
+    height: 44px;
+    max-width: 140px;
+  }
 }

@@ -185,14 +185,15 @@ export const TopBar = (props: {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "9px",
               textDecoration: "none",
             }}
+            title="Dypkri Home"
           >
-            <DipkriLogo size={28} />
-            {!props.roomTitle && !props.roomDescription && (
-              <span className={styles.logo}>dipkri</span>
-            )}
+            <img
+              src="/dypkri-art.png"
+              alt="Dypkri"
+              className={styles.topbarArtLogo}
+            />
           </a>
           {(props.roomTitle || props.roomDescription) && (
             <div className={styles.roomTitleContainer}>

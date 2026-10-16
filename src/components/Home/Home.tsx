@@ -148,6 +148,16 @@ export const Home = () => {
             HERO SECTION
             ======================================================== */}
         <section className={styles.heroSection}>
+          {/* Hero Brand Art Centerpiece */}
+          <div className={styles.heroArtWrapper}>
+            <div className={styles.heroArtGlow} />
+            <img
+              src="/dypkri-art.png"
+              alt="Dypkri"
+              className={styles.heroArtImage}
+            />
+          </div>
+
           {/* Animated Badge Pill */}
           <div className={styles.badgePill}>
             <span className={styles.badgePulseDot} />
@@ -260,8 +270,12 @@ export const Home = () => {
                   <span className={`${styles.dot} ${styles.dotGreen}`} />
                 </div>
                 <div className={styles.mockRoomTitle}>
-                  <DipkriLogo size={16} />
-                  <span>dipkri room • {currentShowcase.title}</span>
+                  <img
+                    src="/dypkri-art.png"
+                    alt="Dypkri"
+                    style={{ height: "18px", width: "auto", objectFit: "contain" }}
+                  />
+                  <span>room • {currentShowcase.title}</span>
                 </div>
                 <div className={styles.mockSyncBadge}>
                   <span className={styles.syncGlowDot} />
@@ -714,6 +728,13 @@ export const Home = () => {
           <div className={styles.finalCtaCard}>
             <div className={styles.finalCtaGlow} />
             <div className={styles.finalCtaContent}>
+              <div className={styles.ctaArtWrapper}>
+                <img
+                  src="/dypkri-art.png"
+                  alt="Dypkri"
+                  className={styles.ctaArtImage}
+                />
+              </div>
               <div className={styles.badgePill} style={{ marginBottom: "16px" }}>
                 <span className={styles.badgePulseDot} />
                 <span>Ready to Watch?</span>
