@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server/server.ts",
+    "start": "node --experimental-strip-types server/server.ts",
     "ui": "vite --host",
-    "dev": "node --watch-path . server/server.ts",
+    "dev": "node --watch-path . --experimental-strip-types server/server.ts",
     "build": "vite build",
     "check": "npm run typecheck && npm run typecheckServer",
     "buildReact": "vite build",
