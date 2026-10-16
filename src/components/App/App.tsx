@@ -704,61 +704,81 @@ export class App extends React.Component<AppProps, AppState> {
           if (data.subtitle) {
             this.setState({ roomSubtitle: data.subtitle });
             this.Player().loadSubtitles(data.subtitle);
-          } else if (currentMedia && currentMedia.includes("/stream?torrent=")) {
-            // Auto-detect and attach any .srt or .vtt subtitle file found inside the torrent
-            try {
-              const dataUrl = currentMedia.replace("/stream?", "/data?");
-              fetch(dataUrl)
-                .then((r) => r.json())
-                .then(async (meta) => {
-                  if (meta?.files && Array.isArray(meta.files)) {
-                    const subFile = meta.files.find((f: any) =>
-                      f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
-                    );
-                    if (subFile) {
-                      const base = currentMedia.split("&fileIndex=")[0];
-                      const subUrl = `${base}&fileIndex=${subFile.index}`;
-                      this.setState({ roomSubtitle: subUrl });
-                      this.Player().loadSubtitles(subUrl);
-                      return;
-                    }
-                  }
-                  // Auto-search OpenSubtitles using torrent movie title
-                  if (meta?.name && !this.state.roomSubtitle) {
-                    const title = cleanMovieTitle(meta.name);
-                    if (title && title.length > 2) {
-                      try {
-                        const sResp = await fetch(
-                          `${serverPath}/searchSubtitles?title=${encodeURIComponent(title)}`
+          } else if (currentMedia && !data.subtitle) {
+            // Auto-detect and attach subtitles for Torrents, Magnet Links, HLS m3u8, and Direct Video Streams
+            const detectAndAttachSubtitles = async () => {
+              if (this.state.roomSubtitle) return;
+
+              // 1. If it's a torrent or magnet stream, check for embedded .srt / .vtt files with retry
+              if (currentMedia.includes("/stream?torrent=") || currentMedia.startsWith("magnet:")) {
+                const dataUrl = currentMedia.includes("/stream?")
+                  ? currentMedia.replace("/stream?", "/data?")
+                  : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
+
+                // Retry fetching metadata up to 5 times (torrent peers take a few seconds to connect)
+                for (let attempt = 0; attempt < 5; attempt++) {
+                  if (this.state.roomSubtitle) return;
+                  try {
+                    const resp = await fetch(dataUrl);
+                    if (resp.ok) {
+                      const meta = await resp.json();
+                      if (meta?.files && Array.isArray(meta.files)) {
+                        const subFile = meta.files.find((f: any) =>
+                          f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
                         );
-                        const sJson = await sResp.json();
-                        if (Array.isArray(sJson) && sJson.length > 0) {
-                          const topSub = sJson.find(
-                            (r: any) => (r.attributes?.language || "").toUpperCase() === "EN"
-                          ) || sJson[0];
-                          if (topSub) {
-                            const fileId = topSub.attributes?.files?.[0]?.file_id;
-                            const dlUrl = topSub.attributes?.downloadUrl || "";
-                            const q = new URLSearchParams();
-                            if (dlUrl) q.set("downloadUrl", dlUrl);
-                            if (fileId) q.set("file_id", fileId);
-                            const dResp = await fetch(`${serverPath}/downloadSubtitles?${q.toString()}`);
-                            const dJson = await dResp.json();
-                            if (dJson?.link) {
-                              const finalSubUrl = `${serverPath}${dJson.link}`;
-                              this.setState({ roomSubtitle: finalSubUrl });
-                              this.Player().loadSubtitles(finalSubUrl);
-                            }
-                          }
+                        if (subFile) {
+                          const base = currentMedia.includes("&fileIndex=")
+                            ? currentMedia.split("&fileIndex=")[0]
+                            : currentMedia;
+                          const subUrl = `${base}&fileIndex=${subFile.index}`;
+                          this.setState({ roomSubtitle: subUrl });
+                          this.Player().loadSubtitles(subUrl);
+                          return;
                         }
-                      } catch (err) {
-                        console.warn("[AutoSub] Background lookup error:", err);
+                      }
+                      if (meta?.name) {
+                        break;
+                      }
+                    }
+                  } catch {}
+                  await new Promise((r) => setTimeout(r, 1200));
+                }
+              }
+
+              // 2. Auto-search OpenSubtitles using cleaned movie/series title from URL, magnet dn, or path
+              const cleanTitle = cleanMovieTitle(currentMedia);
+              if (cleanTitle && cleanTitle.length > 2 && !this.state.roomSubtitle) {
+                try {
+                  const sResp = await fetch(
+                    `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}`
+                  );
+                  const sJson = await sResp.json();
+                  if (Array.isArray(sJson) && sJson.length > 0) {
+                    const topSub = sJson.find(
+                      (r: any) => (r.attributes?.language || "").toUpperCase() === "EN"
+                    ) || sJson[0];
+                    if (topSub) {
+                      const fileId = topSub.attributes?.files?.[0]?.file_id;
+                      const dlUrl = topSub.attributes?.downloadUrl || "";
+                      const q = new URLSearchParams();
+                      if (dlUrl) q.set("downloadUrl", dlUrl);
+                      if (fileId) q.set("file_id", fileId);
+                      const dResp = await fetch(`${serverPath}/downloadSubtitles?${q.toString()}`);
+                      const dJson = await dResp.json();
+                      if (dJson?.link) {
+                        const finalSubUrl = `${serverPath}${dJson.link}`;
+                        this.setState({ roomSubtitle: finalSubUrl });
+                        this.Player().loadSubtitles(finalSubUrl);
                       }
                     }
                   }
-                })
-                .catch(() => {});
-            } catch {}
+                } catch (err) {
+                  console.warn("[AutoSub] Lookup error:", err);
+                }
+              }
+            };
+
+            detectAndAttachSubtitles();
           }
           if (data.playbackRate) {
             this.Player().setPlaybackRate(data.playbackRate);

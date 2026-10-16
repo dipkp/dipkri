@@ -46,11 +46,59 @@ interface SubtitleResult {
 
 export function cleanMovieTitle(raw: string): string {
   if (!raw) return "";
-  let name = raw.split("/").slice(-1)[0] || "";
-  name = name.split("?")[0];
-  name = name.replace(/\.(mp4|mkv|avi|webm|mov|flv|ts|m4v)$/i, "");
-  name = name.replace(/[._]/g, " ").trim();
-  return name;
+  let str = raw.trim();
+
+  // 1. Check if raw is a magnet link or has torrent= in query
+  if (str.startsWith("magnet:") || str.includes("torrent=")) {
+    let magnetUri = str;
+    if (str.includes("torrent=")) {
+      try {
+        const u = new URL(str, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+        magnetUri = u.searchParams.get("torrent") || str;
+      } catch {
+        const match = str.match(/torrent=([^&]+)/);
+        if (match) magnetUri = decodeURIComponent(match[1]);
+      }
+    }
+    const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/i);
+    if (dnMatch && dnMatch[1]) {
+      try {
+        str = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+      } catch {
+        str = dnMatch[1];
+      }
+    }
+  }
+
+  // 2. If it's a URL (e.g. m3u8, mp4, etc.)
+  if (str.includes("://") || str.startsWith("/")) {
+    try {
+      const u = new URL(str, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      const segments = u.pathname.split("/").filter(Boolean);
+      let last = segments[segments.length - 1] || "";
+      if (/^(index|master|playlist|stream|live|manifest|video)\.(m3u8|mpd|mp4|ts)$/i.test(last) && segments.length > 1) {
+        last = segments[segments.length - 2];
+      }
+      str = last;
+    } catch {
+      str = str.split("?")[0].split("/").filter(Boolean).slice(-1)[0] || str;
+    }
+  }
+
+  // 3. Strip file extensions
+  str = str.replace(/\.(mp4|mkv|avi|webm|mov|flv|ts|m4v|m3u8|mpd|srt|vtt)$/i, "");
+
+  // 4. Strip bracketed release tags like [YTS.MX], [RARBG], (2024), etc.
+  str = str.replace(/\[.*?\]/g, " ");
+
+  // 5. Clean common release tags, resolutions, and scene groups
+  str = str.replace(/\b(1080p|720p|480p|2160p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-dl|webrip|web|hdrip|hdtv|dvdrip|x264|x265|h264|hevc|10bit|aac|ac3|dts|yify|yts|ettv|rarbg|psa|eztv)\b/gi, " ");
+
+  // 6. Clean punctuation & extra whitespace
+  str = str.replace(/[._\-–—]/g, " ");
+  str = str.replace(/\s+/g, " ").trim();
+
+  return str;
 }
 
 export class SubtitleModal extends React.Component<SubtitleModalProps> {
