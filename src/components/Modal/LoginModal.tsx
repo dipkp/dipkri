@@ -45,13 +45,27 @@ export class LoginModal extends React.Component<{
   // };
 
   facebookSignIn = async () => {
-    const provider = new firebase.auth.FacebookAuthProvider();
-    await firebase.auth().signInWithPopup(provider);
+    try {
+      const provider = new firebase.auth.FacebookAuthProvider();
+      await firebase.auth().signInWithPopup(provider);
+      this.props.closeModal();
+    } catch (e: any) {
+      if (e?.code !== "auth/popup-closed-by-user") {
+        this.setState({ error: e.message });
+      }
+    }
   };
 
   googleSignIn = async () => {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await firebase.auth().signInWithPopup(provider);
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await firebase.auth().signInWithPopup(provider);
+      this.props.closeModal();
+    } catch (e: any) {
+      if (e?.code !== "auth/popup-closed-by-user") {
+        this.setState({ error: e.message });
+      }
+    }
   };
 
   render() {
@@ -164,6 +178,7 @@ export class CreateModal extends React.Component<{
   createAccount = async (email: string, password: string) => {
     try {
       await firebase.auth().createUserWithEmailAndPassword(email, password);
+      this.props.closeModal();
     } catch (e: any) {
       // handle exceptions
       this.setState({ error: e.message });

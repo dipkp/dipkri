@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Dipkri WatchParty",
+        "supportEmail": "dipkp2909@gmail.com",
+        "authorizedRedirectUris": [
+          "https://dipkri-watchparty.firebaseapp.com/__/auth/handler",
+          "http://localhost:8080",
+          "http://localhost:5173",
+          "http://localhost:3000"
+        ]
+      }
+    }
+  }
+}

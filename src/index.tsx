@@ -11,7 +11,7 @@ import { Privacy, Terms, FAQ } from "./components/Pages/Pages";
 import { TopBar } from "./components/TopBar/TopBar";
 import { Footer } from "./components/Footer/Footer";
 import firebase from "firebase/compat/app";
-import "firebase/auth";
+import "firebase/compat/auth";
 import { serverPath, softWhite } from "./utils/utils";
 import { Create } from "./components/Create/Create";
 import { Discord } from "./components/Discord/Discord";
