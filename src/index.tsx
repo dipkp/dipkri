@@ -127,6 +127,12 @@ class WatchParty extends React.Component {
             streamPath: data.streamPath,
             beta: data.beta,
           });
+        } else {
+          this.setState({
+            user: undefined,
+            isSubscriber: undefined,
+            streamPath: undefined,
+          });
         }
       });
     } else {

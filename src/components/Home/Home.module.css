@@ -1,6 +1,7 @@
 /* ==========================================================================
-   Home.module.css - Minimalist & Compact Home Page
-   Focused exclusively on Google Sign-In (Step 1) and New Room / Join Room (Step 2)
+   Home.module.css - Distinct 2-Phase Minimalist Experience
+   Phase 1: One-time Google Authentication
+   Phase 2: The New Room & Join Room Action Page
    ========================================================================== */
 
 .homeWrapper {
@@ -58,7 +59,7 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 540px;
+  max-width: 520px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -68,7 +69,7 @@
 .brandArtContainer {
   position: relative;
   width: 100%;
-  max-width: 200px;
+  max-width: 190px;
   margin: 0 auto 24px;
   display: flex;
   align-items: center;
@@ -123,78 +124,65 @@
   background: rgba(239, 68, 68, 0.2);
 }
 
-/* Step Sections */
-.stepSection {
-  margin-bottom: 20px;
-}
-
-.stepBadgeRow {
+/* Auth Loader */
+.authLoaderWrapper {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding: 0 4px;
+  justify-content: center;
+  padding: 30px 0;
 }
 
-.stepBadge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  padding: 3px 9px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.authSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
-.stepBadgeActive {
-  background: linear-gradient(135deg, #6366f1, #06b6d4);
-  color: #ffffff;
-  border: none;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.stepStatusText {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 500;
-}
+/* ==========================================================================
+   PHASE 1: Dedicated Google Sign-In Card
+   ========================================================================== */
 
-/* Step 1 Card: Google Sign-In */
-.stepCard {
+.loginCard {
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 22px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  padding: 28px 24px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.3s ease;
 }
 
-.stepCardDone {
-  background: rgba(16, 185, 129, 0.04);
-  border-color: rgba(16, 185, 129, 0.28);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.08);
-}
-
-.stepTitle {
-  font-size: 18px;
+.loginTitle {
+  font-size: 20px;
   font-weight: 700;
   color: #f8fafc;
-  margin: 0 0 6px 0;
+  margin: 0 0 8px 0;
   letter-spacing: -0.3px;
 }
 
-.stepSubtitle {
-  font-size: 13px;
+.loginSubtitle {
+  font-size: 13.5px;
   color: #94a3b8;
-  margin: 0 0 18px 0;
-  line-height: 1.45;
+  margin: 0 auto 24px auto;
+  line-height: 1.5;
+  max-width: 380px;
 }
 
 /* Official Google Login Button */
 .googleLoginBtn {
   width: 100%;
-  height: 48px;
+  height: 50px;
   background: #ffffff;
   color: #1f2937;
   border: none;
@@ -203,18 +191,18 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .googleLoginBtn:hover:not(:disabled) {
   background: #f8fafc;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 22px rgba(255, 255, 255, 0.22);
 }
 
 .googleLoginBtn:active:not(:disabled) {
@@ -226,16 +214,30 @@
   cursor: default;
 }
 
-/* Completed User Profile Row */
+/* ==========================================================================
+   PHASE 2: The New Room & Join Room Action Page
+   ========================================================================== */
+
+.userBar {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: fadeIn 0.3s ease;
+}
+
 .userProfileRow {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .userAvatar {
-  border: 2px solid rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+  border: 2px solid rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
   flex-shrink: 0;
 }
 
@@ -244,19 +246,8 @@
   min-width: 0;
 }
 
-.userBadgeLine {
-  margin-bottom: 2px;
-}
-
-.stepDoneBadge {
-  font-size: 10px;
-  font-weight: 700;
-  color: #10b981;
-  letter-spacing: 0.5px;
-}
-
 .userName {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #f8fafc;
   overflow: hidden;
@@ -292,11 +283,12 @@
   color: #fca5a5;
 }
 
-/* Step 2 Actions Grid */
+/* Actions Grid */
 .actionsGrid {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  animation: fadeIn 0.3s ease;
 }
 
 .actionCard {
@@ -310,10 +302,6 @@
   flex-direction: column;
   gap: 14px;
   transition: all 0.18s ease;
-}
-
-.actionCardLocked {
-  opacity: 0.75;
 }
 
 .actionCard:hover {
@@ -454,8 +442,8 @@
     margin-bottom: 18px;
   }
 
-  .stepCard {
-    padding: 18px 14px;
+  .loginCard {
+    padding: 22px 16px;
   }
 
   .actionCard {

@@ -15,19 +15,44 @@ import styles from "./Home.module.css";
 
 export const Home = () => {
   const context = useContext(MetadataContext);
+  const [authResolved, setAuthResolved] = useState(
+    Boolean(context.user || firebase.auth().currentUser)
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [roomInput, setRoomInput] = useState("");
   const [userImage, setUserImage] = useState<string | null>(null);
   const [error, setError] = useState("");
 
+  // Listen to auth state to resolve initial session without screen flicker
+  useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+      if (!isMounted) return;
+      setAuthResolved(true);
+      if (user) {
+        getUserImage(user).then((img) => {
+          if (isMounted) setUserImage(img);
+        });
+        setError("");
+      } else {
+        setUserImage(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // Update user avatar whenever context.user updates
   useEffect(() => {
     let isMounted = true;
     if (context.user) {
       getUserImage(context.user).then((img) => {
         if (isMounted) setUserImage(img);
       });
-      setError("");
     } else {
       setUserImage(null);
     }
@@ -67,11 +92,7 @@ export const Home = () => {
   };
 
   const handleStartInstantRoom = async () => {
-    if (!context.user) {
-      setError("Please complete Step 1 (Sign in with Google) first.");
-      handleGoogleSignIn();
-      return;
-    }
+    if (!context.user) return;
     setIsCreating(true);
     try {
       await createRoom(context.user, false);
@@ -83,11 +104,7 @@ export const Home = () => {
 
   const handleInlineJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!context.user) {
-      setError("Please complete Step 1 (Sign in with Google) first.");
-      handleGoogleSignIn();
-      return;
-    }
+    if (!context.user) return;
     let code = roomInput.trim();
     if (!code) return;
     if (code.includes("/watch/")) {
@@ -110,9 +127,90 @@ export const Home = () => {
 
   const isLoggedIn = Boolean(context.user);
 
+  // 1. Initial Auth Resolution Loader
+  if (!authResolved) {
+    return (
+      <div className={styles.homeWrapper}>
+        <div className={styles.ambientBackground}>
+          <div className={styles.glowOrbCenter} />
+          <div className={styles.gridOverlay} />
+        </div>
+        <div className={styles.container}>
+          <div className={styles.brandArtContainer}>
+            <div className={styles.artGlowEffect} />
+            <img
+              src="/dypkri-art.png"
+              alt="Dypkri"
+              className={styles.brandArtImage}
+            />
+          </div>
+          <div className={styles.authLoaderWrapper}>
+            <div className={styles.authSpinner} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. PAGE 1: First-Time Google Authentication Page
+  if (!isLoggedIn) {
+    return (
+      <div className={styles.homeWrapper}>
+        <div className={styles.ambientBackground}>
+          <div className={styles.glowOrbCenter} />
+          <div className={styles.gridOverlay} />
+        </div>
+
+        <div className={styles.container}>
+          {/* Brand Art Centerpiece */}
+          <div className={styles.brandArtContainer}>
+            <div className={styles.artGlowEffect} />
+            <img
+              src="/dypkri-art.png"
+              alt="Dypkri"
+              className={styles.brandArtImage}
+            />
+          </div>
+
+          {/* Global Error Banner */}
+          {error && (
+            <div className={styles.errorAlert}>
+              <span>{error}</span>
+              <button
+                type="button"
+                className={styles.errorCloseBtn}
+                onClick={() => setError("")}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* One-Time Google Sign-In Card */}
+          <div className={styles.loginCard}>
+            <h2 className={styles.loginTitle}>Sign in to Continue</h2>
+            <p className={styles.loginSubtitle}>
+              Authenticate with your Google account once to create or join private watch party rooms with your friends.
+            </p>
+
+            <button
+              type="button"
+              className={styles.googleLoginBtn}
+              onClick={handleGoogleSignIn}
+              disabled={isLoggingIn}
+            >
+              <WPIconGoogle size={22} />
+              <span>{isLoggingIn ? "Connecting to Google..." : "Continue with Google"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. PAGE 2: The New Page for Authenticated Users (New Room & Join Room)
   return (
     <div className={styles.homeWrapper}>
-      {/* Background Ambience */}
       <div className={styles.ambientBackground}>
         <div className={styles.glowOrbCenter} />
         <div className={styles.gridOverlay} />
@@ -143,141 +241,98 @@ export const Home = () => {
           </div>
         )}
 
-        {/* ========================================================
-            STEP 1: GOOGLE LOGIN
-            ======================================================== */}
-        <section className={styles.stepSection}>
-          {!isLoggedIn ? (
-            <div className={styles.stepCard}>
-              <div className={styles.stepBadgeRow}>
-                <span className={styles.stepBadge}>STEP 1</span>
-                <span className={styles.stepStatusText}>Required</span>
+        {/* Authenticated User Status Bar */}
+        <div className={styles.userBar}>
+          <div className={styles.userProfileRow}>
+            <Avatar
+              src={userImage}
+              size={42}
+              radius="xl"
+              className={styles.userAvatar}
+            />
+            <div className={styles.userInfo}>
+              <div className={styles.userName}>
+                {context.user?.displayName || "Google User"}
               </div>
-              <h2 className={styles.stepTitle}>Sign in with Google</h2>
-              <p className={styles.stepSubtitle}>
-                Sign in to create your private room or join friends in millisecond sync.
-              </p>
-
-              <button
-                type="button"
-                className={styles.googleLoginBtn}
-                onClick={handleGoogleSignIn}
-                disabled={isLoggingIn}
-              >
-                <WPIconGoogle size={20} />
-                <span>{isLoggingIn ? "Connecting to Google..." : "Continue with Google"}</span>
-              </button>
+              <div className={styles.userEmail}>{context.user?.email}</div>
             </div>
-          ) : (
-            <div className={`${styles.stepCard} ${styles.stepCardDone}`}>
-              <div className={styles.userProfileRow}>
-                <Avatar
-                  src={userImage}
-                  size={46}
-                  radius="xl"
-                  className={styles.userAvatar}
+            <button
+              type="button"
+              className={styles.signOutBtn}
+              onClick={handleSignOut}
+              title="Sign out of Google"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        {/* The Action Cards: New Room & Join Room */}
+        <div className={styles.actionsGrid}>
+          {/* Card 1: New Room */}
+          <div className={styles.actionCard}>
+            <div className={styles.actionHeader}>
+              <div className={styles.actionIconWrapper}>
+                <WPIconPlus size={22} />
+              </div>
+              <div>
+                <h3 className={styles.actionTitle}>New Room</h3>
+                <p className={styles.actionDesc}>
+                  Start an instant synchronized room for YouTube, movies & screen shares.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              size="lg"
+              className={styles.newRoomBtn}
+              onClick={handleStartInstantRoom}
+              loading={isCreating}
+              leftSection={<WPIconPlus size={18} />}
+            >
+              Create New Room
+            </Button>
+          </div>
+
+          {/* Card 2: Join Room */}
+          <div className={styles.actionCard}>
+            <div className={styles.actionHeader}>
+              <div className={`${styles.actionIconWrapper} ${styles.actionIconJoin}`}>
+                <WPIconLogin size={22} />
+              </div>
+              <div>
+                <h3 className={styles.actionTitle}>Join Room</h3>
+                <p className={styles.actionDesc}>
+                  Enter a room code or paste an invite link to jump right into the party.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleInlineJoin} className={styles.joinForm}>
+              <div className={styles.joinInputWrapper}>
+                <WPIconLink size={18} className={styles.joinInputIcon} />
+                <input
+                  type="text"
+                  placeholder="Enter code or paste link..."
+                  value={roomInput}
+                  onChange={(e) => setRoomInput(e.target.value)}
+                  className={styles.joinInput}
+                  autoComplete="off"
                 />
-                <div className={styles.userInfo}>
-                  <div className={styles.userBadgeLine}>
-                    <span className={styles.stepDoneBadge}>✓ STEP 1 COMPLETED</span>
-                  </div>
-                  <div className={styles.userName}>
-                    {context.user?.displayName || "Google User"}
-                  </div>
-                  <div className={styles.userEmail}>{context.user?.email}</div>
-                </div>
-                <button
-                  type="button"
-                  className={styles.signOutBtn}
-                  onClick={handleSignOut}
-                  title="Sign out of account"
-                >
-                  Sign Out
-                </button>
               </div>
-            </div>
-          )}
-        </section>
-
-        {/* ========================================================
-            STEP 2: NEW ROOM & JOIN ROOM
-            ======================================================== */}
-        <section className={styles.stepSection}>
-          <div className={styles.stepBadgeRow}>
-            <span className={`${styles.stepBadge} ${isLoggedIn ? styles.stepBadgeActive : ""}`}>
-              STEP 2
-            </span>
-            <span className={styles.stepStatusText}>
-              {isLoggedIn ? "Ready to watch" : "Unlocks after Google Sign-In"}
-            </span>
-          </div>
-
-          <div className={styles.actionsGrid}>
-            {/* Action 1: New Room */}
-            <div className={`${styles.actionCard} ${!isLoggedIn ? styles.actionCardLocked : ""}`}>
-              <div className={styles.actionHeader}>
-                <div className={styles.actionIconWrapper}>
-                  <WPIconPlus size={22} />
-                </div>
-                <div>
-                  <h3 className={styles.actionTitle}>New Room</h3>
-                  <p className={styles.actionDesc}>
-                    Start an instant synchronized room for YouTube, movies & screen shares.
-                  </p>
-                </div>
-              </div>
-
               <Button
+                type="submit"
                 size="lg"
-                className={styles.newRoomBtn}
-                onClick={handleStartInstantRoom}
-                loading={isCreating}
-                leftSection={<WPIconPlus size={18} />}
+                variant="light"
+                color="cyan"
+                className={styles.joinSubmitBtn}
+                leftSection={<WPIconLogin size={18} />}
               >
-                Create New Room
+                Join Room
               </Button>
-            </div>
-
-            {/* Action 2: Join Room */}
-            <div className={`${styles.actionCard} ${!isLoggedIn ? styles.actionCardLocked : ""}`}>
-              <div className={styles.actionHeader}>
-                <div className={`${styles.actionIconWrapper} ${styles.actionIconJoin}`}>
-                  <WPIconLogin size={22} />
-                </div>
-                <div>
-                  <h3 className={styles.actionTitle}>Join Room</h3>
-                  <p className={styles.actionDesc}>
-                    Enter a room code or paste an invite link to jump right into the party.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleInlineJoin} className={styles.joinForm}>
-                <div className={styles.joinInputWrapper}>
-                  <WPIconLink size={18} className={styles.joinInputIcon} />
-                  <input
-                    type="text"
-                    placeholder="Enter code or paste link..."
-                    value={roomInput}
-                    onChange={(e) => setRoomInput(e.target.value)}
-                    className={styles.joinInput}
-                    autoComplete="off"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  size="lg"
-                  variant="light"
-                  color="cyan"
-                  className={styles.joinSubmitBtn}
-                  leftSection={<WPIconLogin size={18} />}
-                >
-                  Join Room
-                </Button>
-              </form>
-            </div>
+            </form>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   );
