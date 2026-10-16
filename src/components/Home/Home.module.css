@@ -5,10 +5,13 @@
 .homeWrapper {
   position: relative;
   min-height: 100vh;
+  width: 100%;
   background-color: #06070a;
   color: #f8fafc;
   overflow-x: hidden;
+  overflow-y: visible;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ==========================================================================
