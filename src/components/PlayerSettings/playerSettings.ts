@@ -7,6 +7,7 @@ export interface PlayerSettingsState {
   audioTrack: number; // 0, 1, 2...
   audioBoost: number; // 100, 150, 200, 300 (%)
   audioMode: "stereo" | "mono";
+  showStatsOverlay: boolean;
 }
 
 export const PLAYER_SETTINGS_CHANGED_EVENT = "dipkri-player-settings-changed";
@@ -17,6 +18,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
   let audioTrack = 0;
   let audioBoost = 100;
   let audioMode: "stereo" | "mono" = "stereo";
+  let showStatsOverlay = false;
 
   if (typeof window !== "undefined") {
     try {
@@ -49,12 +51,15 @@ export const getPlayerSettings = (): PlayerSettingsState => {
         if (savedM === "mono") audioMode = "mono";
       }
 
+      const savedStats = localStorage.getItem("dipkri-stats-overlay");
+      if (savedStats === "true") showStatsOverlay = true;
+
       const savedT = localStorage.getItem("dipkri-audio-track");
       if (savedT) audioTrack = Number(savedT) || 0;
     } catch {}
   }
 
-  return { liveCaptions, quality, audioTrack, audioBoost, audioMode };
+  return { liveCaptions, quality, audioTrack, audioBoost, audioMode, showStatsOverlay };
 };
 
 export const setPlayerSettings = (
@@ -65,6 +70,9 @@ export const setPlayerSettings = (
 
   if (typeof window !== "undefined") {
     try {
+      if (partial.showStatsOverlay !== undefined) {
+        localStorage.setItem("dipkri-stats-overlay", String(partial.showStatsOverlay));
+      }
       if (partial.liveCaptions !== undefined) {
         localStorage.setItem("dipkri-live-captions", String(partial.liveCaptions));
       }

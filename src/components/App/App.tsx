@@ -48,7 +48,7 @@ import {
   isClientTranscodeSupported,
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
-import { SubtitleModal } from "../Modal/SubtitleModal";
+import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
 import styles from "./App.module.css";
@@ -553,6 +553,7 @@ export class App extends React.Component<AppProps, AppState> {
             this.Player().clearState();
           }
           if (data.subtitle) {
+            this.setState({ roomSubtitle: data.subtitle });
             this.Player().loadSubtitles(data.subtitle);
           } else if (currentMedia && currentMedia.includes("/stream?torrent=")) {
             // Auto-detect and attach any .srt or .vtt subtitle file found inside the torrent
@@ -560,7 +561,7 @@ export class App extends React.Component<AppProps, AppState> {
               const dataUrl = currentMedia.replace("/stream?", "/data?");
               fetch(dataUrl)
                 .then((r) => r.json())
-                .then((meta) => {
+                .then(async (meta) => {
                   if (meta?.files && Array.isArray(meta.files)) {
                     const subFile = meta.files.find((f: any) =>
                       f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
@@ -568,7 +569,42 @@ export class App extends React.Component<AppProps, AppState> {
                     if (subFile) {
                       const base = currentMedia.split("&fileIndex=")[0];
                       const subUrl = `${base}&fileIndex=${subFile.index}`;
+                      this.setState({ roomSubtitle: subUrl });
                       this.Player().loadSubtitles(subUrl);
+                      return;
+                    }
+                  }
+                  // Auto-search OpenSubtitles using torrent movie title
+                  if (meta?.name && !this.state.roomSubtitle) {
+                    const title = cleanMovieTitle(meta.name);
+                    if (title && title.length > 2) {
+                      try {
+                        const sResp = await fetch(
+                          `${serverPath}/searchSubtitles?title=${encodeURIComponent(title)}`
+                        );
+                        const sJson = await sResp.json();
+                        if (Array.isArray(sJson) && sJson.length > 0) {
+                          const topSub = sJson.find(
+                            (r: any) => (r.attributes?.language || "").toUpperCase() === "EN"
+                          ) || sJson[0];
+                          if (topSub) {
+                            const fileId = topSub.attributes?.files?.[0]?.file_id;
+                            const dlUrl = topSub.attributes?.downloadUrl || "";
+                            const q = new URLSearchParams();
+                            if (dlUrl) q.set("downloadUrl", dlUrl);
+                            if (fileId) q.set("file_id", fileId);
+                            const dResp = await fetch(`${serverPath}/downloadSubtitles?${q.toString()}`);
+                            const dJson = await dResp.json();
+                            if (dJson?.link) {
+                              const finalSubUrl = `${serverPath}${dJson.link}`;
+                              this.setState({ roomSubtitle: finalSubUrl });
+                              this.Player().loadSubtitles(finalSubUrl);
+                            }
+                          }
+                        }
+                      } catch (err) {
+                        console.warn("[AutoSub] Background lookup error:", err);
+                      }
                     }
                   }
                 })
@@ -2184,6 +2220,11 @@ export class App extends React.Component<AppProps, AppState> {
         onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
         isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
         isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+        downloaded={this.state.downloaded}
+        total={this.state.total}
+        speed={this.state.speed}
+        connections={this.state.connections}
+        convertProgress={this.state.convertProgress}
       />
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (
@@ -2334,7 +2375,8 @@ export class App extends React.Component<AppProps, AppState> {
             onClick={this.roomTogglePlay}
           ></video>
         )}
-        {Boolean(this.state.total || this.state.convertProgress !== undefined) && (
+        {Boolean(this.state.total || this.state.convertProgress !== undefined) &&
+          getPlayerSettings().showStatsOverlay && (
           <div
             style={{
               color: "rgba(240, 240, 245, 0.9)",

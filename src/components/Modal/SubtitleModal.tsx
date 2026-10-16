@@ -44,7 +44,7 @@ interface SubtitleResult {
   };
 }
 
-function cleanMovieTitle(raw: string): string {
+export function cleanMovieTitle(raw: string): string {
   if (!raw) return "";
   let name = raw.split("/").slice(-1)[0] || "";
   name = name.split("?")[0];

@@ -126,7 +126,8 @@ export class HTML implements Player {
 
     // Clear subtitles
     this.setSubtitleMode("hidden");
-    leftVideo.innerHTML = "";
+    const oldTracks = leftVideo.querySelectorAll("track");
+    oldTracks.forEach((t) => t.remove());
   };
 
   loadSubtitles = async (src: string) => {
@@ -134,21 +135,30 @@ export class HTML implements Player {
     if (!leftVideo) {
       return;
     }
-    // Clear subtitles and put new ones in
-    leftVideo.innerHTML = "";
+    // Remove existing track elements safely
+    const oldTracks = leftVideo.querySelectorAll("track");
+    oldTracks.forEach((t) => t.remove());
+
     if (Boolean(src)) {
       let subtitleSrc = src;
       if (subtitleSrc) {
-        const response = await fetch(subtitleSrc);
-        const buffer = await response.arrayBuffer();
-        const url = await toWebVTT(new Blob([buffer]));
-        const track = document.createElement("track");
-        track.kind = "captions";
-        track.label = "English";
-        track.srclang = "en";
-        track.src = url;
-        leftVideo.appendChild(track);
-        leftVideo.textTracks[0].mode = "showing";
+        try {
+          const response = await fetch(subtitleSrc);
+          const buffer = await response.arrayBuffer();
+          const url = await toWebVTT(new Blob([buffer]));
+          const track = document.createElement("track");
+          track.kind = "captions";
+          track.label = "English";
+          track.srclang = "en";
+          track.src = url;
+          leftVideo.appendChild(track);
+          // Hidden mode enables cue parsing without double-rendering native browser captions
+          if (leftVideo.textTracks && leftVideo.textTracks[0]) {
+            leftVideo.textTracks[0].mode = "hidden";
+          }
+        } catch (err) {
+          console.warn("[HTML Player] Subtitle load warning:", err);
+        }
       }
     }
   };

@@ -4,6 +4,7 @@ import {
   formatTimestamp,
   getDefaultPicture,
   getColorForStringHex,
+  formatSpeed,
 } from "../../utils/utils";
 import styles from "./Controls.module.css";
 import {
@@ -105,6 +106,11 @@ interface ControlsProps {
   onToggleAudio?: () => void;
   isVideoMuted?: boolean;
   isAudioMuted?: boolean;
+  downloaded?: number;
+  total?: number;
+  speed?: number;
+  connections?: number;
+  convertProgress?: number;
 }
 
 export const Controls = (props: ControlsProps) => {
@@ -1263,6 +1269,62 @@ export const Controls = (props: ControlsProps) => {
                         {t.label}
                       </Menu.Item>
                     ))}
+                  </>
+                )}
+
+                {/* Torrent Download Stats (Moved to Player Settings to eliminate screen interruption) */}
+                {Boolean(props.total || props.convertProgress !== undefined) && (
+                  <>
+                    <Menu.Divider />
+                    <Menu.Label>Torrent Download Stats</Menu.Label>
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        margin: "4px 8px",
+                        background: "rgba(255, 255, 255, 0.05)",
+                        borderRadius: "8px",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        fontSize: "12px",
+                        lineHeight: "1.7",
+                      }}
+                    >
+                      {Boolean(props.total) && (
+                        <>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Downloaded:</span>
+                            <strong style={{ color: "#34d399" }}>
+                              {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
+                            </strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Speed:</span>
+                            <strong>{formatSpeed(props.speed || 0)}</strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Peers:</span>
+                            <strong>{props.connections || 0} connections</strong>
+                          </div>
+                        </>
+                      )}
+                      {props.convertProgress !== undefined && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>Transcode:</span>
+                          <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
+                        </div>
+                      )}
+                    </div>
+                    <Menu.Item
+                      onClick={() => {
+                        setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
+                      }}
+                      rightSection={
+                        playerSettingsState.showStatsOverlay ? (
+                          <WPIconCheck size={16} color="#34d399" />
+                        ) : null
+                      }
+                    >
+                      Show On-Screen Badge: {playerSettingsState.showStatsOverlay ? "On" : "Off"}
+                    </Menu.Item>
                   </>
                 )}
 

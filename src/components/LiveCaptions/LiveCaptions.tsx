@@ -55,7 +55,12 @@ function parseSubtitleText(content: string): SubtitleCue[] {
     const start = parseTimestamp(startStr.trim().split(" ")[0]);
     const end = parseTimestamp(endStr.trim().split(" ")[0]);
     const textLines = lines.filter((l) => l !== timeLine && !/^\d+$/.test(l));
-    const text = textLines.join(" ").replace(/<[^>]*>/g, "").trim();
+    const text = textLines
+      .join(" ")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\{[^}]*\}/g, "")
+      .replace(/&lrm;|&rlm;/g, "")
+      .trim();
 
     if (text && !isNaN(start) && !isNaN(end) && end > start) {
       cues.push({ start, end, text });
@@ -248,7 +253,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     };
 
     // Run high-frequency sync loop for smooth subtitle presentation
-    syncIntervalRef.current = setInterval(syncSubtitles, 120);
+    syncIntervalRef.current = setInterval(syncSubtitles, 80);
 
     const video = getActiveVideo();
     if (video && !isYouTube) {
