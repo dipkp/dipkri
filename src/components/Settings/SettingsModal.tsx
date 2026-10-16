@@ -4,6 +4,8 @@ import {
   Switch,
   SegmentedControl,
   Badge,
+  TextInput,
+  Button,
 } from "@mantine/core";
 import { getCurrentSettings, updateSettings } from "./LocalSettings";
 import {
@@ -14,6 +16,7 @@ import {
 import { Socket } from "socket.io-client";
 import {
   WPIconSettings,
+  WPIconTrash,
 } from "../Icons/CustomIcons";
 import styles from "./Settings.module.css";
 
@@ -49,12 +52,105 @@ export const SettingsModal = ({
   modalOpen,
   setModalOpen,
   inline,
+  password,
+  setPassword,
+  isChatDisabled,
+  setIsChatDisabled,
+  clearChat,
+  roomTitle,
+  setRoomTitle,
+  roomDescription,
+  setRoomDescription,
 }: SettingsModalProps) => {
   const [updateTS, setUpdateTS] = useState(0);
 
   const settingsContent = (
-    <div>
-      {/* Preferences & Video Controls */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 1. Room Details & Customization (Title, Description, Password) */}
+      {(setRoomTitle || setRoomDescription || setPassword) && (
+        <>
+          <div className={styles.sectionHeader}>Room Details & Password</div>
+          <div className={styles.settingCard}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+              {setRoomTitle && (
+                <TextInput
+                  label="Room Title"
+                  placeholder="e.g. Movie Night"
+                  value={roomTitle || ""}
+                  onChange={(e) => setRoomTitle(e.target.value)}
+                />
+              )}
+              {setRoomDescription && (
+                <TextInput
+                  label="Room Description"
+                  placeholder="e.g. Streaming our favorite shows together"
+                  value={roomDescription || ""}
+                  onChange={(e) => setRoomDescription(e.target.value)}
+                />
+              )}
+              {setPassword && (
+                <TextInput
+                  label="Room Password"
+                  placeholder="Leave empty for public access"
+                  value={password || ""}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 2. Chat & Moderation */}
+      {(setIsChatDisabled || clearChat) && (
+        <>
+          <div className={styles.sectionHeader}>Chat & Moderation</div>
+          {setIsChatDisabled && (
+            <SettingRow
+              toggle
+              name="Disable Chat Messages"
+              description="Prevent room participants from sending text chat messages."
+              checked={Boolean(isChatDisabled)}
+              disabled={false}
+              onChange={(e) => setIsChatDisabled(e.currentTarget.checked)}
+            />
+          )}
+          {clearChat && (
+            <div className={styles.settingCard}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  width: "100%",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
+                    Clear Chat History
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                    Erase all messages from the chat box for all participants.
+                  </div>
+                </div>
+                <Button
+                  color="red"
+                  variant="light"
+                  size="xs"
+                  onClick={clearChat}
+                  leftSection={<WPIconTrash size={14} />}
+                >
+                  Clear Chat
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 3. Preferences & Webcams */}
       <div className={styles.sectionHeader}>Preferences & Controls</div>
 
           <SettingRow

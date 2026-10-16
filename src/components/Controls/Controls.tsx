@@ -23,6 +23,9 @@ import {
   WPIconChat,
   WPIconClose,
   WPIconSettings,
+  WPIconVolumeOn,
+  WPIconVolumeLow,
+  WPIconVolumeOff,
 } from "../Icons/CustomIcons";
 import {
   IconVideo,
@@ -798,7 +801,9 @@ export const Controls = (props: ControlsProps) => {
               {getLength() < Infinity && showTimestamp && (
                 <div
                   className={styles.hoverTooltip}
-                  style={{ left: `${hoverState.hoverPos * 100}%` }}
+                  style={{
+                    left: `clamp(28px, ${hoverState.hoverPos * 100}%, calc(100% - 28px))`,
+                  }}
                 >
                   {formatTimestamp(
                     hoverState.hoverTimestamp,
@@ -820,7 +825,7 @@ export const Controls = (props: ControlsProps) => {
 
         {/* Row 2: Streamlined Action Buttons */}
         <div className={styles.actionsRow}>
-          {/* Left Actions: Play/Pause and Next Video in Queue */}
+          {/* Left Actions: Play/Pause, Next Video in Queue, and Volume */}
           <div className={styles.actionsLeft}>
             {/* Play/Pause Button */}
             <div
@@ -844,10 +849,65 @@ export const Controls = (props: ControlsProps) => {
                 <WPIconSkipForward size={20} />
               </div>
             )}
+
+            {/* Volume Control & Expandable Slider */}
+            <div className={styles.volumeGroup}>
+              <div
+                className={styles.action}
+                onClick={() => {
+                  props.localToggleMute();
+                  resetHideTimer();
+                }}
+                title={props.muted ? "Unmute" : "Mute"}
+              >
+                {props.muted || props.volume === 0 ? (
+                  <WPIconVolumeOff size={20} />
+                ) : props.volume < 0.4 ? (
+                  <WPIconVolumeLow size={20} />
+                ) : (
+                  <WPIconVolumeOn size={20} />
+                )}
+              </div>
+              <div className={styles.volumeSliderWrapper}>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.02"
+                  value={props.muted ? 0 : props.volume}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    props.localSetVolume(val);
+                    if (props.muted && val > 0) {
+                      props.localToggleMute();
+                    }
+                    resetHideTimer();
+                  }}
+                  className={styles.volumeSlider}
+                  aria-label="Volume Slider"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Right Actions */}
           <div className={styles.actionsRight}>
+            {/* Quick In-Bar Sync Button */}
+            <div
+              className={`${styles.action} ${isBehind ? styles.syncBehind : ""}`}
+              onClick={() => {
+                if (isLiveStream) {
+                  roomSeek(props.duration);
+                } else {
+                  localSeek();
+                }
+                resetHideTimer();
+              }}
+              title={isBehind ? `Behind by ${behindTime.toFixed(1)}s - Tap to catch up` : "In sync with room"}
+            >
+              <WPIconSync size={18} />
+            </div>
+
             {/* Playback Speed Menu */}
             <Menu
               disabled={disabled}

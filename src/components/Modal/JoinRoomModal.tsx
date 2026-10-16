@@ -61,6 +61,8 @@ export const JoinRoomModal = ({
             }
           }}
           autoFocus
+          autoComplete="off"
+          autoCapitalize="none"
         />
         <Button
           fullWidth

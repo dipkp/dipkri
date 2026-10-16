@@ -33,7 +33,18 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     loading: false,
   };
 
+  private blurTimer: any = null;
+
+  componentWillUnmount() {
+    if (this.blurTimer) {
+      clearTimeout(this.blurTimer);
+    }
+  }
+
   setMediaAndClose = (value: string) => {
+    if (this.blurTimer) {
+      clearTimeout(this.blurTimer);
+    }
     this.props.roomSetMedia(value);
     this.setState({ inputMedia: undefined, items: [] });
   };
@@ -93,6 +104,10 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
       return (
         <div
           key={option.value}
+          onMouseDown={(e) => {
+            // Prevent input from immediately blurring before option click or + Queue fires
+            e.preventDefault();
+          }}
           onClick={(e) => this.setMediaAndClose(option.value)}
           style={{ width: "100%" }}
         >
@@ -147,10 +162,15 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
           );
         }}
         onBlur={() => {
-          this.setState({
-            inputMedia: undefined,
-            items: [],
-          });
+          if (this.blurTimer) {
+            clearTimeout(this.blurTimer);
+          }
+          this.blurTimer = setTimeout(() => {
+            this.setState({
+              inputMedia: undefined,
+              items: [],
+            });
+          }, 180);
         }}
         onKeyDown={(e: any) => {
           if (e.key === "Enter") {

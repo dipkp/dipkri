@@ -2359,33 +2359,42 @@ export class App extends React.Component<AppProps, AppState> {
             onClick={this.roomTogglePlay}
           ></video>
         )}
-        <div
-          style={{
-            color: softWhite,
-            fontWeight: 400,
-            fontSize: 10,
-            lineHeight: "8px",
-            position: "absolute",
-            bottom: 0,
-            right: 0,
-            zIndex: 1,
-          }}
-        >
-          {[
-            Boolean(this.state.total) &&
-              Math.min(
-                (this.state.downloaded / this.state.total) * 100,
-                100,
-              ).toFixed(2) + "% downloaded",
-            Boolean(this.state.total) && formatSpeed(this.state.speed),
-            Boolean(this.state.total) &&
-              this.state.connections + " connections",
-            this.state.convertProgress !== undefined &&
-              (this.state.convertProgress * 100).toFixed(1) + "% converted",
-          ]
-            .filter(Boolean)
-            .join(" - ")}
-        </div>
+        {Boolean(this.state.total || this.state.convertProgress !== undefined) && (
+          <div
+            style={{
+              color: "rgba(240, 240, 245, 0.9)",
+              fontWeight: 500,
+              fontSize: 11,
+              position: "absolute",
+              bottom: 54,
+              right: 12,
+              zIndex: 35,
+              background: "rgba(9, 10, 15, 0.78)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              padding: "4px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              pointerEvents: "none",
+              boxShadow: "0 2px 10px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            {[
+              Boolean(this.state.total) &&
+                Math.min(
+                  (this.state.downloaded / this.state.total) * 100,
+                  100,
+                ).toFixed(2) + "% downloaded",
+              Boolean(this.state.total) && formatSpeed(this.state.speed),
+              Boolean(this.state.total) &&
+                this.state.connections + " connections",
+              this.state.convertProgress !== undefined &&
+                (this.state.convertProgress * 100).toFixed(1) + "% converted",
+            ]
+              .filter(Boolean)
+              .join(" - ")}
+          </div>
+        )}
         {this.state.roomMedia && controls}
         <MobileFloatingReactions
           hide={Boolean(this.state.settingsModalOpen)}
@@ -2815,7 +2824,7 @@ export class App extends React.Component<AppProps, AppState> {
                     <span className={styles.bottomNavBadge}>{playlist.length}</span>
                   )}
                 </div>
-                <span className={styles.tabLabel}>Media & Que</span>
+                <span className={styles.tabLabel}>Media & Queue</span>
               </button>
 
               <button
@@ -3090,6 +3099,8 @@ export class App extends React.Component<AppProps, AppState> {
                     this.setState({ showPeopleColumn: true });
                   } else if (tab === "chat") {
                     this.setState({ showPeopleColumn: false, unreadCount: 0 });
+                  } else if (tab === "playlist") {
+                    document.getElementById("playlist")?.scrollIntoView({ behavior: "smooth" });
                   }
                 }}
                 participantCount={this.state.participants.length}
@@ -3097,49 +3108,16 @@ export class App extends React.Component<AppProps, AppState> {
                 onOpenSettings={() => this.setState({ settingsModalOpen: true })}
                 unreadCount={this.state.showPeopleColumn ? this.state.unreadCount : 0}
               />
-              <div style={{ display: "flex", gap: "4px" }}>
-                <Button
-                  color="grey"
-                  onClick={() =>
-                    this.setState({
-                      showPeopleColumn: !this.state.showPeopleColumn,
-                    })
-                  }
-                  fullWidth
-                  leftSection={<WPIconPeople size={16} />}
-                  rightSection={
-                    <Badge circle>{this.state.participants.length}</Badge>
-                  }
-                >
-                  People
-                </Button>
-                <Button
-                  color="grey"
-                  title="Settings"
-                  fullWidth
-                  onClick={() => {
-                    this.setSettingsModalOpen(true);
-                  }}
-                  leftSection={<WPIconSettings size={16} />}
-                >
-                  Settings
-                </Button>
-              </div>
               {this.state.state === "connected" && (
                 <div
                   style={{
                     position: "absolute",
-                    background: "rgba(10, 10, 10, 0.6)",
-                    zIndex: 200,
-                    left: 0,
-                    top: 76,
-                    height: this.state.showPeopleColumn
-                      ? "calc(100% - 120px)"
-                      : "0%",
-                    width: "100%",
+                    background: "rgba(9, 10, 15, 0.95)",
+                    zIndex: 20,
+                    inset: "78px 0 0 0",
+                    display: this.state.showPeopleColumn ? "flex" : "none",
+                    flexDirection: "column",
                     overflowY: "auto",
-                    // visibility: this.state.showPeopleColumn ? 'visible' : 'hidden',
-                    transition: "height ease-out 0.5s",
                   }}
                 >
                   <VideoChat

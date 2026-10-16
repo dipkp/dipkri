@@ -265,3 +265,18 @@
   background: rgba(220, 38, 38, 0.95) !important;
   border-color: #dc2626 !important;
 }
+
+/* Landscape Mode on Smartphones / Short Screens */
+@media (orientation: landscape) and (max-height: 520px) {
+  .floatingContainer {
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bubblesCluster {
+    flex-direction: row;
+    gap: 8px;
+  }
+}
+
