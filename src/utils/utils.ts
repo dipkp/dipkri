@@ -207,6 +207,8 @@ export const iceServers = () => [
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:global.stun.twilio.com:3478" },
   // Free TURN relay for NAT/firewall traversal (OpenRelay project)
   {
     urls: "turn:openrelay.metered.ca:80",

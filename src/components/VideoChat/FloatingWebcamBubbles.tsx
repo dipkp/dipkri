@@ -74,7 +74,11 @@ const BubbleVideoElement = ({
       videoTrack.addEventListener("ended", checkTrack);
     }
 
-    video.play().catch(() => {});
+    video.play().catch(() => {
+      // If unmuted autoplay fails due to browser policy, auto-mute so video plays smoothly
+      video.muted = true;
+      video.play().catch(() => {});
+    });
 
     return () => {
       clearInterval(interval);
@@ -97,8 +101,10 @@ const BubbleVideoElement = ({
         muted={isSelf}
         className={styles.bubbleVideo}
         style={{
-          display: showVideo ? "block" : "none",
+          opacity: showVideo ? 1 : 0,
+          pointerEvents: showVideo ? "auto" : "none",
           transform: isSelf ? "scaleX(-1)" : undefined,
+          transition: "opacity 180ms ease",
         }}
       />
       {!showVideo && (

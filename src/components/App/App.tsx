@@ -691,7 +691,24 @@ export class App extends React.Component<AppProps, AppState> {
               // Remove the loader unless we're waiting for a vbrowser
               this.setLoadingFalse();
             }
+            if (this.playingScreenShare() || this.playingFileShare()) {
+              this.setupRTCConnections();
+            }
             return;
+          }
+          if (
+            !this.playingScreenShare() &&
+            !this.playingFileShare() &&
+            this.consumerConn
+          ) {
+            try {
+              this.consumerConn.close();
+            } catch {}
+            this.consumerConn = undefined;
+            const leftVideo = this.HTMLInterface.getVideoEl();
+            if (leftVideo && leftVideo.srcObject) {
+              leftVideo.srcObject = null;
+            }
           }
           if (this.usingYoutube() && !this.YouTubeInterface.isReady()) {
             console.log(
@@ -961,49 +978,112 @@ export class App extends React.Component<AppProps, AppState> {
         from: string;
         sharer: boolean;
       }) => {
-        config.NODE_ENV === "development" && console.log(data);
-        // Handle messages received from signaling server
+        config.NODE_ENV === "development" && console.log("signalSS:", data);
         const msg = data.msg;
         const from = data.from;
+        const selfId = getOrCreateClientId();
+        if (from === selfId) return; // Prevent self-signaling loopback
+
         // Determine whether the message came from the sharer or the sharee
-        const pc = (
+        let pc = (
           data.sharer ? this.consumerConn : this.publisherConns[from]
-        ) as RTCPeerConnection;
+        ) as RTCPeerConnection | undefined;
+
+        // If the sharer contacted us (watcher) but consumerConn wasn't created yet, create it on-demand
+        if (data.sharer && !pc) {
+          pc = new RTCPeerConnection({ iceServers: iceServers() });
+          this.consumerConn = pc;
+          pc.onicecandidate = (event) => {
+            if (event.candidate) {
+              this.sendSignalSS(from, { ice: event.candidate });
+            }
+          };
+          pc.ontrack = (event: RTCTrackEvent) => {
+            const leftVideo = this.HTMLInterface.getVideoEl();
+            if (leftVideo) {
+              leftVideo.src = "";
+              leftVideo.srcObject = event.streams[0];
+              leftVideo.playsInline = true;
+              leftVideo.muted = true;
+              leftVideo.play().then(() => {
+                leftVideo.muted = false;
+              }).catch(() => {});
+              this.setLoadingFalse();
+            }
+          };
+        }
+
+        if (!pc) {
+          console.warn("No peer connection ready for signalSS from", from);
+          return;
+        }
+
         if (msg.ice !== undefined) {
-          pc.addIceCandidate(new RTCIceCandidate(msg.ice));
-        } else if (msg.sdp && msg.sdp.type === "offer") {
-          // console.log('offer');
-          // TODO Currently ios/Safari cannot handle this property, so remove it from the offer
-          const _sdp = msg.sdp.sdp
-            .split("\n")
-            .filter((line: string) => {
-              return line.trim() !== "a=extmap-allow-mixed";
-            })
-            .join("\n");
-          msg.sdp.sdp = _sdp;
-          await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-          const answer = await pc.createAnswer();
-          // Allow stereo audio
-          answer.sdp = answer.sdp?.replace(
-            "useinbandfec=1",
-            "useinbandfec=1; stereo=1; maxaveragebitrate=510000",
-          );
-          // console.log(answer.sdp);
-          // Allow multichannel audio if Chromium
-          //@ts-expect-error
-          const isChromium = Boolean(window.chrome);
-          if (isChromium) {
-            answer.sdp = answer.sdp
-              ?.replace("opus/48000/2", "multiopus/48000/6")
-              .replace(
-                "useinbandfec=1",
-                "channel_mapping=0,4,1,2,3,5; num_streams=4; coupled_streams=2;maxaveragebitrate=510000;minptime=10;useinbandfec=1",
-              );
+          try {
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+              await pc.addIceCandidate(new RTCIceCandidate(msg.ice));
+            } else {
+              if (!(pc as any)._iceQueue) (pc as any)._iceQueue = [];
+              (pc as any)._iceQueue.push(msg.ice);
+            }
+          } catch (err) {
+            console.warn("addIceCandidate failed in signalSS:", err);
           }
-          await pc.setLocalDescription(answer);
-          this.sendSignalSS(from, { sdp: pc.localDescription }, !data.sharer);
+        } else if (msg.sdp && msg.sdp.type === "offer") {
+          try {
+            const _sdp = msg.sdp.sdp
+              .split("\n")
+              .filter((line: string) => {
+                return line.trim() !== "a=extmap-allow-mixed";
+              })
+              .join("\n");
+            msg.sdp.sdp = _sdp;
+            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+            // Flush any buffered ICE candidates
+            if ((pc as any)._iceQueue) {
+              for (const cand of (pc as any)._iceQueue) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(cand));
+                } catch (e) {}
+              }
+              delete (pc as any)._iceQueue;
+            }
+
+            const answer = await pc.createAnswer();
+            answer.sdp = answer.sdp?.replace(
+              "useinbandfec=1",
+              "useinbandfec=1; stereo=1; maxaveragebitrate=510000",
+            );
+            //@ts-expect-error
+            const isChromium = Boolean(window.chrome);
+            if (isChromium) {
+              answer.sdp = answer.sdp
+                ?.replace("opus/48000/2", "multiopus/48000/6")
+                .replace(
+                  "useinbandfec=1",
+                  "channel_mapping=0,4,1,2,3,5; num_streams=4; coupled_streams=2;maxaveragebitrate=510000;minptime=10;useinbandfec=1",
+                );
+            }
+            await pc.setLocalDescription(answer);
+            this.sendSignalSS(from, { sdp: pc.localDescription }, !data.sharer);
+          } catch (err) {
+            console.error("Error handling offer in signalSS:", err);
+          }
         } else if (msg.sdp && msg.sdp.type === "answer") {
-          pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+            if ((pc as any)._iceQueue) {
+              for (const cand of (pc as any)._iceQueue) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(cand));
+                } catch (e) {}
+              }
+              delete (pc as any)._iceQueue;
+            }
+          } catch (err) {
+            console.error("Error handling answer in signalSS:", err);
+          }
         }
       },
     );
@@ -1297,14 +1377,24 @@ export class App extends React.Component<AppProps, AppState> {
       }
     }
     leftVideo.play();
-    //@ts-expect-error
-    this.localStreamToPublish = leftVideo?.captureStream();
+    const captureStreamFn =
+      (leftVideo as any)?.captureStream ||
+      (leftVideo as any)?.mozCaptureStream;
+    if (captureStreamFn) {
+      this.localStreamToPublish = captureStreamFn.call(leftVideo);
+    }
     this.isLocalStreamAFile = true;
     if (this.localStreamToPublish) {
       this.socket.emit("CMD:joinScreenShare", {
         file: true,
         mediasoup: useMediaSoup,
       });
+    } else {
+      this.setState({
+        errorMessage:
+          "Your browser does not support capturing local video streams directly. Please use Chrome, Edge, or Firefox.",
+      });
+      setTimeout(() => this.setState({ errorMessage: "" }), 5000);
     }
   };
 
@@ -1332,6 +1422,16 @@ export class App extends React.Component<AppProps, AppState> {
       });
       this.localStreamToPublish = stream;
       this.isLocalStreamAFile = false;
+      // Immediately preview local screen stream in leftVideo for the host
+      const leftVideo = this.HTMLInterface.getVideoEl();
+      if (leftVideo) {
+        leftVideo.src = "";
+        leftVideo.srcObject = stream;
+        leftVideo.playsInline = true;
+        leftVideo.muted = true;
+        leftVideo.play().catch(() => {});
+        this.setLoadingFalse();
+      }
       this.socket.emit("CMD:joinScreenShare", {
         file: false,
         mediasoup: useMediaSoup,
@@ -1764,6 +1864,19 @@ export class App extends React.Component<AppProps, AppState> {
 
     // We're the sharer, create a connection to each other member
     if (sharer?.id === selfId) {
+      // For desktop screenshare, preview local stream immediately on the host player
+      if (!this.isLocalStreamAFile && this.localStreamToPublish) {
+        const leftVideo = this.HTMLInterface.getVideoEl();
+        if (leftVideo && leftVideo.srcObject !== this.localStreamToPublish) {
+          leftVideo.src = "";
+          leftVideo.srcObject = this.localStreamToPublish;
+          leftVideo.playsInline = true;
+          leftVideo.muted = true;
+          leftVideo.play().catch(() => {});
+          this.setLoadingFalse();
+        }
+      }
+
       // Delete and close any connections that aren't in the current member list (maybe someone disconnected)
       // This allows them to rejoin later
       const clientIds = new Set(this.state.participants.map((p) => p.id));
@@ -1776,38 +1889,44 @@ export class App extends React.Component<AppProps, AppState> {
 
       this.state.participants.forEach((user) => {
         const id = user.id;
-        if (id === selfId && this.isLocalStreamAFile) {
-          // Don't set up a connection to ourselves if sharing file
+        if (id === selfId) {
+          // Never establish publisher WebRTC connection to self
           return;
         }
         if (!this.publisherConns[id]) {
           // Set up the RTCPeerConnection for sharing media to each member
           const pc = new RTCPeerConnection({ iceServers: iceServers() });
           this.publisherConns[id] = pc;
-          this.localStreamToPublish?.getTracks().forEach((track) => {
-            if (this.localStreamToPublish != null) {
-              pc.addTrack(track, this.localStreamToPublish);
-            }
-          });
           pc.onicecandidate = (event) => {
             // We generated an ICE candidate, send it to peer
             if (event.candidate) {
               this.sendSignalSS(id, { ice: event.candidate }, true);
             }
           };
-          pc.onnegotiationneeded = async () => {
-            // Start connection for peer's video
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this.sendSignalSS(id, { sdp: pc.localDescription }, true);
+          this.localStreamToPublish?.getTracks().forEach((track) => {
+            if (this.localStreamToPublish != null) {
+              pc.addTrack(track, this.localStreamToPublish);
+            }
+          });
+          const createAndSendOffer = async () => {
+            try {
+              if (pc.signalingState === "closed") return;
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              this.sendSignalSS(id, { sdp: pc.localDescription }, true);
+            } catch (err) {
+              console.warn("Failed to create offer for peer:", id, err);
+            }
           };
+          pc.onnegotiationneeded = createAndSendOffer;
+          // Trigger offer creation immediately to ensure delivery
+          createAndSendOffer();
         }
       });
     }
     // We're a watcher, establish connection to sharer
-    // If screensharing, sharer also does this
-    // If filesharing, sharer does not do this since we use leftVideo
-    if (sharer && !this.consumerConn && !this.isLocalStreamAFile) {
+    // Only if we are not the sharer ourselves and not sharing local file
+    if (sharer && sharer.id !== selfId && !this.consumerConn && !this.isLocalStreamAFile) {
       const pc = new RTCPeerConnection({ iceServers: iceServers() });
       this.consumerConn = pc;
       pc.onicecandidate = (event) => {
@@ -1818,12 +1937,19 @@ export class App extends React.Component<AppProps, AppState> {
       };
       pc.ontrack = (event: RTCTrackEvent) => {
         // Mount the stream from sharer
-        // console.log(stream);
         const leftVideo = this.HTMLInterface.getVideoEl();
         if (leftVideo) {
           leftVideo.src = "";
           leftVideo.srcObject = event.streams[0];
-          this.localPlay();
+          leftVideo.playsInline = true;
+          // Auto-mute initially to satisfy browser autoplay requirements, then unmute
+          leftVideo.muted = true;
+          leftVideo.play().then(() => {
+            leftVideo.muted = false;
+          }).catch((err) => {
+            console.warn("Autoplay with sound failed, staying muted:", err);
+          });
+          this.setLoadingFalse();
         }
       };
     }
