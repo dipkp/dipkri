@@ -2379,6 +2379,7 @@ export class App extends React.Component<AppProps, AppState> {
         </div>
         {this.state.roomMedia && (
           <MobileFloatingReactions
+            hide={Boolean(this.state.settingsModalOpen)}
             onSendReaction={(emoji: string) => {
               this.socket?.emit("CMD:chat", emoji);
             }}

@@ -8,7 +8,7 @@
   flex-direction: row;
   align-items: center;
   gap: 3px;
-  z-index: 45;
+  z-index: 25;
   pointer-events: auto;
   background: rgba(9, 10, 15, 0.6);
   backdrop-filter: blur(12px);
@@ -26,6 +26,19 @@
     padding: 3px 8px;
     gap: 4px;
   }
+}
+
+/* Hide floating reaction buttons in landscape or short screens */
+@media (orientation: landscape), (max-height: 580px) {
+  .floatingReactionsBar {
+    display: none !important;
+  }
+}
+
+/* Hide floating reaction buttons in fullscreen mode */
+:global(:fullscreen) .floatingReactionsBar,
+:global(:-webkit-full-screen) .floatingReactionsBar {
+  display: none !important;
 }
 
 .reactionBtn {
