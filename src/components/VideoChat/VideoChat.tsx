@@ -17,6 +17,7 @@ import {
   IconMicrophone,
   IconScreenShare,
   IconVideo,
+  IconVideoOff,
   IconX,
 } from "@tabler/icons-react";
 
@@ -429,8 +430,8 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 </div>
               </div>
 
-              {/* Live Video Element or Avatar Picture */}
-              {ourStream && isUserInVideo ? (
+              {/* Live Video Element or Avatar Picture (Freeze-free) */}
+              {ourStream && isUserInVideo && (isSelf ? this.getVideoWebRTC() : true) ? (
                 <video
                   ref={(el) => {
                     if (el) {
@@ -450,22 +451,48 @@ export class VideoChat extends React.Component<VideoChatProps> {
                   data-id={p.id}
                 />
               ) : (
-                <img
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                  src={
-                    pictureMap[p.id] ||
-                    getDefaultPicture(
-                      nameMap[p.id],
-                      getColorForStringHex(p.id),
-                    )
-                  }
-                  alt={nameMap[p.id] || "User"}
-                />
+                <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                  <img
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                    src={
+                      pictureMap[p.id] ||
+                      getDefaultPicture(
+                        nameMap[p.id],
+                        getColorForStringHex(p.id),
+                      )
+                    }
+                    alt={nameMap[p.id] || "User"}
+                  />
+                  {isSelf && ourStream && !this.getVideoWebRTC() && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        background: "rgba(0, 0, 0, 0.7)",
+                        backdropFilter: "blur(8px)",
+                        borderRadius: "9999px",
+                        padding: "5px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        color: "#f87171",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        border: "1px solid rgba(239, 68, 68, 0.35)",
+                      }}
+                    >
+                      <IconVideoOff size={13} />
+                      <span>Camera Off</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           );

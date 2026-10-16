@@ -2,7 +2,7 @@
 
 .floatingContainer {
   position: fixed;
-  z-index: 9999;
+  z-index: 9999999 !important;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;

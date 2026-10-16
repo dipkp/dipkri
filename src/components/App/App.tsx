@@ -2392,20 +2392,6 @@ export class App extends React.Component<AppProps, AppState> {
             }}
           />
         )}
-        {!isMobileLayout && this.state.state === "connected" && (
-          <FloatingWebcamBubbles
-            participants={this.state.participants}
-            nameMap={this.state.nameMap}
-            pictureMap={this.state.pictureMap}
-            socket={this.socket}
-            onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-            onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-            onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-            onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-            isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-            isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
-          />
-        )}
         {this.state.roomMedia && controls}
       </div>
     );
@@ -2518,6 +2504,21 @@ export class App extends React.Component<AppProps, AppState> {
             {this.state.warningMessage}
           </Alert>
         )}
+        {this.state.state === "connected" && (
+          <FloatingWebcamBubbles
+            participants={this.state.participants}
+            nameMap={this.state.nameMap}
+            pictureMap={this.state.pictureMap}
+            socket={this.socket}
+            onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+            onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+            onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+            onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+            isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+            isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+            isFullScreen={this.state.fullScreen}
+          />
+        )}
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>
             {/* Slim 44px Top Bar (dipkri Title only) */}
@@ -2529,22 +2530,6 @@ export class App extends React.Component<AppProps, AppState> {
                 </span>
               </div>
             </header>
-
-            {/* Floating Webcam Bubbles in Vertical Mode: can float all around the screen! */}
-            {this.state.state === "connected" && (
-              <FloatingWebcamBubbles
-                participants={this.state.participants}
-                nameMap={this.state.nameMap}
-                pictureMap={this.state.pictureMap}
-                socket={this.socket}
-                onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-                onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-                onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-                onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-                isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-                isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
-              />
-            )}
 
             {/* Fixed 16:9 Video Player (Top pinned, zero scroll with on-video controls) */}
             <div className={styles.mobileVideoWrapper}>

@@ -48,6 +48,7 @@
   border: none !important;
   background: #000000 !important;
   box-shadow: none !important;
+  overflow: visible !important;
 }
 
 .playerContainer:fullscreen video,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import styles from "./FloatingWebcamBubbles.module.css";
 import {
   getOrCreateClientId,
@@ -21,26 +22,32 @@ import {
   setWebcamSettings,
 } from "./webcamSettings";
 
-// Stream-driven video element
+// Stream-driven video element with freeze prevention
 const BubbleVideoElement = ({
   stream,
   isSelf,
   avatarUrl,
   name,
+  isVideoOff,
 }: {
   stream: MediaStream | null;
   isSelf?: boolean;
   avatarUrl?: string;
   name?: string;
+  isVideoOff?: boolean;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasLiveVideo, setHasLiveVideo] = useState(false);
 
   useEffect(() => {
-    if (!videoRef.current || !stream) {
+    if (!videoRef.current || !stream || isVideoOff) {
       setHasLiveVideo(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
       return;
     }
+
     const video = videoRef.current;
     if (video.srcObject !== stream) {
       video.srcObject = stream;
@@ -48,10 +55,18 @@ const BubbleVideoElement = ({
 
     const checkTrack = () => {
       const videoTrack = stream.getVideoTracks()[0];
-      setHasLiveVideo(Boolean(videoTrack && videoTrack.enabled));
+      const isLive = Boolean(videoTrack && videoTrack.enabled && !isVideoOff);
+      setHasLiveVideo(isLive);
+      if (!isLive && videoRef.current) {
+        videoRef.current.srcObject = null;
+      } else if (isLive && videoRef.current && videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
     };
 
     checkTrack();
+    const interval = setInterval(checkTrack, 400);
+
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.addEventListener("mute", checkTrack);
@@ -62,13 +77,16 @@ const BubbleVideoElement = ({
     video.play().catch(() => {});
 
     return () => {
+      clearInterval(interval);
       if (videoTrack) {
         videoTrack.removeEventListener("mute", checkTrack);
         videoTrack.removeEventListener("unmute", checkTrack);
         videoTrack.removeEventListener("ended", checkTrack);
       }
     };
-  }, [stream]);
+  }, [stream, isVideoOff]);
+
+  const showVideo = hasLiveVideo && !isVideoOff;
 
   return (
     <>
@@ -79,11 +97,11 @@ const BubbleVideoElement = ({
         muted={isSelf}
         className={styles.bubbleVideo}
         style={{
-          display: hasLiveVideo ? "block" : "none",
+          display: showVideo ? "block" : "none",
           transform: isSelf ? "scaleX(-1)" : undefined,
         }}
       />
-      {!hasLiveVideo && (
+      {!showVideo && (
         <img
           src={avatarUrl}
           alt={name || "User"}
@@ -105,6 +123,7 @@ export interface FloatingWebcamBubblesProps {
   onToggleAudio?: () => void;
   isVideoMuted?: boolean;
   isAudioMuted?: boolean;
+  isFullScreen?: boolean;
 }
 
 export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
@@ -118,8 +137,40 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   onToggleAudio,
   isVideoMuted,
   isAudioMuted,
+  isFullScreen,
 }) => {
   const selfId = getOrCreateClientId();
+
+  // Track fullscreen element so bubbles always portal into document.fullscreenElement when in fullscreen mode
+  const [fullscreenEl, setFullscreenEl] = useState<Element | null>(() =>
+    typeof document !== "undefined"
+      ? document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        null
+      : null,
+  );
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreenEl(
+        document.fullscreenElement ||
+          (document as any).webkitFullscreenElement ||
+          (document as any).mozFullScreenElement ||
+          null,
+      );
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+    };
+  }, [isFullScreen]);
 
   // Load initial settings from centralized store
   const [sizePreset, setSizePreset] = useState<BubbleSize>(
@@ -283,44 +334,48 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     setWebcamSettings({ dragUnlocked: false });
   };
 
-  // Direct WebRTC Track Operations (Guaranteed to work regardless of component mount status)
+  // Direct WebRTC Track Operations (Guaranteed to work without double-toggling)
   const handleToggleAudio = () => {
     const ourStream = window.watchparty?.ourStream;
     let newMuted = !selfAudioMuted;
-    if (ourStream && ourStream.getAudioTracks()[0]) {
-      const track = ourStream.getAudioTracks()[0];
-      track.enabled = !track.enabled;
-      newMuted = !track.enabled;
-    }
-    setSelfAudioMuted(newMuted);
-    socket?.emit("CMD:userMute", { isMuted: newMuted });
-
     if (onToggleAudio) {
       try {
         onToggleAudio();
       } catch (e) {
         console.warn(e);
       }
+    } else if (ourStream && ourStream.getAudioTracks()[0]) {
+      const track = ourStream.getAudioTracks()[0];
+      track.enabled = !track.enabled;
+      newMuted = !track.enabled;
     }
+    setTimeout(() => {
+      const track = window.watchparty?.ourStream?.getAudioTracks()[0];
+      const actualMuted = track ? !track.enabled : newMuted;
+      setSelfAudioMuted(actualMuted);
+      socket?.emit("CMD:userMute", { isMuted: actualMuted });
+    }, 40);
   };
 
   const handleToggleVideo = () => {
     const ourStream = window.watchparty?.ourStream;
     let newMuted = !selfVideoMuted;
-    if (ourStream && ourStream.getVideoTracks()[0]) {
-      const track = ourStream.getVideoTracks()[0];
-      track.enabled = !track.enabled;
-      newMuted = !track.enabled;
-    }
-    setSelfVideoMuted(newMuted);
-
     if (onToggleVideo) {
       try {
         onToggleVideo();
       } catch (e) {
         console.warn(e);
       }
+    } else if (ourStream && ourStream.getVideoTracks()[0]) {
+      const track = ourStream.getVideoTracks()[0];
+      track.enabled = !track.enabled;
+      newMuted = !track.enabled;
     }
+    setTimeout(() => {
+      const track = window.watchparty?.ourStream?.getVideoTracks()[0];
+      const actualMuted = track ? !track.enabled : newMuted;
+      setSelfVideoMuted(actualMuted);
+    }, 40);
   };
 
   const handleLeaveVideo = () => {
@@ -397,7 +452,20 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     return null;
   };
 
-  return (
+  const targetContainer =
+    fullscreenEl ||
+    (typeof document !== "undefined"
+      ? document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        document.body
+      : null);
+
+  if (!targetContainer) {
+    return null;
+  }
+
+  return ReactDOM.createPortal(
     <div
       className={styles.floatingContainer}
       style={{
@@ -507,6 +575,14 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                   isSelf={isSelf}
                   avatarUrl={avatar}
                   name={displayName}
+                  isVideoOff={
+                    isSelf
+                      ? selfVideoMuted ||
+                        !Boolean(
+                          window.watchparty?.ourStream?.getVideoTracks()[0]?.enabled,
+                        )
+                      : !user.isVideoChat
+                  }
                 />
               </div>
 
@@ -608,6 +684,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
           );
         })}
       </div>
-    </div>
+    </div>,
+    targetContainer,
   );
 };
