@@ -14,73 +14,19 @@
   transition: opacity 0.2s ease;
 }
 
-/* Drag Mode Banner - ONLY displayed when "Unlock Dragging" is turned ON in Settings */
-.dragModeBanner {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(99, 102, 241, 0.95);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 9999px;
-  padding: 5px 12px;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.55);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: grab;
-  animation: fadeInBanner 0.2s ease-out;
-}
-
-.dragModeBanner:active {
-  cursor: grabbing;
-}
-
-@keyframes fadeInBanner {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.dragHandleIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-}
-
-.lockBtn {
-  background: rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #ffffff;
-  border-radius: 9999px;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.lockBtn:hover {
-  background: #ffffff;
-  color: #4338ca;
-}
-
-/* Bubbles Cluster */
+/* Bubbles Cluster - Directly draggable anywhere with zero clutter */
 .bubblesCluster {
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: center;
   position: relative;
-  transition: border 0.2s ease;
+  touch-action: none;
+  cursor: grab;
 }
 
-.dragActiveCluster {
-  border: 1.5px dashed rgba(99, 102, 241, 0.6);
-  border-radius: 20px;
-  padding: 6px;
-  background: rgba(99, 102, 241, 0.08);
+.bubblesCluster:active {
+  cursor: grabbing;
 }
 
 /* Single Circular Webcam Head */

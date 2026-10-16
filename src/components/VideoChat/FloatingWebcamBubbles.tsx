@@ -13,7 +13,6 @@ import {
   IconVideo,
   IconVideoOff,
   IconPin,
-  IconArrowsMove,
 } from "@tabler/icons-react";
 import {
   BubbleSize,
@@ -311,9 +310,9 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   const videoUsers = participants.filter((p) => p.isVideoChat);
 
   // Drag handlers with full viewport bounds
+  // Drag handlers with full viewport bounds - always fluid, no lock key needed
   const handleDragStart = (clientX: number, clientY: number) => {
-    if (!isDragUnlocked) return;
-    isDraggingRef.current = true;
+    isDraggingRef.current = false;
     dragStartRef.current = {
       mouseX: clientX,
       mouseY: clientY,
@@ -323,9 +322,18 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   };
 
   const handleDragMove = useCallback((clientX: number, clientY: number) => {
-    if (!isDraggingRef.current) return;
+    if (!dragStartRef.current) return;
     const deltaX = clientX - dragStartRef.current.mouseX;
     const deltaY = clientY - dragStartRef.current.mouseY;
+
+    // Start drag after 4px of movement to differentiate from click/tap
+    if (!isDraggingRef.current) {
+      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+        isDraggingRef.current = true;
+      } else {
+        return;
+      }
+    }
 
     // Constrain within screen bounds so bubbles float anywhere
     const maxRight = typeof window !== "undefined" ? window.innerWidth - 65 : 400;
@@ -338,11 +346,19 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   }, []);
 
   const handleDragEnd = useCallback(() => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-    try {
-      localStorage.setItem("dipkri-webcam-pos", JSON.stringify(position));
-    } catch {}
+    if (!dragStartRef.current) return;
+    if (isDraggingRef.current) {
+      try {
+        localStorage.setItem("dipkri-webcam-pos", JSON.stringify(position));
+      } catch {}
+      // Keep isDraggingRef.current true briefly so trailing click doesn't trigger
+      setTimeout(() => {
+        isDraggingRef.current = false;
+        dragStartRef.current = null;
+      }, 60);
+    } else {
+      dragStartRef.current = null;
+    }
   }, [position]);
 
   // Window drag listeners
@@ -531,43 +547,16 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
         top: `${position.y}px`,
       }}
     >
-      {/* Drag Mode Banner: ONLY rendered when "Unlock Dragging" is turned ON in Settings */}
-      {isDragUnlocked && (
-        <div
-          className={styles.dragModeBanner}
-          onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
-          onTouchStart={(e) => {
-            if (e.touches[0]) {
-              handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
-            }
-          }}
-          title="Drag to reposition webcam bubbles"
-        >
-          <div className={styles.dragHandleIcon}>
-            <IconArrowsMove size={13} />
-          </div>
-          <span>Drag Anywhere</span>
-          <button
-            type="button"
-            className={styles.lockBtn}
-            onClick={handleLockPosition}
-            title="Lock bubbles in place and hide drag controls"
-          >
-            Lock
-          </button>
-        </div>
-      )}
-
-      {/* Pure Circular Video Bubbles Cluster - Zero Clutter */}
+      {/* Pure Circular Video Bubbles Cluster - Zero Clutter, Directly Draggable Anywhere */}
       <div
-        className={`${styles.bubblesCluster} ${isDragUnlocked ? styles.dragActiveCluster : ""}`}
+        className={styles.bubblesCluster}
         onMouseDown={(e) => {
-          if (isDragUnlocked) {
+          if (e.button === 0) {
             handleDragStart(e.clientX, e.clientY);
           }
         }}
         onTouchStart={(e) => {
-          if (isDragUnlocked && e.touches[0]) {
+          if (e.touches[0]) {
             handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
           }
         }}
@@ -592,7 +581,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                 height: `${bubbleWidth}px`,
               }}
               onClick={() => {
-                if (isDragUnlocked) return;
+                if (isDraggingRef.current) return;
                 if (isSelf) {
                   triggerSelfControls();
                 } else {

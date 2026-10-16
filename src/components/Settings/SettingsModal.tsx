@@ -267,32 +267,19 @@ export const SettingsModal = ({
             disabled={false}
             content={
               <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", padding: "4px 0" }}>
-                {/* 1. Drag Unlock Option */}
+                {/* 1. Direct Dragging Notice */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                  <div style={{ maxWidth: "380px" }}>
+                  <div style={{ maxWidth: "480px" }}>
                     <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5" }}>
-                      Unlock Bubble Dragging
+                      Direct Bubble Dragging
                     </div>
                     <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                      Turn on to drag and reposition webcam bubbles anywhere over the video. Turn off to lock position and eliminate all drag icons.
+                      Floating video bubbles can be freely dragged anywhere over the video player without lock keys.
                     </div>
                   </div>
-                  <Switch
-                    size="md"
-                    color="indigo"
-                    checked={getWebcamSettings().dragUnlocked}
-                    onChange={(e) => {
-                      const next = e.currentTarget.checked;
-                      setWebcamSettings({ dragUnlocked: next });
-                      updateSettings(
-                        JSON.stringify({
-                          ...getCurrentSettings(),
-                          webcamDragUnlocked: next,
-                        }),
-                      );
-                      setUpdateTS(Date.now());
-                    }}
-                  />
+                  <div style={{ color: "#34d399", fontSize: "12px", fontWeight: 600 }}>
+                    Active ✓
+                  </div>
                 </div>
 
                 {/* 2. Bubble Size Option (Min / Small / Medium / Max) */}

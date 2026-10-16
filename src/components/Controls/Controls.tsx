@@ -119,6 +119,11 @@ export const Controls = (props: ControlsProps) => {
     hoverPos: 0,
   });
   const [showTimestamp, setShowTimestamp] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const isScrubbingRef = useRef(false);
+  const [scrubPercent, setScrubPercent] = useState<number | null>(null);
+  const scrubPercentRef = useRef<number | null>(null);
+  const progressWrapperRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
@@ -365,6 +370,7 @@ export const Controls = (props: ControlsProps) => {
     setShowTimestamp(false);
   };
   const onMouseMove = (e: any) => {
+    if (isScrubbingRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const max = rect.width;
@@ -372,6 +378,103 @@ export const Controls = (props: ControlsProps) => {
     const target = getStart() + pct * getLength();
     setHoverState({ hoverTimestamp: target, hoverPos: pct });
   };
+
+  const calculateScrubPct = useCallback((clientX: number) => {
+    if (!progressWrapperRef.current) return 0;
+    const rect = progressWrapperRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }, []);
+
+  const handleSeekStart = useCallback(
+    (clientX: number) => {
+      const pct = calculateScrubPct(clientX);
+      isScrubbingRef.current = true;
+      scrubPercentRef.current = pct;
+      setIsScrubbing(true);
+      setScrubPercent(pct);
+      setShowTimestamp(true);
+      const target = getStart() + pct * getLength();
+      setHoverState({ hoverTimestamp: target, hoverPos: pct });
+      resetHideTimer();
+    },
+    [calculateScrubPct, getLength, resetHideTimer],
+  );
+
+  const handleSeekMove = useCallback(
+    (clientX: number) => {
+      if (!isScrubbingRef.current) return;
+      const pct = calculateScrubPct(clientX);
+      scrubPercentRef.current = pct;
+      setScrubPercent(pct);
+      const target = getStart() + pct * getLength();
+      setHoverState({ hoverTimestamp: target, hoverPos: pct });
+      resetHideTimer();
+    },
+    [calculateScrubPct, getLength, resetHideTimer],
+  );
+
+  const handleSeekEnd = useCallback(
+    (clientX?: number) => {
+      if (!isScrubbingRef.current) return;
+      isScrubbingRef.current = false;
+      setIsScrubbing(false);
+
+      let finalPct = scrubPercentRef.current;
+      if (typeof clientX === "number") {
+        finalPct = calculateScrubPct(clientX);
+      }
+      if (finalPct !== null && Number.isFinite(finalPct)) {
+        const target = getStart() + finalPct * getLength();
+        if (Number.isFinite(target)) {
+          roomSeek(target);
+        }
+      }
+      scrubPercentRef.current = null;
+      setScrubPercent(null);
+      setShowTimestamp(false);
+      resetHideTimer();
+    },
+    [calculateScrubPct, getLength, roomSeek, resetHideTimer],
+  );
+
+  useEffect(() => {
+    if (!isScrubbing) return;
+    const onPointerMove = (e: MouseEvent | PointerEvent) => {
+      handleSeekMove(e.clientX);
+    };
+    const onPointerUp = (e: MouseEvent | PointerEvent) => {
+      handleSeekEnd(e.clientX);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches[0]) {
+        handleSeekMove(e.touches[0].clientX);
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.changedTouches[0]) {
+        handleSeekEnd(e.changedTouches[0].clientX);
+      } else {
+        handleSeekEnd();
+      }
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("mouseup", onPointerUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [isScrubbing, handleSeekMove, handleSeekEnd]);
 
   // Quick 10s seek
   const handleSeekDelta = (deltaSeconds: number) => {
@@ -827,40 +930,46 @@ export const Controls = (props: ControlsProps) => {
           </span>
 
           <div
-            className={styles.progressWrapper}
-            onMouseOver={onMouseOver}
-            onMouseOut={onMouseOut}
+            ref={progressWrapperRef}
+            className={`${styles.progressWrapper} ${isScrubbing ? styles.scrubbing : ""}`}
+            onMouseEnter={() => setShowTimestamp(true)}
+            onMouseLeave={() => {
+              if (!isScrubbing) setShowTimestamp(false);
+            }}
             onMouseMove={onMouseMove}
+            onPointerDown={(e) => {
+              if (e.button === 0) {
+                e.preventDefault();
+                handleSeekStart(e.clientX);
+              }
+            }}
+            onTouchStart={(e) => {
+              if (e.touches[0]) {
+                handleSeekStart(e.touches[0].clientX);
+              }
+            }}
           >
-            <Progress.Root
-              radius="xl"
-              className={styles.progressBar}
-              onClick={(e: any) => {
-                if (!disabled) {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const max = rect.width;
-                  const pct = Math.max(0, Math.min(1, x / max));
-                  const target = getLength() * pct;
-                  roomSeek(target);
-                  resetHideTimer();
-                }
-              }}
-            >
-              <Progress.Section
-                className={styles.progressSection}
-                style={{ pointerEvents: "none", zIndex: 1 }}
-                value={getPercent() * 100}
-              />
+            <div className={styles.progressBar}>
+              {/* Buffer range bars */}
               {buffers}
 
-              {/* Progress glowing scrubber thumb */}
+              {/* Active playback fill */}
               <div
-                className={styles.scrubberThumb}
-                style={{ left: `${getPercent() * 100}%` }}
+                className={styles.progressSection}
+                style={{
+                  width: `${(isScrubbing && scrubPercent !== null ? scrubPercent : getPercent()) * 100}%`,
+                }}
               />
 
-              {/* Hover preview timestamp tooltip */}
+              {/* Glowing Draggable Scrubber Thumb */}
+              <div
+                className={styles.scrubberThumb}
+                style={{
+                  left: `${(isScrubbing && scrubPercent !== null ? scrubPercent : getPercent()) * 100}%`,
+                }}
+              />
+
+              {/* Hover / Drag preview timestamp tooltip */}
               {getLength() < Infinity && showTimestamp && (
                 <div
                   className={styles.hoverTooltip}
@@ -874,7 +983,7 @@ export const Controls = (props: ControlsProps) => {
                   )}
                 </div>
               )}
-            </Progress.Root>
+            </div>
           </div>
 
           <span className={styles.timeText}>{formatTimestamp(getEnd())}</span>
@@ -1364,19 +1473,6 @@ export const Controls = (props: ControlsProps) => {
                 {/* 4. Webcam Bubbles */}
                 <Menu.Divider />
                 <Menu.Label>Webcam Bubbles</Menu.Label>
-                {/* Drag Unlock Toggle */}
-                <Menu.Item
-                  onClick={() => {
-                    setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked });
-                  }}
-                  rightSection={
-                    webcamState.dragUnlocked ? (
-                      <WPIconCheck size={16} color="#6366f1" />
-                    ) : null
-                  }
-                >
-                  {webcamState.dragUnlocked ? "Dragging: Unlocked (Movable)" : "Dragging: Locked (Clean Video)"}
-                </Menu.Item>
 
                 {/* Size presets */}
                 {[
