@@ -17,6 +17,7 @@ import twitch from "twitch-m3u8";
 import { type QueryResult } from "pg";
 import { Docker } from "./vm/docker.ts";
 import { autoCaptionManager, RoomTranscriber } from "./autoCaption.ts";
+import { resolveMediaUrl } from "./utils/regex.ts";
 
 // Stateless pool instance to use for VMs if full management isn't needed
 let stateless: Docker | undefined = undefined;
@@ -640,6 +641,7 @@ export class Room {
       );
       return;
     }
+    data = resolveMediaUrl(data);
     redisCount("urlStarts");
     if (config.STREAM_PATH && data?.startsWith(config.STREAM_PATH)) {
       redisCount("streamStarts");

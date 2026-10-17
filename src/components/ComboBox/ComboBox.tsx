@@ -6,6 +6,7 @@ import {
   isHttp,
   isMagnet,
   isYouTube,
+  resolveMediaUrl,
 } from "../../utils/utils";
 import { examples } from "../../utils/examples";
 import ChatVideoCard from "../ChatVideoCard/ChatVideoCard";
@@ -45,15 +46,16 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     if (this.blurTimer) {
       clearTimeout(this.blurTimer);
     }
-    this.props.roomSetMedia(value);
+    const resolved = resolveMediaUrl(value);
+    this.props.roomSetMedia(resolved);
     this.setState({ inputMedia: undefined, items: [] });
   };
 
 
   doSearch = async () => {
-    const value = this.state.inputMedia;
+    const rawValue = this.state.inputMedia;
     this.setState({ loading: true });
-    const query: string = value || "";
+    const query: string = resolveMediaUrl(rawValue || "");
     let items: SearchResult[] = [];
     if (
       query === "" ||

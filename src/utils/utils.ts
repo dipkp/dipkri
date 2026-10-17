@@ -152,6 +152,63 @@ export const isVBrowser = (input: string) => {
   return input.startsWith("vbrowser://");
 };
 
+/**
+ * Unwraps nested proxy stream URLs (such as proxy.valhallastream.com/m3u8?url=... or cors proxies)
+ * into their underlying direct playable media stream URLs.
+ */
+export function resolveMediaUrl(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
+  let trimmed = rawUrl.trim();
+
+  // Decode common HTML entities like &amp; into &
+  if (trimmed.includes("&amp;")) {
+    trimmed = trimmed.replace(/&amp;/g, "&");
+  }
+
+  // If already magnet, youtube, or local relative stream, return as is
+  if (
+    trimmed.startsWith("magnet:") ||
+    trimmed.startsWith("/stream?") ||
+    trimmed.includes("youtube.com") ||
+    trimmed.includes("youtu.be")
+  ) {
+    return trimmed;
+  }
+
+  // Check for embedded target stream URL in query parameters
+  try {
+    const parsed = new URL(trimmed);
+    const candidateKeys = [
+      "url",
+      "src",
+      "stream",
+      "stream_url",
+      "file",
+      "file_url",
+      "link",
+      "target",
+      "m3u8",
+      "video",
+      "uri",
+    ];
+
+    for (const key of candidateKeys) {
+      const val = parsed.searchParams.get(key);
+      if (val) {
+        let candidate = val.trim();
+        if (candidate.includes("&amp;")) {
+          candidate = candidate.replace(/&amp;/g, "&");
+        }
+        if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+          return candidate;
+        }
+      }
+    }
+  } catch {}
+
+  return trimmed;
+}
+
 export async function testAutoplay() {
   const result = await canAutoplay.video();
   return result.result;

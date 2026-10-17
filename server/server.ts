@@ -755,6 +755,90 @@ app.get("/proxy/*splat", async (req, res) => {
   }
 });
 
+// Universal stream CORS proxy for external HLS/M3U8 streams requiring custom headers
+app.get("/stream-proxy", async (req, res) => {
+  try {
+    const rawUrl = req.query.url ? String(req.query.url).trim() : "";
+    if (!rawUrl || (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://"))) {
+      res.status(400).send("Invalid target URL");
+      return;
+    }
+
+    let customHeaders: Record<string, string> = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    };
+
+    if (req.query.headers) {
+      try {
+        const parsed = JSON.parse(String(req.query.headers));
+        if (typeof parsed === "object" && parsed !== null) {
+          customHeaders = { ...customHeaders, ...parsed };
+        }
+      } catch {}
+    }
+
+    if (req.query.referer) {
+      customHeaders["Referer"] = String(req.query.referer);
+    }
+    if (req.query.origin) {
+      customHeaders["Origin"] = String(req.query.origin);
+    }
+
+    const resp = await axios.get(rawUrl, {
+      headers: customHeaders,
+      responseType: "arraybuffer",
+      timeout: 12000,
+      validateStatus: () => true,
+    });
+
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "*");
+
+    const contentType = resp.headers["content-type"] || "";
+
+    if (
+      contentType.includes("mpegurl") ||
+      contentType.includes("application/x-mpegURL") ||
+      rawUrl.includes(".m3u8") ||
+      contentType.includes("text/plain")
+    ) {
+      const text = Buffer.from(resp.data).toString("utf-8");
+      if (text.trim().startsWith("#EXTM3U")) {
+        const lines = text.split("\n");
+        const rewritten = lines.map((line) => {
+          const trimmed = line.trim();
+          if (!trimmed) return line;
+
+          if (trimmed.startsWith("#")) {
+            return line.replace(/URI="([^"]+)"/g, (_match, uriVal) => {
+              const abs = new URL(uriVal, rawUrl).toString();
+              const proxied = `/stream-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(customHeaders))}`;
+              return `URI="${proxied}"`;
+            });
+          }
+
+          const abs = new URL(trimmed, rawUrl).toString();
+          return `/stream-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(customHeaders))}`;
+        });
+
+        res.set("Content-Type", "application/vnd.apple.mpegurl");
+        res.send(rewritten.join("\n"));
+        return;
+      }
+    }
+
+    if (contentType) {
+      res.set("Content-Type", contentType);
+    }
+    res.send(resp.data);
+  } catch (err: any) {
+    console.warn("stream-proxy error:", err?.message || err);
+    res.status(502).send("Upstream stream error");
+  }
+});
+
 app.get("/favicon.ico", (_req, res) => {
   res.set("Cache-Control", "no-cache, must-revalidate");
   res.sendFile(

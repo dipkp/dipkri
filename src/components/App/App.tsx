@@ -23,6 +23,7 @@ import {
   pickSingleLargeFile,
   isVBrowser,
   isDash,
+  resolveMediaUrl,
   VIDEO_MAX_HEIGHT_CSS,
   softWhite,
   getSavedPasswords,
@@ -639,7 +640,7 @@ export class App extends React.Component<AppProps, AppState> {
       this.setState({ controller: data });
     });
     socket.on("REC:host", async (data: HostState) => {
-      let currentMedia = data.video || "";
+      let currentMedia = resolveMediaUrl(data.video || "");
       if (this.playingScreenShare() && !isScreenShare(currentMedia)) {
         this.stopPublishingLocalStream();
       }
@@ -777,7 +778,7 @@ export class App extends React.Component<AppProps, AppState> {
             );
             return;
           }
-          const src = data.video;
+          const src = resolveMediaUrl(data.video);
           let time = data.videoTS ?? 0;
           if (time <= 0 && src) {
             const savedTime = this.getSavedPlaybackTime(this.roomId, src);
@@ -2364,7 +2365,8 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   roomSetMedia = (value: string) => {
-    this.socket.emit("CMD:host", value);
+    const resolved = resolveMediaUrl(value);
+    this.socket.emit("CMD:host", resolved);
   };
 
   setConvertEnabled = (convertEnabled: boolean) => {
