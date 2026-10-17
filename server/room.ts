@@ -16,6 +16,7 @@ import {
 import twitch from "twitch-m3u8";
 import { type QueryResult } from "pg";
 import { Docker } from "./vm/docker.ts";
+import { autoCaptionManager, RoomTranscriber } from "./autoCaption.ts";
 
 // Stateless pool instance to use for VMs if full management isn't needed
 let stateless: Docker | undefined = undefined;
@@ -66,6 +67,7 @@ export class Room {
   public isChatDisabled: boolean | undefined = undefined;
   public lastUpdateTime: Date = new Date();
   private preventTSUpdate = false;
+  public autoCaption: RoomTranscriber;
   // Not really a queue since there's no ordering, we just retry as long as this is set
   // If we want a real queue then we need external processing of the jobs and a way to update the room from outside
   public vBrowserQueue:
@@ -87,8 +89,19 @@ export class Room {
     this.roomId = roomId;
     this.io = io;
 
+    this.autoCaption = autoCaptionManager.getOrCreate(
+      io,
+      this.roomId,
+      () => this.videoTS,
+      () => this.paused,
+    );
+
     if (roomData) {
       this.deserialize(roomData);
+    }
+
+    if (this.video) {
+      this.autoCaption.setVideo(this.video);
     }
 
     this.tsInterval = setInterval(async () => {
@@ -320,6 +333,17 @@ export class Room {
       socket.on("CMD:subtitle", (data: unknown) => {
         validateLock() && this.addSubtitles(String(data));
       });
+      socket.on("CMD:startAutoCaption", (data?: { lang?: string }) => {
+        this.autoCaption.userJoinedAutoCaption(socket, data?.lang);
+      });
+      socket.on("CMD:stopAutoCaption", () => {
+        this.autoCaption.userLeftAutoCaption(socket.id);
+      });
+      socket.on("CMD:changeAutoCaptionLang", (data?: { lang?: string }) => {
+        if (data?.lang) {
+          this.autoCaption.setLanguage(data.lang);
+        }
+      });
       socket.on("CMD:lock", async (data: unknown) => {
         const hasLock = validateLock();
         const isOwner = await validateOwner();
@@ -454,6 +478,7 @@ export class Room {
   };
 
   public destroy = () => {
+    autoCaptionManager.remove(this.roomId);
     if (this.tsInterval) {
       clearInterval(this.tsInterval);
     }
@@ -548,6 +573,7 @@ export class Room {
     }
     this.video = data;
     this.videoTS = 0;
+    this.autoCaption.setVideo(data);
     this.paused = false;
     this.subtitle = "";
     this.loop = false;
@@ -779,6 +805,7 @@ export class Room {
       msg: this.tsMap[socket.clientId]?.toString(),
     };
     this.paused = false;
+    this.autoCaption.onPlay();
     this.addChatMessage(socket, chatMsg);
   };
 
@@ -790,6 +817,7 @@ export class Room {
       msg: this.tsMap[socket.clientId]?.toString(),
     };
     this.paused = true;
+    this.autoCaption.onPause();
     if (
       socket?.clientId &&
       typeof this.tsMap[socket.clientId] === "number" &&
@@ -805,6 +833,7 @@ export class Room {
       return;
     }
     this.videoTS = data;
+    this.autoCaption.onSeek(data);
     socket.broadcast.emit("REC:seek", data);
     const chatMsg = { id: socket.clientId, cmd: "seek", msg: data?.toString() };
     this.addChatMessage(socket, chatMsg);
@@ -1427,6 +1456,7 @@ export class Room {
   };
 
   private onDisconnect = (socket: Socket) => {
+    this.autoCaption.userLeftAutoCaption(socket.id);
     const { clientId } = socket;
     // Disconnecting socket is the current one
     if (socket.id === this.socketIdMap[clientId]) {

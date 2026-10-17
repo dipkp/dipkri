@@ -2813,6 +2813,7 @@ export class App extends React.Component<AppProps, AppState> {
           roomMedia={this.state.roomMedia}
           isSubtitled={this.Player().isSubtitled()}
           getYoutubeTime={() => this.YouTubeInterface.getCurrentTime()}
+          socket={this.socket}
         />
         <MobileFloatingReactions
           hide={Boolean(this.state.settingsModalOpen)}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { Socket } from "socket.io-client";
 import styles from "./LiveCaptions.module.css";
 import {
   getPlayerSettings,
@@ -22,6 +23,7 @@ export interface LiveCaptionsProps {
   roomMedia?: string;
   isSubtitled?: boolean;
   getYoutubeTime?: () => number;
+  socket?: Socket;
 }
 
 /**
@@ -138,6 +140,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   roomMedia,
   isSubtitled = false,
   getYoutubeTime,
+  socket,
 }) => {
   const [enabled, setEnabled] = useState<boolean>(
     () => getPlayerSettings().liveCaptions
@@ -204,6 +207,58 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       );
     };
   }, [roomSubtitle, isSubtitled]);
+
+  // --------------------------------------------------------------------------
+  // Socket-backed Lookahead Auto-Caption Worker (Single Room Worker & In-Memory Cache)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleAutoCaptions = (newCues: SubtitleCue[]) => {
+      if (!Array.isArray(newCues) || newCues.length === 0) return;
+      for (const cue of newCues) {
+        const exists = parsedCuesRef.current.some(
+          (c) => Math.abs(c.start - cue.start) < 0.25,
+        );
+        if (!exists) {
+          parsedCuesRef.current.push(cue);
+        }
+      }
+      parsedCuesRef.current.sort((a, b) => a.start - b.start);
+      setSyncStatus("");
+    };
+
+    const handleClearAutoCaptions = () => {
+      parsedCuesRef.current = [];
+      lastCueIndexRef.current = -1;
+      setActiveText("");
+      currentRenderedTextRef.current = "";
+    };
+
+    const handleNotice = (notice: { type: string; message: string }) => {
+      if (notice?.message) {
+        setSyncStatus(notice.message);
+        setTimeout(() => setSyncStatus(""), 4500);
+      }
+    };
+
+    socket.on("REC:autoCaptions", handleAutoCaptions);
+    socket.on("REC:clearAutoCaptions", handleClearAutoCaptions);
+    socket.on("REC:autoCaptionNotice", handleNotice);
+
+    // If Live Captions is active, join the single room transcriber worker
+    if (enabled && !roomSubtitle) {
+      socket.emit("CMD:startAutoCaption", { lang: captionLanguage });
+      setSyncStatus("Connecting Live Transcribe stream...");
+    }
+
+    return () => {
+      socket.off("REC:autoCaptions", handleAutoCaptions);
+      socket.off("REC:clearAutoCaptions", handleClearAutoCaptions);
+      socket.off("REC:autoCaptionNotice", handleNotice);
+      socket.emit("CMD:stopAutoCaption");
+    };
+  }, [socket, enabled, roomSubtitle, captionLanguage]);
 
   // --------------------------------------------------------------------------
   // Ingest Subtitles (.srt / .vtt) from roomSubtitle (e.g. Uploaded Subtitle)
