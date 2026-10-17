@@ -13,13 +13,13 @@ import {
 import { UserMenu } from "../UserMenu/UserMenu";
 import { MetadataContext } from "../../MetadataContext";
 import {
-  IconDotsVertical,
-  IconMicrophone,
-  IconScreenShare,
-  IconVideo,
-  IconVideoOff,
-  IconX,
-} from "@tabler/icons-react";
+  WPIconDotsVertical,
+  WPIconMicrophone,
+  WPIconScreenshare,
+  WPIconVideo,
+  WPIconVideoOff,
+  WPIconClose,
+} from "../Icons/CustomIcons";
 
 interface VideoChatProps {
   socket: Socket;
@@ -369,7 +369,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 socket={socket}
                 userToManage={p.id}
                 trigger={
-                  <IconDotsVertical
+                  <WPIconDotsVertical
                     style={{
                       position: "absolute",
                       right: 6,
@@ -405,7 +405,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                     color="indigo"
                     radius="xl"
                     onClick={this.setupWebRTC}
-                    leftSection={<IconVideo size={13} />}
+                    leftSection={<WPIconVideo size={13} />}
                   >
                     Join
                   </Button>
@@ -416,7 +416,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                     color="red"
                     radius="xl"
                     onClick={this.stopWebRTC}
-                    leftSection={<IconX size={13} />}
+                    leftSection={<WPIconClose size={13} />}
                   >
                     Leave
                   </Button>
@@ -435,7 +435,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                           : "Turn Video On"
                       }
                     >
-                      <IconVideo size={13} />
+                      <WPIconVideo size={13} />
                     </ActionIcon>
                     <ActionIcon
                       size="sm"
@@ -445,15 +445,15 @@ export class VideoChat extends React.Component<VideoChatProps> {
                       onClick={this.toggleAudioWebRTC}
                       title={this.getAudioWebRTC() ? "Mute Mic" : "Unmute Mic"}
                     >
-                      <IconMicrophone size={13} />
+                      <WPIconMicrophone size={13} />
                     </ActionIcon>
                   </>
                 )}
                 {!isSelf && (
                   <>
-                    {isUserInVideo && <IconVideo size={15} color={softWhite} />}
+                    {isUserInVideo && <WPIconVideo size={15} color={softWhite} />}
                     {isUserInVideo && (
-                      <IconMicrophone
+                      <WPIconMicrophone
                         size={15}
                         color={p.isMuted ? "#ef4444" : "#10b981"}
                       />
@@ -461,7 +461,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                   </>
                 )}
                 {p.isScreenShare && (
-                  <IconScreenShare size={15} color="#06b6d4" />
+                  <WPIconScreenshare size={15} color="#06b6d4" />
                 )}
               </div>
 
@@ -572,7 +572,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                         border: "1px solid rgba(239, 68, 68, 0.35)",
                       }}
                     >
-                      <IconVideoOff size={13} />
+                      <WPIconVideoOff size={13} />
                       <span>Camera Off</span>
                     </div>
                   )}

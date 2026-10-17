@@ -6,14 +6,14 @@ import {
   getDefaultPicture,
   getColorForStringHex,
 } from "../../utils/utils";
-import { WPIconClose } from "../Icons/CustomIcons";
 import {
-  IconMicrophone,
-  IconMicrophoneOff,
-  IconVideo,
-  IconVideoOff,
-  IconPin,
-} from "@tabler/icons-react";
+  WPIconClose,
+  WPIconMicrophone,
+  WPIconMicrophoneOff,
+  WPIconVideo,
+  WPIconVideoOff,
+  WPIconPin,
+} from "../Icons/CustomIcons";
 import {
   BubbleSize,
   SIZE_PRESETS,
@@ -636,14 +636,14 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
               {/* Pin Badge */}
               {isPinned && (
                 <div className={styles.pinBadge} title="Pinned Friend">
-                  <IconPin size={11} />
+                  <WPIconPin size={11} />
                 </div>
               )}
 
               {/* Mic Muted Badge */}
               {isMuted && (
                 <div className={styles.micBadge} title="Microphone Muted">
-                  <IconMicrophoneOff size={10} />
+                  <WPIconMicrophoneOff size={10} />
                 </div>
               )}
 
@@ -678,9 +678,9 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                     title={selfAudioMuted ? "Unmute Mic" : "Mute Mic"}
                   >
                     {selfAudioMuted ? (
-                      <IconMicrophoneOff size={13} />
+                      <WPIconMicrophoneOff size={13} />
                     ) : (
-                      <IconMicrophone size={13} />
+                      <WPIconMicrophone size={13} />
                     )}
                   </button>
 
@@ -702,9 +702,9 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                     title={selfVideoMuted ? "Start Camera" : "Stop Camera"}
                   >
                     {selfVideoMuted ? (
-                      <IconVideoOff size={13} />
+                      <WPIconVideoOff size={13} />
                     ) : (
-                      <IconVideo size={13} />
+                      <WPIconVideo size={13} />
                     )}
                   </button>
 

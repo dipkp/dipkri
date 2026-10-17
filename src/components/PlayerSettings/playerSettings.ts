@@ -2,10 +2,18 @@
 import { getCurrentSettings, updateSettings } from "../Settings/LocalSettings";
 
 export type DualAudioMode = "stereo" | "left" | "right";
+export type CaptionSize = "small" | "medium" | "large";
+export type CaptionColor = "white" | "yellow" | "cyan" | "green";
+export type CaptionStyle = "shadow" | "box" | "outline";
+export type CaptionPosition = "bottom" | "top";
 
 export interface PlayerSettingsState {
   liveCaptions: boolean;
   captionLanguage: string; // "en" | "hi" | "es" | "all"
+  captionSize: CaptionSize; // "small" | "medium" | "large"
+  captionColor: CaptionColor; // "white" | "yellow" | "cyan" | "green"
+  captionStyle: CaptionStyle; // "shadow" | "box" | "outline"
+  captionPosition: CaptionPosition; // "bottom" | "top"
   quality: string; // "auto" | "1080p" | "720p" | "480p" | "360p"
   audioTrack: number; // 0, 1, 2...
   audioBoost: number; // 100, 150, 200, 300 (%)
@@ -19,6 +27,10 @@ export const PLAYER_SETTINGS_CHANGED_EVENT = "dipkri-player-settings-changed";
 export const getPlayerSettings = (): PlayerSettingsState => {
   let liveCaptions = false;
   let captionLanguage = "en";
+  let captionSize: CaptionSize = "medium";
+  let captionColor: CaptionColor = "white";
+  let captionStyle: CaptionStyle = "shadow";
+  let captionPosition: CaptionPosition = "bottom";
   let quality = "auto";
   let audioTrack = 0;
   let audioBoost = 100;
@@ -38,6 +50,26 @@ export const getPlayerSettings = (): PlayerSettingsState => {
 
       const savedLang = localStorage.getItem("dipkri-caption-language");
       if (savedLang) captionLanguage = savedLang;
+
+      const savedSize = localStorage.getItem("dipkri-caption-size") as CaptionSize | null;
+      if (savedSize === "small" || savedSize === "medium" || savedSize === "large") {
+        captionSize = savedSize;
+      }
+
+      const savedColor = localStorage.getItem("dipkri-caption-color") as CaptionColor | null;
+      if (savedColor === "white" || savedColor === "yellow" || savedColor === "cyan" || savedColor === "green") {
+        captionColor = savedColor;
+      }
+
+      const savedStyle = localStorage.getItem("dipkri-caption-style") as CaptionStyle | null;
+      if (savedStyle === "shadow" || savedStyle === "box" || savedStyle === "outline") {
+        captionStyle = savedStyle;
+      }
+
+      const savedPos = localStorage.getItem("dipkri-caption-position") as CaptionPosition | null;
+      if (savedPos === "bottom" || savedPos === "top") {
+        captionPosition = savedPos;
+      }
 
       if (local.playbackQuality) {
         quality = local.playbackQuality;
@@ -73,7 +105,20 @@ export const getPlayerSettings = (): PlayerSettingsState => {
     } catch {}
   }
 
-  return { liveCaptions, captionLanguage, quality, audioTrack, audioBoost, dualAudioMode, audioMode, showStatsOverlay };
+  return {
+    liveCaptions,
+    captionLanguage,
+    captionSize,
+    captionColor,
+    captionStyle,
+    captionPosition,
+    quality,
+    audioTrack,
+    audioBoost,
+    dualAudioMode,
+    audioMode,
+    showStatsOverlay,
+  };
 };
 
 export const setPlayerSettings = (
@@ -92,6 +137,18 @@ export const setPlayerSettings = (
       }
       if (partial.captionLanguage !== undefined) {
         localStorage.setItem("dipkri-caption-language", partial.captionLanguage);
+      }
+      if (partial.captionSize !== undefined) {
+        localStorage.setItem("dipkri-caption-size", partial.captionSize);
+      }
+      if (partial.captionColor !== undefined) {
+        localStorage.setItem("dipkri-caption-color", partial.captionColor);
+      }
+      if (partial.captionStyle !== undefined) {
+        localStorage.setItem("dipkri-caption-style", partial.captionStyle);
+      }
+      if (partial.captionPosition !== undefined) {
+        localStorage.setItem("dipkri-caption-position", partial.captionPosition);
       }
       if (partial.quality !== undefined) {
         localStorage.setItem("dipkri-playback-quality", partial.quality);

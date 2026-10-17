@@ -11,7 +11,12 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: bottom 0.2s ease, opacity 0.15s ease;
+  transition: bottom 0.2s ease, top 0.2s ease, opacity 0.15s ease;
+}
+
+.positionTop {
+  bottom: auto !important;
+  top: 48px !important;
 }
 
 @media only screen and (max-width: 600px) {
@@ -19,44 +24,103 @@
     bottom: 54px;
     max-width: 94%;
   }
+  .positionTop {
+    top: 36px !important;
+  }
 }
 
 .minimalSubtitle {
-  background-color: rgba(0, 0, 0, 0.75) !important;
-  background: rgba(0, 0, 0, 0.75) !important;
-  color: #ffffff !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
-  font-size: 20px;
   font-weight: 600;
   line-height: 1.38;
   letter-spacing: 0.25px;
   text-align: center;
   padding: 4px 12px;
-  border-radius: 5px;
-  border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+  border-radius: 6px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-width: 760px;
+  display: inline-block;
+  animation: subtitleFadeIn 0.12s ease-out;
+  transition: font-size 0.15s ease, color 0.15s ease;
+}
+
+/* Size Variants */
+.sizeSmall {
+  font-size: 16px;
+}
+.sizeMedium {
+  font-size: 22px;
+}
+.sizeLarge {
+  font-size: 30px;
+}
+
+@media only screen and (max-width: 600px) {
+  .sizeSmall {
+    font-size: 13px;
+    padding: 2px 8px;
+  }
+  .sizeMedium {
+    font-size: 16px;
+    padding: 3px 10px;
+  }
+  .sizeLarge {
+    font-size: 21px;
+    padding: 4px 12px;
+  }
+}
+
+/* Color Variants */
+.colorWhite {
+  color: #ffffff !important;
+}
+.colorYellow {
+  color: #facc15 !important;
+}
+.colorCyan {
+  color: #38bdf8 !important;
+}
+.colorGreen {
+  color: #4ade80 !important;
+}
+
+/* Style Variants */
+.styleShadow {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
   text-shadow:
-    0 0 2px #000000,
-    0 1px 2px #000000,
+    0 2px 4px rgba(0, 0, 0, 0.95),
+    0 0 3px #000000,
     -1px -1px 0 #000000,
     1px -1px 0 #000000,
     -1px 1px 0 #000000,
     1px 1px 0 #000000 !important;
   -webkit-text-stroke: 0;
-  word-break: break-word;
-  white-space: pre-wrap;
-  max-width: 720px;
-  display: inline-block;
-  animation: subtitleFadeIn 0.12s ease-out;
 }
 
-@media only screen and (max-width: 600px) {
-  .minimalSubtitle {
-    font-size: 15px;
-    padding: 3px 10px;
-    border-radius: 4px;
-    max-width: 92vw;
-  }
+.styleBox {
+  background: rgba(0, 0, 0, 0.78) !important;
+  background-color: rgba(0, 0, 0, 0.78) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+  text-shadow: 0 1px 2px #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.styleOutline {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  text-shadow:
+    -2px -2px 0 #000000,
+    2px -2px 0 #000000,
+    -2px 2px 0 #000000,
+    2px 2px 0 #000000,
+    0 3px 6px rgba(0, 0, 0, 0.9) !important;
+  -webkit-text-stroke: 1.2px #000000;
 }
 
 @keyframes subtitleFadeIn {

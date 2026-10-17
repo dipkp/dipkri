@@ -29,13 +29,11 @@ import {
   WPIconVolumeOff,
   WPIconMonitor,
   WPIconSearch,
+  WPIconVideo,
+  WPIconVideoOff,
+  WPIconMicrophone,
+  WPIconMicrophoneOff,
 } from "../Icons/CustomIcons";
-import {
-  IconVideo,
-  IconVideoOff,
-  IconMicrophone,
-  IconMicrophoneOff,
-} from "@tabler/icons-react";
 import {
   getWebcamSettings,
   setWebcamSettings,
@@ -46,6 +44,10 @@ import {
   setPlayerSettings,
   PLAYER_SETTINGS_CHANGED_EVENT,
   PlayerSettingsState,
+  CaptionSize,
+  CaptionColor,
+  CaptionStyle,
+  CaptionPosition,
 } from "../PlayerSettings/playerSettings";
 import { qualityManager, QUALITY_PRESETS } from "../PlayerSettings/qualityManager";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
@@ -705,7 +707,7 @@ export const Controls = (props: ControlsProps) => {
         >
           <div className={styles.fullscreenChatHeader}>
             <div className={styles.drawerTitleGroup} style={{ color: "#10b981" }}>
-              <IconVideo size={16} />
+              <WPIconVideo size={16} />
               <span>Voice & Webcams ({videoUsersCount})</span>
             </div>
             <button
@@ -744,7 +746,7 @@ export const Controls = (props: ControlsProps) => {
                   }}
                   onClick={() => props.onJoinVideo && props.onJoinVideo()}
                 >
-                  <IconVideo size={16} />
+                  <WPIconVideo size={16} />
                   <span>Join Video Call</span>
                 </button>
               ) : (
@@ -768,7 +770,7 @@ export const Controls = (props: ControlsProps) => {
                     }}
                     onClick={() => props.onToggleVideo && props.onToggleVideo()}
                   >
-                    {props.isVideoMuted ? <IconVideoOff size={14} /> : <IconVideo size={14} />}
+                    {props.isVideoMuted ? <WPIconVideoOff size={14} /> : <WPIconVideo size={14} />}
                     <span>{props.isVideoMuted ? "Cam Off" : "Cam On"}</span>
                   </button>
                   <button
@@ -790,7 +792,7 @@ export const Controls = (props: ControlsProps) => {
                     }}
                     onClick={() => props.onToggleAudio && props.onToggleAudio()}
                   >
-                    {props.isAudioMuted ? <IconMicrophoneOff size={14} /> : <IconMicrophone size={14} />}
+                    {props.isAudioMuted ? <WPIconMicrophoneOff size={14} /> : <WPIconMicrophone size={14} />}
                     <span>{props.isAudioMuted ? "Muted" : "Unmuted"}</span>
                   </button>
                   <button
@@ -856,8 +858,8 @@ export const Controls = (props: ControlsProps) => {
                     </div>
                     {p.isVideoChat && (
                       <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                        <IconVideo size={12} color="#10b981" />
-                        <IconMicrophone size={12} color={p.isMuted ? "#ef4444" : "#10b981"} />
+                        <WPIconVideo size={12} color="#10b981" />
+                        <WPIconMicrophone size={12} color={p.isMuted ? "#ef4444" : "#10b981"} />
                       </div>
                     )}
                   </div>
@@ -1205,7 +1207,7 @@ export const Controls = (props: ControlsProps) => {
                 title={isVideoDrawerOpen ? "Close Webcams" : "Voice & Webcams"}
                 style={{ position: "relative" }}
               >
-                <IconVideo size={20} color={hasOurStream ? "#10b981" : undefined} />
+                <WPIconVideo size={20} color={hasOurStream ? "#10b981" : undefined} />
                 {videoUsersCount > 0 && (
                   <span className={styles.chatBadge} style={{ background: "#10b981" }}>
                     {videoUsersCount}
@@ -1545,11 +1547,142 @@ export const Controls = (props: ControlsProps) => {
                         </div>
                       </div>
 
-                      {/* Subtitle Style Notice */}
+                      {/* Subtitle Font Size Selector */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Subtitle Size</span>
+                          <span className={styles.settingsBadge}>{(playerSettingsState.captionSize || "medium").toUpperCase()}</span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "small", label: "Small (16px)" },
+                            { key: "medium", label: "Medium (22px)" },
+                            { key: "large", label: "Large (30px)" },
+                          ].map((s) => (
+                            <button
+                              key={s.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${(playerSettingsState.captionSize || "medium") === s.key ? styles.settingsPillActive : ""}`}
+                              onClick={() => setPlayerSettings({ captionSize: s.key as CaptionSize })}
+                            >
+                              {(playerSettingsState.captionSize || "medium") === s.key && "✓ "}
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Subtitle Text Color Selector */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Text Color</span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "white", label: "White", color: "#ffffff" },
+                            { key: "yellow", label: "Yellow", color: "#facc15" },
+                            { key: "cyan", label: "Cyan", color: "#38bdf8" },
+                            { key: "green", label: "Green", color: "#4ade80" },
+                          ].map((c) => (
+                            <button
+                              key={c.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${(playerSettingsState.captionColor || "white") === c.key ? styles.settingsPillActive : ""}`}
+                              style={{ display: "flex", alignItems: "center", gap: 5 }}
+                              onClick={() => setPlayerSettings({ captionColor: c.key as CaptionColor })}
+                            >
+                              <span style={{ width: 10, height: 10, borderRadius: "50%", background: c.color, display: "inline-block" }} />
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Subtitle Background / Style Effect */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Text Style & Effect</span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "shadow", label: "Netflix Shadow" },
+                            { key: "box", label: "YouTube Box" },
+                            { key: "outline", label: "Outline" },
+                          ].map((st) => (
+                            <button
+                              key={st.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${(playerSettingsState.captionStyle || "shadow") === st.key ? styles.settingsPillActive : ""}`}
+                              onClick={() => setPlayerSettings({ captionStyle: st.key as CaptionStyle })}
+                            >
+                              {(playerSettingsState.captionStyle || "shadow") === st.key && "✓ "}
+                              {st.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Subtitle Vertical Position */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Screen Position</span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { key: "bottom", label: "Bottom (Default)" },
+                            { key: "top", label: "Top" },
+                          ].map((pos) => (
+                            <button
+                              key={pos.key}
+                              type="button"
+                              className={`${styles.settingsPill} ${(playerSettingsState.captionPosition || "bottom") === pos.key ? styles.settingsPillActive : ""}`}
+                              onClick={() => setPlayerSettings({ captionPosition: pos.key as CaptionPosition })}
+                            >
+                              {(playerSettingsState.captionPosition || "bottom") === pos.key && "✓ "}
+                              {pos.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Live Subtitle Preview */}
                       <div className={styles.settingsSubtitleStyleBox}>
-                        <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>
-                        <div className={styles.settingsSubtitlePreviewPill}>
-                          Pure White Text • Translucent Dark Backing
+                        <div className={styles.settingsSubtitleStyleLabel}>Live Preview:</div>
+                        <div
+                          style={{
+                            padding: "8px 14px",
+                            textAlign: "center",
+                            fontSize:
+                              (playerSettingsState.captionSize || "medium") === "small"
+                                ? "14px"
+                                : (playerSettingsState.captionSize || "medium") === "large"
+                                  ? "20px"
+                                  : "16px",
+                            fontWeight: 600,
+                            color:
+                              (playerSettingsState.captionColor || "white") === "yellow"
+                                ? "#facc15"
+                                : (playerSettingsState.captionColor || "white") === "cyan"
+                                  ? "#38bdf8"
+                                  : (playerSettingsState.captionColor || "white") === "green"
+                                    ? "#4ade80"
+                                    : "#ffffff",
+                            background:
+                              (playerSettingsState.captionStyle || "shadow") === "box"
+                                ? "rgba(0, 0, 0, 0.78)"
+                                : "transparent",
+                            borderRadius: "6px",
+                            textShadow:
+                              (playerSettingsState.captionStyle || "shadow") === "outline"
+                                ? "-1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000"
+                                : "0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000",
+                            border:
+                              (playerSettingsState.captionStyle || "shadow") === "box"
+                                ? "1px solid rgba(255,255,255,0.1)"
+                                : "none",
+                          }}
+                        >
+                          The speech syncs in real-time!
                         </div>
                       </div>
                     </div>

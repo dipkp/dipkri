@@ -3,7 +3,7 @@ import { Menu } from "@mantine/core";
 import { Socket } from "socket.io-client";
 // import styles from './UserMenu.module.css';
 import { MetadataContext } from "../../MetadataContext";
-import { IconBan, IconTrashFilled, IconX } from "@tabler/icons-react";
+import { WPIconClose, WPIconTrash, WPIconBan } from "../Icons/CustomIcons";
 
 export const UserMenu = ({
   socket,
@@ -36,7 +36,7 @@ export const UserMenu = ({
         <Menu.Label>{displayName}</Menu.Label>
         {isChatMessage && (
           <Menu.Item
-            leftSection={<IconX />}
+            leftSection={<WPIconClose size={16} />}
             onClick={async () => {
               socket.emit("CMD:deleteChatMessages", {
                 author: userToManage,
@@ -48,7 +48,7 @@ export const UserMenu = ({
           </Menu.Item>
         )}
         <Menu.Item
-          leftSection={<IconTrashFilled />}
+          leftSection={<WPIconTrash size={16} />}
           onClick={async () => {
             socket.emit("CMD:deleteChatMessages", {
               author: userToManage,
@@ -58,7 +58,7 @@ export const UserMenu = ({
           Delete User's Messages
         </Menu.Item>
         <Menu.Item
-          leftSection={<IconBan />}
+          leftSection={<WPIconBan size={16} />}
           onClick={async () => {
             socket.emit("CMD:kickUser", {
               userToBeKicked: userToManage,

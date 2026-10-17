@@ -56,12 +56,6 @@ import config from "../../config";
 import { MetadataContext } from "../../MetadataContext";
 import ChatVideoCard from "../ChatVideoCard/ChatVideoCard";
 import {
-  IconMicrophone,
-  IconMicrophoneOff,
-  IconVideo,
-  IconVideoOff,
-} from "@tabler/icons-react";
-import {
   ActionIcon,
   Badge,
   TextInput,

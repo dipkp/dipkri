@@ -24,6 +24,10 @@ import {
 import {
   getPlayerSettings,
   setPlayerSettings,
+  CaptionSize,
+  CaptionColor,
+  CaptionStyle,
+  CaptionPosition,
 } from "../PlayerSettings/playerSettings";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import { qualityManager } from "../PlayerSettings/qualityManager";
@@ -230,6 +234,103 @@ export const SettingsModal = ({
               setPlayerSettings({ liveCaptions: checked });
               setUpdateTS(Date.now());
             }}
+          />
+
+          {/* Subtitle Appearance & Visual Customization */}
+          <SettingRow
+            disabled={false}
+            content={
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", padding: "4px 0" }}>
+                <div style={{ fontWeight: 600, fontSize: "14px", color: "#f0f0f5", display: "flex", alignItems: "center", gap: 6 }}>
+                  <WPIconCaptions size={16} color="#38bdf8" />
+                  Subtitle Display & Visual Styling
+                </div>
+
+                {/* 1. Subtitle Font Size */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "13px", color: "#e2e8f0" }}>Font Size</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Scale dialogue text for mobile or large screens.</div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getPlayerSettings().captionSize}
+                    onChange={(val) => {
+                      setPlayerSettings({ captionSize: val as CaptionSize });
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "Small (16px)", value: "small" },
+                      { label: "Medium (22px)", value: "medium" },
+                      { label: "Large (30px)", value: "large" },
+                    ]}
+                  />
+                </div>
+
+                {/* 2. Text Color */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "13px", color: "#e2e8f0" }}>Text Color</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>High contrast subtitle hue.</div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getPlayerSettings().captionColor}
+                    onChange={(val) => {
+                      setPlayerSettings({ captionColor: val as CaptionColor });
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "White", value: "white" },
+                      { label: "Yellow", value: "yellow" },
+                      { label: "Cyan", value: "cyan" },
+                      { label: "Green", value: "green" },
+                    ]}
+                  />
+                </div>
+
+                {/* 3. Text Style & Effect */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "13px", color: "#e2e8f0" }}>Background / Effect</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Netflix drop shadow or YouTube semi-transparent box.</div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getPlayerSettings().captionStyle}
+                    onChange={(val) => {
+                      setPlayerSettings({ captionStyle: val as CaptionStyle });
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "Shadow", value: "shadow" },
+                      { label: "Box", value: "box" },
+                      { label: "Outline", value: "outline" },
+                    ]}
+                  />
+                </div>
+
+                {/* 4. Position */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "13px", color: "#e2e8f0" }}>Screen Position</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Display dialogue at bottom or top of player.</div>
+                  </div>
+                  <SegmentedControl
+                    size="xs"
+                    value={getPlayerSettings().captionPosition}
+                    onChange={(val) => {
+                      setPlayerSettings({ captionPosition: val as CaptionPosition });
+                      setUpdateTS(Date.now());
+                    }}
+                    data={[
+                      { label: "Bottom", value: "bottom" },
+                      { label: "Top", value: "top" },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
           />
 
           {/* Player Quality & Audio Controls Card */}

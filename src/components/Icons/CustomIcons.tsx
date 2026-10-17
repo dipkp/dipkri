@@ -1242,3 +1242,112 @@ export const WPIconGoogle = React.forwardRef<
 });
 WPIconGoogle.displayName = "WPIconGoogle";
 
+// 59. WPIconVideo - Modern Rounded Camcorder
+export const WPIconVideo = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <rect x="2" y="5" width="13" height="14" rx="3" strokeWidth="1.8" />
+        <path
+          d="M15 10l4.5-2.7a1 1 0 0 1 1.5.86v7.68a1 1 0 0 1-1.5.86L15 14v-4z"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </WPIconBase>
+    );
+  }
+);
+WPIconVideo.displayName = "WPIconVideo";
+
+// 60. WPIconVideoOff - Camcorder with Diagonal Slash
+export const WPIconVideoOff = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <path d="M15 10l4.5-2.7a1 1 0 0 1 1.5.86v7.68a1 1 0 0 1-1.5.86L15 14" strokeWidth="1.8" />
+        <path d="M9.5 5H12a3 3 0 0 1 3 3v2.5" strokeWidth="1.8" />
+        <path d="M2 8.5V16a3 3 0 0 0 3 3h7.5" strokeWidth="1.8" />
+        <line x1="3" y1="3" x2="21" y2="21" strokeWidth="1.8" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconVideoOff.displayName = "WPIconVideoOff";
+
+// 61. WPIconMicrophone - Modern Rounded Audio Mic
+export const WPIconMicrophone = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <rect x="9" y="2" width="6" height="11" rx="3" strokeWidth="1.8" />
+        <path d="M5 10a7 7 0 0 0 14 0" strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="12" y1="17" x2="12" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="8" y1="21" x2="16" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconMicrophone.displayName = "WPIconMicrophone";
+
+// 62. WPIconMicrophoneOff - Mic with Diagonal Slash
+export const WPIconMicrophoneOff = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <line x1="3" y1="3" x2="21" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M9 5a3 3 0 0 1 5.3 1.8v1.2" strokeWidth="1.8" />
+        <path d="M9 9v2a3 3 0 0 0 4.1 2.8" strokeWidth="1.8" />
+        <path d="M5 10a7 7 0 0 0 11.7 5.2" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M19 10a7 7 0 0 1-.7 3.1" strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="12" y1="17" x2="12" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="8" y1="21" x2="16" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconMicrophoneOff.displayName = "WPIconMicrophoneOff";
+
+// 63. WPIconPin - Modern Pushpin
+export const WPIconPin = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <path
+          d="M9 4v5l-2 3v1h10v-1l-2-3V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <line x1="12" y1="13" x2="12" y2="21" strokeWidth="1.8" strokeLinecap="round" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconPin.displayName = "WPIconPin";
+
+// 64. WPIconDotsVertical - Three Stacked Indicator Dots
+export const WPIconDotsVertical = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="currentColor" stroke="none" {...props}>
+        <circle cx="12" cy="5" r="1.75" />
+        <circle cx="12" cy="12" r="1.75" />
+        <circle cx="12" cy="19" r="1.75" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconDotsVertical.displayName = "WPIconDotsVertical";
+
+// 65. WPIconBan - Prohibition Symbol
+export const WPIconBan = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => {
+    return (
+      <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+        <circle cx="12" cy="12" r="9" strokeWidth="1.8" />
+        <line x1="5.7" y1="5.7" x2="18.3" y2="18.3" strokeWidth="1.8" strokeLinecap="round" />
+      </WPIconBase>
+    );
+  }
+);
+WPIconBan.displayName = "WPIconBan";
+

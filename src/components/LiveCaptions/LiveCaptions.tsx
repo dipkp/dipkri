@@ -4,6 +4,10 @@ import styles from "./LiveCaptions.module.css";
 import {
   getPlayerSettings,
   PLAYER_SETTINGS_CHANGED_EVENT,
+  CaptionSize,
+  CaptionColor,
+  CaptionStyle,
+  CaptionPosition,
 } from "../PlayerSettings/playerSettings";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import { cleanMovieTitle } from "../Modal/SubtitleModal";
@@ -148,6 +152,18 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const [captionLanguage, setCaptionLanguage] = useState<string>(
     () => getPlayerSettings().captionLanguage || "en"
   );
+  const [captionSize, setCaptionSize] = useState<CaptionSize>(
+    () => getPlayerSettings().captionSize || "medium"
+  );
+  const [captionColor, setCaptionColor] = useState<CaptionColor>(
+    () => getPlayerSettings().captionColor || "white"
+  );
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(
+    () => getPlayerSettings().captionStyle || "shadow"
+  );
+  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
+    () => getPlayerSettings().captionPosition || "bottom"
+  );
   const [activeText, setActiveText] = useState<string>("");
   const [syncStatus, setSyncStatus] = useState<string>("");
 
@@ -197,6 +213,18 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           }
           return prev;
         });
+      }
+      if (detail && detail.captionSize !== undefined) {
+        setCaptionSize(detail.captionSize);
+      }
+      if (detail && detail.captionColor !== undefined) {
+        setCaptionColor(detail.captionColor);
+      }
+      if (detail && detail.captionStyle !== undefined) {
+        setCaptionStyle(detail.captionStyle);
+      }
+      if (detail && detail.captionPosition !== undefined) {
+        setCaptionPosition(detail.captionPosition);
       }
     };
     window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handleSettingsChange);
@@ -631,17 +659,47 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
   // 1. Render active live dialogue caption if available
   if (activeText) {
+    const sizeClass =
+      captionSize === "small"
+        ? styles.sizeSmall
+        : captionSize === "large"
+          ? styles.sizeLarge
+          : styles.sizeMedium;
+
+    const colorClass =
+      captionColor === "yellow"
+        ? styles.colorYellow
+        : captionColor === "cyan"
+          ? styles.colorCyan
+          : captionColor === "green"
+            ? styles.colorGreen
+            : styles.colorWhite;
+
+    const styleClass =
+      captionStyle === "box"
+        ? styles.styleBox
+        : captionStyle === "outline"
+          ? styles.styleOutline
+          : styles.styleShadow;
+
+    const posClass = captionPosition === "top" ? styles.positionTop : "";
+
     return (
-      <div className={styles.captionsContainer}>
-        <div className={styles.minimalSubtitle}>{activeText}</div>
+      <div className={`${styles.captionsContainer} ${posClass}`}>
+        <div
+          className={`${styles.minimalSubtitle} ${sizeClass} ${colorClass} ${styleClass}`}
+        >
+          {activeText}
+        </div>
       </div>
     );
   }
 
   // 2. Render sync status pill only when explicitly syncing without cues
   if (enabled && syncStatus && parsedCuesRef.current.length === 0) {
+    const posClass = captionPosition === "top" ? styles.positionTop : "";
     return (
-      <div className={styles.captionsContainer}>
+      <div className={`${styles.captionsContainer} ${posClass}`}>
         <div className={styles.noticePill}>{syncStatus}</div>
       </div>
     );
