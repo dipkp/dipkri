@@ -126,12 +126,9 @@ function formatProgressiveSpeech(cue: SubtitleCue, currentTime: number): string 
   const words = cue.text.split(" ").filter(Boolean);
   if (words.length <= 3) return cue.text;
 
-  // Fraction of spoken dialogue completed
   const elapsed = Math.max(0, currentTime - cue.start);
   const progress = Math.min(1, elapsed / duration);
 
-  // Progressive word reveal: always reveal at least the first 2 words immediately,
-  // then reveal remaining words as time advances
   const wordCount = Math.max(2, Math.ceil(progress * words.length));
   return words.slice(0, wordCount).join(" ");
 }
@@ -208,6 +205,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
   // Transient notice status pill (auto-expires)
   const [syncStatus, setSyncStatus] = useState<string>("");
+  const [hasLoadedCues, setHasLoadedCues] = useState<boolean>(false);
 
   const parsedCuesRef = useRef<SubtitleCue[]>([]);
   const lastCueIndexRef = useRef<number>(-1);
@@ -232,10 +230,20 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, []);
 
   // Subtitles / captions are active if either:
-  // 1. A subtitle file exists in the room (uploaded .srt/.vtt or torrent file)
-  // 2. The user has turned "Live Audio Transcribe: ON"
-  // 3. The user has turned captions mode to "showing"
-  const isFeatureActive = Boolean(enabled || roomSubtitle || isSubtitled);
+  // 1. Live Captions / Auto Caption is ON
+  // 2. A subtitle file exists in the room
+  // 3. Captions mode is set to "showing"
+  // 4. Subtitle cues have been discovered and loaded
+  const userDisabled = !enabled && !isSubtitled;
+  const isFeatureActive =
+    !userDisabled &&
+    Boolean(
+      enabled ||
+      roomSubtitle ||
+      isSubtitled ||
+      hasLoadedCues ||
+      parsedCuesRef.current.length > 0
+    );
 
   // Helper to reliably retrieve the current video element
   const getActiveVideo = useCallback((): HTMLMediaElement | null => {
@@ -303,6 +311,216 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [roomSubtitle, isSubtitled, showNotice]);
 
   // --------------------------------------------------------------------------
+  // Auto-Detect & Auto-Load Subtitles (HLS Manifest .m3u8, Torrents, OpenSubtitles)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!roomMedia || roomSubtitle) return;
+    const searchKey = `${roomMedia}__${captionLanguage}`;
+    if (autoSearchAttemptedRef.current === searchKey) return;
+    autoSearchAttemptedRef.current = searchKey;
+
+    let isDisposed = false;
+    const cleanTitle = cleanMovieTitle(roomMedia);
+
+    const autoLoadSubtitles = async () => {
+      // 1. Direct HLS (.m3u8) embedded subtitle extraction
+      if (roomMedia.includes(".m3u8")) {
+        try {
+          const fullMediaUrl = roomMedia.startsWith("http")
+            ? roomMedia
+            : typeof window !== "undefined"
+              ? new URL(roomMedia, window.location.origin).toString()
+              : roomMedia;
+
+          const masterResp = await fetch(fullMediaUrl);
+          if (masterResp.ok) {
+            const masterText = await masterResp.text();
+            if (masterText.includes("TYPE=SUBTITLES")) {
+              const subLines = masterText
+                .split("\n")
+                .filter((l) => l.includes("TYPE=SUBTITLES"));
+
+              let chosenUri: string | null = null;
+              let chosenTrackName = "Captions";
+
+              for (const line of subLines) {
+                const lower = line.toLowerCase();
+                const isMatch =
+                  (captionLanguage === "all" && (lower.includes('language="en') || lower.includes("english"))) ||
+                  (captionLanguage === "en" && (lower.includes('language="en') || lower.includes("english"))) ||
+                  (captionLanguage === "hi" && (lower.includes('language="hi') || lower.includes("hindi"))) ||
+                  (captionLanguage === "es" && (lower.includes('language="es') || lower.includes("spanish"))) ||
+                  (captionLanguage === "fr" && (lower.includes('language="fr') || lower.includes("french"))) ||
+                  (captionLanguage === "de" && (lower.includes('language="de') || lower.includes("german"))) ||
+                  (captionLanguage === "ja" && (lower.includes('language="ja') || lower.includes("japanese"))) ||
+                  (captionLanguage === "ar" && (lower.includes('language="ar') || lower.includes("arabic")));
+
+                if (isMatch) {
+                  const match = line.match(/URI="([^"]+)"/);
+                  if (match) {
+                    chosenUri = match[1];
+                    const nameMatch = line.match(/NAME="([^"]+)"/);
+                    if (nameMatch) chosenTrackName = nameMatch[1];
+                    break;
+                  }
+                }
+              }
+
+              // Fallback to default or English or first subtitle track
+              if (!chosenUri && subLines.length > 0) {
+                const defLine =
+                  subLines.find((l) => l.includes("DEFAULT=YES")) ||
+                  subLines.find((l) => l.toLowerCase().includes("english") || l.toLowerCase().includes('language="en')) ||
+                  subLines[0];
+                const match = defLine.match(/URI="([^"]+)"/);
+                if (match) {
+                  chosenUri = match[1];
+                  const nameMatch = defLine.match(/NAME="([^"]+)"/);
+                  if (nameMatch) chosenTrackName = nameMatch[1];
+                }
+              }
+
+              if (chosenUri && !isDisposed) {
+                const subPlaylistUrl = new URL(chosenUri, fullMediaUrl).toString();
+                const pResp = await fetch(subPlaylistUrl);
+                if (pResp.ok) {
+                  const pText = await pResp.text();
+                  const vttLine = pText
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .find((l) => l && !l.startsWith("#"));
+
+                  let vttUrl = subPlaylistUrl;
+                  if (vttLine) {
+                    vttUrl = new URL(vttLine, subPlaylistUrl).toString();
+                  }
+
+                  const vResp = await fetch(vttUrl);
+                  if (vResp.ok) {
+                    const vText = await vResp.text();
+                    const cues = parseSubtitleText(vText);
+                    if (cues.length > 0 && !isDisposed) {
+                      parsedCuesRef.current = cues;
+                      lastCueIndexRef.current = -1;
+                      setHasLoadedCues(true);
+                      showNotice(`Captions: ${chosenTrackName} (${cues.length} lines)`, 2500);
+                      console.log(`[LiveCaptions] Auto-loaded ${cues.length} HLS cues for ${chosenTrackName}`);
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[LiveCaptions] HLS manifest subtitle extraction note:", e);
+        }
+      }
+
+      // 2. Torrent / Magnet internal subtitle files (.srt/.vtt)
+      if (roomMedia.includes("/stream?torrent=") || roomMedia.startsWith("magnet:")) {
+        const dataUrl = roomMedia.includes("/stream?")
+          ? roomMedia.replace("/stream?", "/data?")
+          : `${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`;
+
+        for (let i = 0; i < 4; i++) {
+          if (isDisposed || parsedCuesRef.current.length > 0) return;
+          try {
+            const resp = await fetch(dataUrl);
+            if (resp.ok) {
+              const meta = await resp.json();
+              if (meta?.files && Array.isArray(meta.files)) {
+                const subFiles = meta.files.filter((f: any) =>
+                  f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
+                );
+                if (subFiles.length > 0) {
+                  let subFile = null;
+                  if (captionLanguage === "hi") {
+                    subFile = subFiles.find((f: any) => /hindi|hin|\.hi\./i.test(f.name));
+                  } else if (captionLanguage === "es") {
+                    subFile = subFiles.find((f: any) => /spanish|spa|\.es\./i.test(f.name));
+                  } else if (captionLanguage === "en" || captionLanguage === "all") {
+                    subFile = subFiles.find((f: any) => /english|eng|\.en\./i.test(f.name));
+                  }
+                  if (!subFile) {
+                    subFile = subFiles[0];
+                  }
+
+                  if (subFile) {
+                    const base = roomMedia.includes("&fileIndex=")
+                      ? roomMedia.split("&fileIndex=")[0]
+                      : roomMedia;
+                    const subUrl = `${base}&fileIndex=${subFile.index}`;
+                    const sResp = await fetch(subUrl);
+                    if (sResp.ok) {
+                      const sText = await sResp.text();
+                      const cues = parseSubtitleText(sText);
+                      if (cues.length > 0 && !isDisposed) {
+                        parsedCuesRef.current = cues;
+                        lastCueIndexRef.current = -1;
+                        setHasLoadedCues(true);
+                        showNotice(`Subtitles: ${subFile.name}`, 2500);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+              if (meta?.name) break;
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
+
+      // 3. Auto-search OpenSubtitles / Cinemeta for movies & shows
+      if (!isDisposed && parsedCuesRef.current.length === 0 && cleanTitle && cleanTitle.length > 2) {
+        try {
+          const searchResp = await fetch(
+            `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}&lang=${encodeURIComponent(captionLanguage)}`
+          );
+          if (searchResp.ok) {
+            const results = await searchResp.json();
+            if (Array.isArray(results) && results.length > 0) {
+              const bestMatch = results[0];
+              const downloadUrl = bestMatch.url || bestMatch.downloadUrl;
+              const fileId = bestMatch.file_id || bestMatch.id;
+              if (downloadUrl || fileId) {
+                const dlResp = await fetch(
+                  `${serverPath}/downloadSubtitles?downloadUrl=${encodeURIComponent(downloadUrl || "")}&file_id=${encodeURIComponent(fileId || "")}`
+                );
+                if (dlResp.ok) {
+                  const dlData = await dlResp.json();
+                  if (dlData.link) {
+                    const subResp = await fetch(dlData.link);
+                    if (subResp.ok) {
+                      const sText = await subResp.text();
+                      const cues = parseSubtitleText(sText);
+                      if (cues.length > 0 && !isDisposed) {
+                        parsedCuesRef.current = cues;
+                        lastCueIndexRef.current = -1;
+                        setHasLoadedCues(true);
+                        showNotice(`Subtitles: ${bestMatch.release || cleanTitle}`, 2500);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+    };
+
+    autoLoadSubtitles();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [roomMedia, roomSubtitle, captionLanguage, showNotice]);
+
+  // --------------------------------------------------------------------------
   // Client-Side Real-Time Browser Speech Recognition (100% Free, Zero Server CPU)
   // --------------------------------------------------------------------------
   const resetSpeechSilenceTimer = useCallback(() => {
@@ -334,7 +552,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     }
 
     if (!SpeechRecognitionClass) {
-      // Speech recognition not natively available in this browser (e.g. Firefox desktop)
       if (parsedCuesRef.current.length === 0 && !roomSubtitle) {
         showNotice("Browser speech recognition requires Chrome, Edge, Brave, or Safari", 4000);
       }
@@ -436,15 +653,20 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
     const handleAutoCaptions = (newCues: SubtitleCue[]) => {
       if (!Array.isArray(newCues) || newCues.length === 0) return;
+      let added = false;
       for (const cue of newCues) {
         const exists = parsedCuesRef.current.some(
           (c) => Math.abs(c.start - cue.start) < 0.25,
         );
         if (!exists) {
           parsedCuesRef.current.push(cue);
+          added = true;
         }
       }
-      parsedCuesRef.current.sort((a, b) => a.start - b.start);
+      if (added) {
+        parsedCuesRef.current.sort((a, b) => a.start - b.start);
+        setHasLoadedCues(true);
+      }
       setSyncStatus("");
     };
 
@@ -453,6 +675,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       lastCueIndexRef.current = -1;
       setActiveText("");
       currentRenderedTextRef.current = "";
+      setHasLoadedCues(false);
     };
 
     const handleNotice = (notice: { type: string; message: string }) => {
@@ -465,7 +688,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     socket.on("REC:clearAutoCaptions", handleClearAutoCaptions);
     socket.on("REC:autoCaptionNotice", handleNotice);
 
-    // If Live Captions is active, request server worker if available
     if (enabled && !roomSubtitle) {
       socket.emit("CMD:startAutoCaption", { lang: captionLanguage });
     }
@@ -499,6 +721,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           const cues = parseSubtitleText(text);
           if (cues.length > 0) {
             parsedCuesRef.current = cues;
+            setHasLoadedCues(true);
             setSyncStatus("");
           }
         }
@@ -515,136 +738,25 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [roomSubtitle]);
 
   // --------------------------------------------------------------------------
-  // Auto-Detect & Auto-Search Subtitles for Magnet Links & Torrent Streams
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    if (!enabled || roomSubtitle || !roomMedia) return;
-    const searchKey = `${roomMedia}__${captionLanguage}`;
-    if (autoSearchAttemptedRef.current === searchKey) return;
-    autoSearchAttemptedRef.current = searchKey;
-
-    let isDisposed = false;
-    const cleanTitle = cleanMovieTitle(roomMedia);
-
-    const autoDiscoverSubtitles = async () => {
-      // If torrent or magnet stream, check /data?torrent=... for internal subtitle files
-      if (roomMedia.includes("/stream?torrent=") || roomMedia.startsWith("magnet:")) {
-        const dataUrl = roomMedia.includes("/stream?")
-          ? roomMedia.replace("/stream?", "/data?")
-          : `${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`;
-
-        showNotice(`Syncing dialogue stream for "${cleanTitle || "Movie"}"...`, 3500);
-
-        for (let i = 0; i < 4; i++) {
-          if (isDisposed || parsedCuesRef.current.length > 0) return;
-          try {
-            const resp = await fetch(dataUrl);
-            if (resp.ok) {
-              const meta = await resp.json();
-              if (meta?.files && Array.isArray(meta.files)) {
-                const subFiles = meta.files.filter((f: any) =>
-                  f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
-                );
-                if (subFiles.length > 0) {
-                  let subFile = null;
-                  if (captionLanguage === "hi") {
-                    subFile = subFiles.find((f: any) => /hindi|hin|\.hi\./i.test(f.name));
-                  } else if (captionLanguage === "es") {
-                    subFile = subFiles.find((f: any) => /spanish|spa|\.es\./i.test(f.name));
-                  } else if (captionLanguage === "en") {
-                    subFile = subFiles.find((f: any) => /english|eng|\.en\./i.test(f.name));
-                  }
-                  if (!subFile) {
-                    subFile = subFiles[0];
-                  }
-
-                  if (subFile) {
-                    const base = roomMedia.includes("&fileIndex=")
-                      ? roomMedia.split("&fileIndex=")[0]
-                      : roomMedia;
-                    const subUrl = `${base}&fileIndex=${subFile.index}`;
-                    const sResp = await fetch(subUrl);
-                    if (sResp.ok) {
-                      const sText = await sResp.text();
-                      const cues = parseSubtitleText(sText);
-                      if (cues.length > 0 && !isDisposed) {
-                        parsedCuesRef.current = cues;
-                        setSyncStatus("");
-                        return;
-                      }
-                    }
-                  }
-                }
-              }
-              if (meta?.name) break;
-            }
-          } catch {}
-          await new Promise((r) => setTimeout(r, 1200));
-        }
-      }
-    };
-
-    autoDiscoverSubtitles();
-
-    return () => {
-      isDisposed = true;
-    };
-  }, [enabled, roomSubtitle, roomMedia, captionLanguage, showNotice]);
-
-  // --------------------------------------------------------------------------
   // Auto-Scan Native HTMLMediaElement TextTracks & HLS.js Embedded Cues
   // --------------------------------------------------------------------------
   useEffect(() => {
-    if (!isFeatureActive || isYouTube) return;
+    if (isYouTube) return;
 
     const video = getActiveVideo();
     if (!video) return;
 
-    // Attach Web Audio nodes lazily to the video source
     audioEnhancer.attachToElement(video);
 
     const scanTracks = () => {
-      if (parsedCuesRef.current.length > 0) return; // Already have active cues
-
-      // 1. Scan native HTMLMediaElement textTracks prioritizing captionLanguage
+      // 1. Ensure all video.textTracks are enabled in "hidden" mode
       if (video.textTracks && video.textTracks.length > 0) {
-        let chosenTrackIdx = -1;
-        if (captionLanguage === "hi") {
-          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
-            const t = video.textTracks[idx];
-            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
-            return l.includes("hi") || l.includes("hin");
-          });
-        } else if (captionLanguage === "es") {
-          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
-            const t = video.textTracks[idx];
-            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
-            return l.includes("es") || l.includes("spa");
-          });
-        } else if (captionLanguage === "en") {
-          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
-            const t = video.textTracks[idx];
-            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
-            return l.includes("en") || l.includes("eng");
-          });
-        }
-
-        const order =
-          chosenTrackIdx !== -1
-            ? [
-                chosenTrackIdx,
-                ...Array.from({ length: video.textTracks.length }, (_, i) => i).filter(
-                  (i) => i !== chosenTrackIdx,
-                ),
-              ]
-            : Array.from({ length: video.textTracks.length }, (_, i) => i);
-
-        for (const i of order) {
+        for (let i = 0; i < video.textTracks.length; i++) {
           const track = video.textTracks[i];
           if (track.mode === "disabled") {
             track.mode = "hidden";
           }
-          if (track.cues && track.cues.length > 0) {
+          if (track.cues && track.cues.length > 0 && parsedCuesRef.current.length === 0) {
             const nativeCues: SubtitleCue[] = [];
             for (let c = 0; c < track.cues.length; c++) {
               const cue = track.cues[c] as any;
@@ -662,6 +774,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             if (nativeCues.length > 0) {
               parsedCuesRef.current = nativeCues.sort((a, b) => a.start - b.start);
               lastCueIndexRef.current = -1;
+              setHasLoadedCues(true);
               setSyncStatus("");
               return;
             }
@@ -669,7 +782,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
       }
 
-      // 2. Scan HLS.js embedded subtitle tracks (for m3u8 streams)
+      // 2. Scan HLS.js embedded subtitle tracks
       const hls = (window as any).watchparty?.hls;
       if (hls && hls.subtitleTracks && hls.subtitleTracks.length > 0) {
         let matchingHlsTrack = -1;
@@ -706,6 +819,38 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       }
     }
 
+    // Connect to active HLS instance events
+    const hls = (window as any).watchparty?.hls;
+    if (hls) {
+      try {
+        hls.on("hlsSubtitleTracksUpdated", scanTracks);
+        hls.on("hlsSubtitleTrackLoaded", scanTracks);
+        hls.on("hlsCuesParsed", (_e: any, data: any) => {
+          if (data?.cues && Array.isArray(data.cues)) {
+            let added = false;
+            for (const cue of data.cues) {
+              const start = cue.startTime ?? cue.start;
+              const end = cue.endTime ?? cue.end;
+              const text = (cue.text || "").replace(/<[^>]*>/g, "").trim();
+              if (text && !isNaN(start) && !isNaN(end) && end > start) {
+                const exists = parsedCuesRef.current.some(
+                  (c) => Math.abs(c.start - start) < 0.25
+                );
+                if (!exists) {
+                  parsedCuesRef.current.push({ start, end, text });
+                  added = true;
+                }
+              }
+            }
+            if (added) {
+              parsedCuesRef.current.sort((a, b) => a.start - b.start);
+              setHasLoadedCues(true);
+            }
+          }
+        });
+      } catch {}
+    }
+
     return () => {
       video.removeEventListener("loadedmetadata", scanTracks);
       video.removeEventListener("canplay", scanTracks);
@@ -713,18 +858,12 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         video.textTracks.removeEventListener("addtrack", scanTracks);
       }
     };
-  }, [isFeatureActive, isYouTube, getActiveVideo, captionLanguage]);
+  }, [isYouTube, getActiveVideo, captionLanguage]);
 
   // --------------------------------------------------------------------------
   // Ultra-Low Latency Zero-Gap (~0.03s) 60fps/120fps Synchronized Subtitle Render Loop
   // --------------------------------------------------------------------------
   useEffect(() => {
-    if (!isFeatureActive) {
-      setActiveText("");
-      currentRenderedTextRef.current = "";
-      return;
-    }
-
     let isMounted = true;
 
     const renderLoop = () => {
@@ -829,7 +968,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [isFeatureActive, paused, isYouTube, getYoutubeTime, getActiveVideo]);
+  }, [paused, isYouTube, getYoutubeTime, getActiveVideo]);
 
   if (!isFeatureActive) {
     return null;

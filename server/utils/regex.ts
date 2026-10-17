@@ -27,6 +27,7 @@ export function resolveMediaUrl(rawUrl: string): string {
   if (
     trimmed.startsWith("magnet:") ||
     trimmed.startsWith("/stream?") ||
+    trimmed.startsWith("/stream-proxy?") ||
     trimmed.includes("youtube.com") ||
     trimmed.includes("youtu.be")
   ) {
@@ -36,6 +37,13 @@ export function resolveMediaUrl(rawUrl: string): string {
   // Check for embedded target stream URL in query parameters
   try {
     const parsed = new URL(trimmed);
+    const headersParam =
+      parsed.searchParams.get("headers") || parsed.searchParams.get("header");
+    const refererParam =
+      parsed.searchParams.get("referer") || parsed.searchParams.get("Referer");
+    const originParam =
+      parsed.searchParams.get("origin") || parsed.searchParams.get("Origin");
+
     const candidateKeys = [
       "url",
       "src",
@@ -58,6 +66,22 @@ export function resolveMediaUrl(rawUrl: string): string {
           candidate = candidate.replace(/&amp;/g, "&");
         }
         if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+          // If custom headers exist or if it came from a proxy like valhallastream:
+          // Wrap with our server's /stream-proxy so CORS and Referer/Origin headers succeed!
+          if (
+            headersParam ||
+            refererParam ||
+            originParam ||
+            trimmed.includes("valhallastream") ||
+            trimmed.includes("/m3u8?url=")
+          ) {
+            const proxyParams = new URLSearchParams();
+            proxyParams.set("url", candidate);
+            if (headersParam) proxyParams.set("headers", headersParam);
+            if (refererParam) proxyParams.set("referer", refererParam);
+            if (originParam) proxyParams.set("origin", originParam);
+            return `/stream-proxy?${proxyParams.toString()}`;
+          }
           return candidate;
         }
       }

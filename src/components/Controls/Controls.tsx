@@ -1090,13 +1090,19 @@ export const Controls = (props: ControlsProps) => {
                 ) : (
                   <>
                     <Menu.Item
-                      onClick={() => props.localSetSubtitleMode("hidden")}
+                      onClick={() => {
+                        props.localSetSubtitleMode("hidden");
+                        setPlayerSettings({ liveCaptions: false });
+                      }}
                       rightSection={!subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
                     >
                       Captions: Off
                     </Menu.Item>
                     <Menu.Item
-                      onClick={() => props.localSetSubtitleMode("showing")}
+                      onClick={() => {
+                        props.localSetSubtitleMode("showing");
+                        setPlayerSettings({ liveCaptions: true });
+                      }}
                       rightSection={subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
                     >
                       Captions: On {props.roomSubtitle ? "(Room File)" : "(Track)"}
@@ -1428,14 +1434,20 @@ export const Controls = (props: ControlsProps) => {
                           <button
                             type="button"
                             className={`${styles.settingsPill} ${!props.subtitled ? styles.settingsPillActive : ""}`}
-                            onClick={() => props.localSetSubtitleMode("hidden")}
+                            onClick={() => {
+                              props.localSetSubtitleMode("hidden");
+                              setPlayerSettings({ liveCaptions: false });
+                            }}
                           >
                             Off
                           </button>
                           <button
                             type="button"
                             className={`${styles.settingsPill} ${props.subtitled ? styles.settingsPillActive : ""}`}
-                            onClick={() => props.localSetSubtitleMode("showing")}
+                            onClick={() => {
+                              props.localSetSubtitleMode("showing");
+                              setPlayerSettings({ liveCaptions: true });
+                            }}
                           >
                             On {props.roomSubtitle ? "(Room File)" : ""}
                           </button>

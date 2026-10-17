@@ -25,7 +25,7 @@ export interface PlayerSettingsState {
 export const PLAYER_SETTINGS_CHANGED_EVENT = "dipkri-player-settings-changed";
 
 export const getPlayerSettings = (): PlayerSettingsState => {
-  let liveCaptions = false;
+  let liveCaptions = true;
   let captionLanguage = "en";
   let captionSize: CaptionSize = "medium";
   let captionColor: CaptionColor = "white";
@@ -45,7 +45,9 @@ export const getPlayerSettings = (): PlayerSettingsState => {
         liveCaptions = Boolean(local.liveCaptions);
       } else {
         const savedLC = localStorage.getItem("dipkri-live-captions");
-        if (savedLC === "true") liveCaptions = true;
+        if (savedLC !== null) {
+          liveCaptions = savedLC === "true";
+        }
       }
 
       const savedLang = localStorage.getItem("dipkri-caption-language");

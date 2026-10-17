@@ -2593,7 +2593,13 @@ export class App extends React.Component<AppProps, AppState> {
         localSubtitleModal={this.localSubtitleModal}
         localSetVolume={this.localSetVolume}
         localSeek={this.localSeek}
-        localSetSubtitleMode={this.Player().setSubtitleMode}
+        localSetSubtitleMode={(
+          mode?: TextTrackMode,
+          trackIndexOrLang?: number | string,
+        ) => {
+          this.Player().setSubtitleMode(mode, trackIndexOrLang);
+          this.setState({ controlsTimestamp: Date.now() });
+        }}
         roomPlaylistPlay={this.roomPlaylistPlay}
         playlist={this.state.playlist}
         chat={this.state.chat}
@@ -2762,6 +2768,7 @@ export class App extends React.Component<AppProps, AppState> {
               maxHeight: isMobileLayout ? "100%" : VIDEO_MAX_HEIGHT_CSS,
             }}
             id="leftVideo"
+            crossOrigin="anonymous"
             onPlay={(e) => {
               this.setLoadingFalse();
               this.setState({ nonPlayableMedia: false });

@@ -128,10 +128,13 @@ export class HTML implements Player {
     return this.getVideoEl()?.volume ?? 1;
   };
 
+  private subtitleMode: TextTrackMode = "showing";
+
   setSubtitleMode = (
     mode?: TextTrackMode,
     trackIndexOrLang?: number | string,
   ) => {
+    this.subtitleMode = mode || "hidden";
     const video = this.getVideoEl();
     if (!video || !video.textTracks) return;
     const tracks = video.textTracks;
@@ -145,8 +148,13 @@ export class HTML implements Player {
     }
   };
 
-  getSubtitleMode = () => {
-    return this.getVideoEl()?.textTracks[0]?.mode ?? "hidden";
+  getSubtitleMode = (): TextTrackMode => {
+    const video = this.getVideoEl();
+    if (video && video.textTracks && video.textTracks.length > 0) {
+      const active = Array.from(video.textTracks).some((t) => t.mode === "showing");
+      if (active) return "showing";
+    }
+    return this.subtitleMode;
   };
 
   isReady = () => {
