@@ -1,9 +1,12 @@
+import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 
-try {
-  loadEnvFile();
-} catch (e) {
-  console.log(e);
+// Only load .env if the file exists on disk (local development).
+// In production (Render, Docker, etc.), environment variables are passed directly via process.env.
+if (existsSync(".env")) {
+  try {
+    loadEnvFile();
+  } catch {}
 }
 
 const defaults = {
