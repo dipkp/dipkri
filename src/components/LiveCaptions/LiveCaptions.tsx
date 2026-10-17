@@ -136,6 +136,40 @@ function formatProgressiveSpeech(cue: SubtitleCue, currentTime: number): string 
   return words.slice(0, wordCount).join(" ");
 }
 
+/**
+ * Map user captionLanguage setting to standard BCP-47 SpeechRecognition language tag.
+ */
+function getSpeechLangCode(lang: string): string {
+  switch (lang) {
+    case "hi":
+      return "hi-IN";
+    case "es":
+      return "es-ES";
+    case "fr":
+      return "fr-FR";
+    case "de":
+      return "de-DE";
+    case "ja":
+      return "ja-JP";
+    case "ko":
+      return "ko-KR";
+    case "zh":
+      return "zh-CN";
+    case "ar":
+      return "ar-SA";
+    case "pt":
+      return "pt-BR";
+    case "ru":
+      return "ru-RU";
+    case "it":
+      return "it-IT";
+    case "all":
+    case "en":
+    default:
+      return "en-US";
+  }
+}
+
 export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   paused = false,
   videoEl,
@@ -164,7 +198,15 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
     () => getPlayerSettings().captionPosition || "bottom"
   );
+
+  // Subtitle cue text rendered from .srt/.vtt or server cues
   const [activeText, setActiveText] = useState<string>("");
+
+  // Live real-time speech recognized directly in client browser
+  const [speechTranscript, setSpeechTranscript] = useState<string>("");
+  const [interimSpeech, setInterimSpeech] = useState<string>("");
+
+  // Transient notice status pill (auto-expires)
   const [syncStatus, setSyncStatus] = useState<string>("");
 
   const parsedCuesRef = useRef<SubtitleCue[]>([]);
@@ -172,6 +214,22 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const currentRenderedTextRef = useRef<string>("");
   const animFrameRef = useRef<number | null>(null);
   const autoSearchAttemptedRef = useRef<string>("");
+  const noticeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Client-side speech recognition references
+  const recognitionRef = useRef<any>(null);
+  const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasErrorRef = useRef<boolean>(false);
+
+  // Show notice helper that auto-clears after given milliseconds
+  const showNotice = useCallback((msg: string, durationMs: number = 3000) => {
+    setSyncStatus(msg);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => {
+      setSyncStatus("");
+    }, durationMs);
+  }, []);
 
   // Subtitles / captions are active if either:
   // 1. A subtitle file exists in the room (uploaded .srt/.vtt or torrent file)
@@ -188,17 +246,22 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return null;
   }, [videoEl]);
 
-  // Sync with global player settings events (toggling live captions on/off, changing language)
+  // Sync with global player settings events (toggling live captions on/off, changing language, styling)
   useEffect(() => {
     const handleSettingsChange = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && detail.liveCaptions !== undefined) {
         setEnabled(detail.liveCaptions);
+        hasErrorRef.current = false;
         if (!detail.liveCaptions && !roomSubtitle && !isSubtitled) {
           setActiveText("");
+          setSpeechTranscript("");
+          setInterimSpeech("");
           setSyncStatus("");
           currentRenderedTextRef.current = "";
           lastCueIndexRef.current = -1;
+        } else if (detail.liveCaptions) {
+          showNotice("Live Captions: Active", 2500);
         }
       }
       if (detail && detail.captionLanguage !== undefined) {
@@ -208,7 +271,10 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             lastCueIndexRef.current = -1;
             autoSearchAttemptedRef.current = "";
             setActiveText("");
+            setSpeechTranscript("");
+            setInterimSpeech("");
             currentRenderedTextRef.current = "";
+            hasErrorRef.current = false;
             return detail.captionLanguage;
           }
           return prev;
@@ -234,10 +300,136 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         handleSettingsChange
       );
     };
-  }, [roomSubtitle, isSubtitled]);
+  }, [roomSubtitle, isSubtitled, showNotice]);
 
   // --------------------------------------------------------------------------
-  // Socket-backed Lookahead Auto-Caption Worker (Single Room Worker & In-Memory Cache)
+  // Client-Side Real-Time Browser Speech Recognition (100% Free, Zero Server CPU)
+  // --------------------------------------------------------------------------
+  const resetSpeechSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    silenceTimerRef.current = setTimeout(() => {
+      setSpeechTranscript("");
+      setInterimSpeech("");
+    }, 3200);
+  }, []);
+
+  useEffect(() => {
+    const SpeechRecognitionClass =
+      typeof window !== "undefined"
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (!enabled || paused) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      return;
+    }
+
+    if (!SpeechRecognitionClass) {
+      // Speech recognition not natively available in this browser (e.g. Firefox desktop)
+      if (parsedCuesRef.current.length === 0 && !roomSubtitle) {
+        showNotice("Browser speech recognition requires Chrome, Edge, Brave, or Safari", 4000);
+      }
+      return;
+    }
+
+    let isDisposed = false;
+    let recognition: any = null;
+
+    try {
+      recognition = new SpeechRecognitionClass();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = getSpeechLangCode(captionLanguage);
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event: any) => {
+        if (isDisposed) return;
+        let currentInterim = "";
+        let finalChunk = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            finalChunk += res[0].transcript;
+          } else {
+            currentInterim += res[0].transcript;
+          }
+        }
+
+        if (finalChunk.trim()) {
+          setSpeechTranscript((prev) => {
+            const combined = `${prev} ${finalChunk.trim()}`.trim();
+            const words = combined.split(" ");
+            // Keep clean 1-2 line subtitle length (latest 8 to 10 words)
+            if (words.length > 10) {
+              return words.slice(-8).join(" ");
+            }
+            return combined;
+          });
+        }
+
+        setInterimSpeech(currentInterim.trim());
+        resetSpeechSilenceTimer();
+      };
+
+      recognition.onerror = (event: any) => {
+        if (isDisposed) return;
+        const err = event.error;
+        if (err === "no-speech" || err === "aborted") {
+          return;
+        }
+        if (err === "not-allowed" || err === "service-not-allowed") {
+          hasErrorRef.current = true;
+        }
+      };
+
+      recognition.onend = () => {
+        if (isDisposed) return;
+        if (hasErrorRef.current) return;
+
+        // Clean automatic restart when still playing
+        if (enabled && !paused) {
+          if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = setTimeout(() => {
+            if (!isDisposed && enabled && !paused && !hasErrorRef.current) {
+              try {
+                recognition.start();
+              } catch {}
+            }
+          }, 300);
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch {
+      hasErrorRef.current = true;
+    }
+
+    return () => {
+      isDisposed = true;
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (recognition) {
+        try {
+          recognition.abort();
+        } catch {}
+      }
+      recognitionRef.current = null;
+    };
+  }, [enabled, paused, captionLanguage, resetSpeechSilenceTimer, showNotice, roomSubtitle]);
+
+  // --------------------------------------------------------------------------
+  // Socket-backed Lookahead Auto-Caption Worker (Server Groq Worker & Cache)
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!socket) return;
@@ -265,8 +457,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
     const handleNotice = (notice: { type: string; message: string }) => {
       if (notice?.message) {
-        setSyncStatus(notice.message);
-        setTimeout(() => setSyncStatus(""), 4500);
+        showNotice(notice.message, 4000);
       }
     };
 
@@ -274,10 +465,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     socket.on("REC:clearAutoCaptions", handleClearAutoCaptions);
     socket.on("REC:autoCaptionNotice", handleNotice);
 
-    // If Live Captions is active, join the single room transcriber worker
+    // If Live Captions is active, request server worker if available
     if (enabled && !roomSubtitle) {
       socket.emit("CMD:startAutoCaption", { lang: captionLanguage });
-      setSyncStatus("Connecting Live Transcribe stream...");
     }
 
     return () => {
@@ -286,7 +476,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       socket.off("REC:autoCaptionNotice", handleNotice);
       socket.emit("CMD:stopAutoCaption");
     };
-  }, [socket, enabled, roomSubtitle, captionLanguage]);
+  }, [socket, enabled, roomSubtitle, captionLanguage, showNotice]);
 
   // --------------------------------------------------------------------------
   // Ingest Subtitles (.srt / .vtt) from roomSubtitle (e.g. Uploaded Subtitle)
@@ -325,7 +515,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [roomSubtitle]);
 
   // --------------------------------------------------------------------------
-  // Auto-Detect & Auto-Search Subtitles for Magnet Links, Torrent Streams & m3u8
+  // Auto-Detect & Auto-Search Subtitles for Magnet Links & Torrent Streams
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!enabled || roomSubtitle || !roomMedia) return;
@@ -337,13 +527,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     const cleanTitle = cleanMovieTitle(roomMedia);
 
     const autoDiscoverSubtitles = async () => {
-      // 1. If torrent or magnet stream, check /data?torrent=... for internal subtitle files
+      // If torrent or magnet stream, check /data?torrent=... for internal subtitle files
       if (roomMedia.includes("/stream?torrent=") || roomMedia.startsWith("magnet:")) {
         const dataUrl = roomMedia.includes("/stream?")
           ? roomMedia.replace("/stream?", "/data?")
           : `${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`;
 
-        setSyncStatus(`Syncing dialogue stream for "${cleanTitle || "Movie"}"...`);
+        showNotice(`Syncing dialogue stream for "${cleanTitle || "Movie"}"...`, 3500);
 
         for (let i = 0; i < 4; i++) {
           if (isDisposed || parsedCuesRef.current.length > 0) return;
@@ -392,13 +582,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           await new Promise((r) => setTimeout(r, 1200));
         }
       }
-
-      // Clear sync status notice after 2.5s
-      setTimeout(() => {
-        if (!isDisposed && parsedCuesRef.current.length === 0) {
-          setSyncStatus("");
-        }
-      }, 2500);
     };
 
     autoDiscoverSubtitles();
@@ -406,7 +589,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return () => {
       isDisposed = true;
     };
-  }, [enabled, roomSubtitle, roomMedia, captionLanguage]);
+  }, [enabled, roomSubtitle, roomMedia, captionLanguage, showNotice]);
 
   // --------------------------------------------------------------------------
   // Auto-Scan Native HTMLMediaElement TextTracks & HLS.js Embedded Cues
@@ -417,7 +600,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     const video = getActiveVideo();
     if (!video) return;
 
-    // Attach Web Audio nodes and voice activity analyzer to the video source
+    // Attach Web Audio nodes lazily to the video source
     audioEnhancer.attachToElement(video);
 
     const scanTracks = () => {
@@ -516,7 +699,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     video.addEventListener("loadedmetadata", scanTracks);
     video.addEventListener("canplay", scanTracks);
 
-    // Dynamic track detection when cues finish downloading over HLS or video stream
     if (video.textTracks) {
       video.textTracks.addEventListener("addtrack", scanTracks);
       for (let i = 0; i < video.textTracks.length; i++) {
@@ -534,7 +716,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [isFeatureActive, isYouTube, getActiveVideo, captionLanguage]);
 
   // --------------------------------------------------------------------------
-  // Ultra-Low Latency Zero-Gap (~0.03s) 60fps/120fps Synchronized Render Loop
+  // Ultra-Low Latency Zero-Gap (~0.03s) 60fps/120fps Synchronized Subtitle Render Loop
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!isFeatureActive) {
@@ -549,7 +731,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       if (!isMounted) return;
 
       if (!paused) {
-        // 1. Retrieve exact microsecond timestamp from YouTube or HTML5 Video
         let currentTime = 0;
         if (isYouTube && getYoutubeTime) {
           try {
@@ -564,14 +745,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           }
         }
 
-        // 2. High-precision 30ms (0.030s) acoustic onset lead compensation.
+        // High-precision 30ms (0.030s) acoustic onset lead compensation
         const syncTime = currentTime + 0.030;
 
         let matchedText = "";
         const cues = parsedCuesRef.current;
 
         if (cues.length > 0) {
-          // O(1) Sequential Cache Lookup:
           const lastIdx = lastCueIndexRef.current;
           let activeIdx = -1;
 
@@ -590,7 +770,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             activeIdx = lastIdx + 1;
             lastCueIndexRef.current = activeIdx;
           } else {
-            // Binary search in O(log N) on seeks, jumps, or scene cuts
             activeIdx = binarySearchCue(cues, syncTime);
             if (activeIdx !== -1) {
               lastCueIndexRef.current = activeIdx;
@@ -603,7 +782,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           }
         }
 
-        // 3. Fallback: Secondary check on active textTracks from native video
+        // Secondary check on active textTracks from native video
         if (!matchedText && !isYouTube) {
           const video = getActiveVideo();
           if (video && video.textTracks && video.textTracks.length > 0) {
@@ -633,7 +812,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           }
         }
 
-        // 4. Update state only on change to avoid unnecessary React re-renders
         if (matchedText !== currentRenderedTextRef.current) {
           currentRenderedTextRef.current = matchedText;
           setActiveText(matchedText);
@@ -657,47 +835,53 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return null;
   }
 
-  // 1. Render active live dialogue caption if available
-  if (activeText) {
-    const sizeClass =
-      captionSize === "small"
-        ? styles.sizeSmall
-        : captionSize === "large"
-          ? styles.sizeLarge
-          : styles.sizeMedium;
+  // Precedence: Subtitle cue text > Client speech transcript & interim speech
+  const speechText = speechTranscript
+    ? `${speechTranscript} ${interimSpeech}`.trim()
+    : interimSpeech;
 
-    const colorClass =
-      captionColor === "yellow"
-        ? styles.colorYellow
-        : captionColor === "cyan"
-          ? styles.colorCyan
-          : captionColor === "green"
-            ? styles.colorGreen
-            : styles.colorWhite;
+  const currentDisplaySubtitle = activeText || speechText;
 
-    const styleClass =
-      captionStyle === "box"
-        ? styles.styleBox
-        : captionStyle === "outline"
-          ? styles.styleOutline
-          : styles.styleShadow;
+  const sizeClass =
+    captionSize === "small"
+      ? styles.sizeSmall
+      : captionSize === "large"
+        ? styles.sizeLarge
+        : styles.sizeMedium;
 
-    const posClass = captionPosition === "top" ? styles.positionTop : "";
+  const colorClass =
+    captionColor === "yellow"
+      ? styles.colorYellow
+      : captionColor === "cyan"
+        ? styles.colorCyan
+        : captionColor === "green"
+          ? styles.colorGreen
+          : styles.colorWhite;
 
+  const styleClass =
+    captionStyle === "box"
+      ? styles.styleBox
+      : captionStyle === "outline"
+        ? styles.styleOutline
+        : styles.styleShadow;
+
+  const posClass = captionPosition === "top" ? styles.positionTop : "";
+
+  // 1. Render active live dialogue caption or recognized speech
+  if (currentDisplaySubtitle) {
     return (
       <div className={`${styles.captionsContainer} ${posClass}`}>
         <div
           className={`${styles.minimalSubtitle} ${sizeClass} ${colorClass} ${styleClass}`}
         >
-          {activeText}
+          {currentDisplaySubtitle}
         </div>
       </div>
     );
   }
 
-  // 2. Render sync status pill only when explicitly syncing without cues
-  if (enabled && syncStatus && parsedCuesRef.current.length === 0) {
-    const posClass = captionPosition === "top" ? styles.positionTop : "";
+  // 2. Render sync status notice pill only when present
+  if (enabled && syncStatus && !currentDisplaySubtitle) {
     return (
       <div className={`${styles.captionsContainer} ${posClass}`}>
         <div className={styles.noticePill}>{syncStatus}</div>

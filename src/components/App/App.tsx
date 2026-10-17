@@ -853,7 +853,10 @@ export class App extends React.Component<AppProps, AppState> {
                       if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
                         leftVideo.src = src;
                       } else {
-                        this.setState({ loading: false, nonPlayableMedia: true });
+                        if (leftVideo) {
+                          leftVideo.src = src;
+                        }
+                        this.setLoadingFalse();
                       }
                       break;
                   }
@@ -2757,6 +2760,15 @@ export class App extends React.Component<AppProps, AppState> {
               maxHeight: isMobileLayout ? "100%" : VIDEO_MAX_HEIGHT_CSS,
             }}
             id="leftVideo"
+            onPlay={(e) => {
+              this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
+              audioEnhancer.attachToElement(e.currentTarget);
+              const s = getPlayerSettings();
+              if (s.audioBoost) {
+                audioEnhancer.setBoost(s.audioBoost);
+              }
+            }}
             onCanPlay={() => {
               this.setLoadingFalse();
               this.setState({ nonPlayableMedia: false });
@@ -2764,17 +2776,6 @@ export class App extends React.Component<AppProps, AppState> {
             onPlaying={() => {
               this.setLoadingFalse();
               this.setState({ nonPlayableMedia: false });
-            }}
-            onError={(e) => {
-              const err = e.currentTarget.error;
-              console.warn("leftVideo error event:", err?.code, err?.message);
-              if (
-                err &&
-                (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
-                  err.code === MediaError.MEDIA_ERR_DECODE)
-              ) {
-                this.setState({ loading: false, nonPlayableMedia: true });
-              }
             }}
             onEnded={(e) => this.onVideoEnded(e.currentTarget.src)}
             playsInline
