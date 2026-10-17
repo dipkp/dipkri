@@ -20,6 +20,7 @@ export interface LiveCaptionsProps {
   isYouTube?: boolean;
   roomSubtitle?: string;
   roomMedia?: string;
+  isSubtitled?: boolean;
   getYoutubeTime?: () => number;
 }
 
@@ -43,14 +44,17 @@ function parseTimestamp(timeStr: string): number {
 }
 
 /**
- * High-speed in-memory parser for both .srt and .vtt subtitle formats.
- * Works seamlessly across YouTube, Torrents, direct MP4, MKV, HLS, and mobile.
+ * Robust in-memory parser for both .srt and .vtt subtitle formats.
+ * Handles UTF-8 BOM, Windows/Unix line breaks, formatting tags, and entity codes.
  */
 export function parseSubtitleText(content: string): SubtitleCue[] {
   const cues: SubtitleCue[] = [];
   if (!content) return cues;
-  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const blocks = normalized.split(/\n\n+/);
+
+  // Strip Byte Order Mark (BOM) if present
+  const cleanedContent = content.replace(/^\uFEFF/, "");
+  const normalized = cleanedContent.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const blocks = normalized.split(/\n\s*\n+/);
 
   for (const block of blocks) {
     const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -68,6 +72,11 @@ export function parseSubtitleText(content: string): SubtitleCue[] {
       .replace(/<[^>]*>/g, "")
       .replace(/\{[^}]*\}/g, "")
       .replace(/&lrm;|&rlm;/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
       .trim();
 
     if (text && !isNaN(start) && !isNaN(end) && end > start) {
@@ -127,6 +136,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   isYouTube = false,
   roomSubtitle,
   roomMedia,
+  isSubtitled = false,
   getYoutubeTime,
 }) => {
   const [enabled, setEnabled] = useState<boolean>(
@@ -140,6 +150,12 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const currentRenderedTextRef = useRef<string>("");
   const animFrameRef = useRef<number | null>(null);
   const autoSearchAttemptedRef = useRef<string>("");
+
+  // Subtitles / captions are active if either:
+  // 1. A subtitle file exists in the room (uploaded .srt/.vtt or torrent file)
+  // 2. The user has turned "Live Audio Transcribe: ON"
+  // 3. The user has turned captions mode to "showing"
+  const isFeatureActive = Boolean(enabled || roomSubtitle || isSubtitled);
 
   // Helper to reliably retrieve the current video element
   const getActiveVideo = useCallback((): HTMLMediaElement | null => {
@@ -156,7 +172,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       const detail = (e as CustomEvent).detail;
       if (detail && detail.liveCaptions !== undefined) {
         setEnabled(detail.liveCaptions);
-        if (!detail.liveCaptions) {
+        if (!detail.liveCaptions && !roomSubtitle && !isSubtitled) {
           setActiveText("");
           setSyncStatus("");
           currentRenderedTextRef.current = "";
@@ -171,10 +187,10 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         handleSettingsChange
       );
     };
-  }, []);
+  }, [roomSubtitle, isSubtitled]);
 
   // --------------------------------------------------------------------------
-  // Ingest Subtitles (.srt / .vtt) from roomSubtitle into memory
+  // Ingest Subtitles (.srt / .vtt) from roomSubtitle (e.g. Uploaded Subtitle)
   // --------------------------------------------------------------------------
   useEffect(() => {
     let isCancelled = false;
@@ -184,8 +200,6 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     if (!roomSubtitle) {
       return;
     }
-
-    setSyncStatus("Loading subtitle cues...");
 
     const loadSubtitlesData = async () => {
       try {
@@ -229,7 +243,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           ? roomMedia.replace("/stream?", "/data?")
           : `${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`;
 
-        setSyncStatus(`Syncing torrent audio & dialogue (${cleanTitle || "Movie"})...`);
+        setSyncStatus(`Syncing dialogue stream for "${cleanTitle || "Movie"}"...`);
 
         for (let i = 0; i < 4; i++) {
           if (isDisposed || parsedCuesRef.current.length > 0) return;
@@ -308,12 +322,12 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
       }
 
-      // Hide sync status after 4.5s if no cues found
+      // Clear sync status notice after 4s
       setTimeout(() => {
         if (!isDisposed && parsedCuesRef.current.length === 0) {
           setSyncStatus("");
         }
-      }, 4500);
+      }, 4000);
     };
 
     autoDiscoverSubtitles();
@@ -327,7 +341,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   // Auto-Scan Native HTMLMediaElement TextTracks & HLS.js Embedded Cues
   // --------------------------------------------------------------------------
   useEffect(() => {
-    if (!enabled || isYouTube) return;
+    if (!isFeatureActive || isYouTube) return;
 
     const video = getActiveVideo();
     if (!video) return;
@@ -398,13 +412,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         video.textTracks.removeEventListener("addtrack", scanTracks);
       }
     };
-  }, [enabled, isYouTube, getActiveVideo]);
+  }, [isFeatureActive, isYouTube, getActiveVideo]);
 
   // --------------------------------------------------------------------------
   // Ultra-Low Latency Zero-Gap (~0.03s) 60fps/120fps Synchronized Render Loop
   // --------------------------------------------------------------------------
   useEffect(() => {
-    if (!enabled) {
+    if (!isFeatureActive) {
       setActiveText("");
       currentRenderedTextRef.current = "";
       return;
@@ -518,9 +532,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [enabled, paused, isYouTube, getYoutubeTime, getActiveVideo]);
+  }, [isFeatureActive, paused, isYouTube, getYoutubeTime, getActiveVideo]);
 
-  if (!enabled) {
+  if (!isFeatureActive) {
     return null;
   }
 
@@ -533,8 +547,8 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     );
   }
 
-  // 2. Render sync status pill while acquiring or searching dialogue cues
-  if (syncStatus) {
+  // 2. Render sync status pill only when explicitly syncing without cues
+  if (enabled && syncStatus && parsedCuesRef.current.length === 0) {
     return (
       <div className={styles.captionsContainer}>
         <div className={styles.noticePill}>{syncStatus}</div>

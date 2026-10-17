@@ -1523,7 +1523,7 @@ export const Controls = (props: ControlsProps) => {
                       <div className={styles.settingsSubtitleStyleBox}>
                         <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>
                         <div className={styles.settingsSubtitlePreviewPill}>
-                          100% Transparent • White Shadowed Borders
+                          Pure White Text • Translucent Dark Backing
                         </div>
                       </div>
                     </div>
