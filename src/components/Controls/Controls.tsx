@@ -1519,6 +1519,32 @@ export const Controls = (props: ControlsProps) => {
                         </div>
                       </div>
 
+                      {/* Auto-Caption Language Selector */}
+                      <div className={styles.settingsGroup}>
+                        <div className={styles.settingsHeaderRow}>
+                          <span className={styles.settingsGroupTitle}>Auto-Caption Language</span>
+                          <span className={styles.settingsBadge}>{(playerSettingsState.captionLanguage || "en").toUpperCase()}</span>
+                        </div>
+                        <div className={styles.settingsPillsRow}>
+                          {[
+                            { code: "en", label: "English" },
+                            { code: "hi", label: "हिन्दी (Hindi)" },
+                            { code: "es", label: "Español" },
+                            { code: "all", label: "All / Auto" },
+                          ].map((l) => (
+                            <button
+                              key={l.code}
+                              type="button"
+                              className={`${styles.settingsPill} ${(playerSettingsState.captionLanguage || "en") === l.code ? styles.settingsPillActive : ""}`}
+                              onClick={() => setPlayerSettings({ captionLanguage: l.code })}
+                            >
+                              {(playerSettingsState.captionLanguage || "en") === l.code && "✓ "}
+                              {l.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Subtitle Style Notice */}
                       <div className={styles.settingsSubtitleStyleBox}>
                         <div className={styles.settingsSubtitleStyleLabel}>Subtitle Display Appearance:</div>

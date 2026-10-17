@@ -142,6 +142,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const [enabled, setEnabled] = useState<boolean>(
     () => getPlayerSettings().liveCaptions
   );
+  const [captionLanguage, setCaptionLanguage] = useState<string>(
+    () => getPlayerSettings().captionLanguage || "en"
+  );
   const [activeText, setActiveText] = useState<string>("");
   const [syncStatus, setSyncStatus] = useState<string>("");
 
@@ -166,7 +169,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return null;
   }, [videoEl]);
 
-  // Sync with global player settings events (toggling live captions on/off)
+  // Sync with global player settings events (toggling live captions on/off, changing language)
   useEffect(() => {
     const handleSettingsChange = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -178,6 +181,19 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           currentRenderedTextRef.current = "";
           lastCueIndexRef.current = -1;
         }
+      }
+      if (detail && detail.captionLanguage !== undefined) {
+        setCaptionLanguage((prev) => {
+          if (prev !== detail.captionLanguage) {
+            parsedCuesRef.current = [];
+            lastCueIndexRef.current = -1;
+            autoSearchAttemptedRef.current = "";
+            setActiveText("");
+            currentRenderedTextRef.current = "";
+            return detail.captionLanguage;
+          }
+          return prev;
+        });
       }
     };
     window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handleSettingsChange);
@@ -230,8 +246,9 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!enabled || roomSubtitle || !roomMedia) return;
-    if (autoSearchAttemptedRef.current === roomMedia) return;
-    autoSearchAttemptedRef.current = roomMedia;
+    const searchKey = `${roomMedia}__${captionLanguage}`;
+    if (autoSearchAttemptedRef.current === searchKey) return;
+    autoSearchAttemptedRef.current = searchKey;
 
     let isDisposed = false;
     const cleanTitle = cleanMovieTitle(roomMedia);
@@ -252,22 +269,36 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             if (resp.ok) {
               const meta = await resp.json();
               if (meta?.files && Array.isArray(meta.files)) {
-                const subFile = meta.files.find((f: any) =>
+                const subFiles = meta.files.filter((f: any) =>
                   f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
                 );
-                if (subFile) {
-                  const base = roomMedia.includes("&fileIndex=")
-                    ? roomMedia.split("&fileIndex=")[0]
-                    : roomMedia;
-                  const subUrl = `${base}&fileIndex=${subFile.index}`;
-                  const sResp = await fetch(subUrl);
-                  if (sResp.ok) {
-                    const sText = await sResp.text();
-                    const cues = parseSubtitleText(sText);
-                    if (cues.length > 0 && !isDisposed) {
-                      parsedCuesRef.current = cues;
-                      setSyncStatus("");
-                      return;
+                if (subFiles.length > 0) {
+                  let subFile = null;
+                  if (captionLanguage === "hi") {
+                    subFile = subFiles.find((f: any) => /hindi|hin|\.hi\./i.test(f.name));
+                  } else if (captionLanguage === "es") {
+                    subFile = subFiles.find((f: any) => /spanish|spa|\.es\./i.test(f.name));
+                  } else if (captionLanguage === "en") {
+                    subFile = subFiles.find((f: any) => /english|eng|\.en\./i.test(f.name));
+                  }
+                  if (!subFile) {
+                    subFile = subFiles[0];
+                  }
+
+                  if (subFile) {
+                    const base = roomMedia.includes("&fileIndex=")
+                      ? roomMedia.split("&fileIndex=")[0]
+                      : roomMedia;
+                    const subUrl = `${base}&fileIndex=${subFile.index}`;
+                    const sResp = await fetch(subUrl);
+                    if (sResp.ok) {
+                      const sText = await sResp.text();
+                      const cues = parseSubtitleText(sText);
+                      if (cues.length > 0 && !isDisposed) {
+                        parsedCuesRef.current = cues;
+                        setSyncStatus("");
+                        return;
+                      }
                     }
                   }
                 }
@@ -279,19 +310,52 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
       }
 
-      // 2. Search OpenSubtitles / Stremio API for matching dialogue track
+      // 2. Search OpenSubtitles / Stremio API for matching dialogue track in requested language
       if (cleanTitle && cleanTitle.length > 2 && parsedCuesRef.current.length === 0) {
-        setSyncStatus(`Auto-syncing dialogue stream for "${cleanTitle}"...`);
+        const langDisplay =
+          captionLanguage === "hi"
+            ? "Hindi"
+            : captionLanguage === "es"
+            ? "Spanish"
+            : "English";
+        setSyncStatus(`Auto-syncing ${langDisplay} dialogue stream for "${cleanTitle}"...`);
         try {
+          const langParam =
+            captionLanguage && captionLanguage !== "all"
+              ? `&lang=${encodeURIComponent(captionLanguage)}`
+              : "";
           const sResp = await fetch(
-            `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}`
+            `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}${langParam}`
           );
           if (sResp.ok) {
             const list = await sResp.json();
             if (Array.isArray(list) && list.length > 0) {
-              const topSub = list.find(
-                (r: any) => (r.attributes?.language || "").toUpperCase() === "EN"
-              ) || list[0];
+              let topSub = null;
+              if (captionLanguage === "hi") {
+                topSub = list.find((r: any) => {
+                  const l = (r.attributes?.language || "").toUpperCase();
+                  return l === "HI" || l === "HIN" || l === "HINDI";
+                });
+              } else if (captionLanguage === "es") {
+                topSub = list.find((r: any) => {
+                  const l = (r.attributes?.language || "").toUpperCase();
+                  return l === "ES" || l === "SPA" || l === "SPANISH";
+                });
+              } else if (captionLanguage === "en") {
+                topSub = list.find((r: any) => {
+                  const l = (r.attributes?.language || "").toUpperCase();
+                  return l === "EN" || l === "ENG" || l === "ENGLISH";
+                });
+              }
+              if (!topSub) {
+                // Fallback to English, then first available
+                topSub =
+                  list.find((r: any) => {
+                    const l = (r.attributes?.language || "").toUpperCase();
+                    return l === "EN" || l === "ENG" || l === "ENGLISH";
+                  }) || list[0];
+              }
+
               if (topSub) {
                 const fileId = topSub.attributes?.files?.[0]?.file_id;
                 const dlUrl = topSub.attributes?.downloadUrl || "";
@@ -335,7 +399,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     return () => {
       isDisposed = true;
     };
-  }, [enabled, roomSubtitle, roomMedia]);
+  }, [enabled, roomSubtitle, roomMedia, captionLanguage]);
 
   // --------------------------------------------------------------------------
   // Auto-Scan Native HTMLMediaElement TextTracks & HLS.js Embedded Cues
@@ -352,9 +416,40 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     const scanTracks = () => {
       if (parsedCuesRef.current.length > 0) return; // Already have active cues
 
-      // 1. Scan native HTMLMediaElement textTracks
+      // 1. Scan native HTMLMediaElement textTracks prioritizing captionLanguage
       if (video.textTracks && video.textTracks.length > 0) {
-        for (let i = 0; i < video.textTracks.length; i++) {
+        let chosenTrackIdx = -1;
+        if (captionLanguage === "hi") {
+          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
+            const t = video.textTracks[idx];
+            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
+            return l.includes("hi") || l.includes("hin");
+          });
+        } else if (captionLanguage === "es") {
+          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
+            const t = video.textTracks[idx];
+            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
+            return l.includes("es") || l.includes("spa");
+          });
+        } else if (captionLanguage === "en") {
+          chosenTrackIdx = Array.from({ length: video.textTracks.length }).findIndex((_, idx) => {
+            const t = video.textTracks[idx];
+            const l = ((t.language || "") + " " + (t.label || "")).toLowerCase();
+            return l.includes("en") || l.includes("eng");
+          });
+        }
+
+        const order =
+          chosenTrackIdx !== -1
+            ? [
+                chosenTrackIdx,
+                ...Array.from({ length: video.textTracks.length }, (_, i) => i).filter(
+                  (i) => i !== chosenTrackIdx,
+                ),
+              ]
+            : Array.from({ length: video.textTracks.length }, (_, i) => i);
+
+        for (const i of order) {
           const track = video.textTracks[i];
           if (track.mode === "disabled") {
             track.mode = "hidden";
@@ -387,7 +482,24 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       // 2. Scan HLS.js embedded subtitle tracks (for m3u8 streams)
       const hls = (window as any).watchparty?.hls;
       if (hls && hls.subtitleTracks && hls.subtitleTracks.length > 0) {
-        if (hls.subtitleTrack === -1) {
+        let matchingHlsTrack = -1;
+        if (captionLanguage === "hi") {
+          matchingHlsTrack = hls.subtitleTracks.findIndex((t: any) =>
+            (t.lang || t.name || "").toLowerCase().includes("hi")
+          );
+        } else if (captionLanguage === "es") {
+          matchingHlsTrack = hls.subtitleTracks.findIndex((t: any) =>
+            (t.lang || t.name || "").toLowerCase().includes("es") ||
+            (t.lang || t.name || "").toLowerCase().includes("spa")
+          );
+        } else if (captionLanguage === "en") {
+          matchingHlsTrack = hls.subtitleTracks.findIndex((t: any) =>
+            (t.lang || t.name || "").toLowerCase().includes("en")
+          );
+        }
+        if (matchingHlsTrack !== -1) {
+          hls.subtitleTrack = matchingHlsTrack;
+        } else if (hls.subtitleTrack === -1) {
           hls.subtitleTrack = 0;
         }
       }
@@ -412,7 +524,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         video.textTracks.removeEventListener("addtrack", scanTracks);
       }
     };
-  }, [isFeatureActive, isYouTube, getActiveVideo]);
+  }, [isFeatureActive, isYouTube, getActiveVideo, captionLanguage]);
 
   // --------------------------------------------------------------------------
   // Ultra-Low Latency Zero-Gap (~0.03s) 60fps/120fps Synchronized Render Loop

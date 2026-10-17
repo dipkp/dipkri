@@ -237,6 +237,8 @@ app.get("/searchSubtitles", async (req, res) => {
   try {
     const title = req.query.title ? String(req.query.title).trim() : "";
     const url = req.query.url ? String(req.query.url).trim() : "";
+    const reqLang = req.query.lang ? String(req.query.lang).trim() : "en";
+    const subLangs = reqLang === "all" ? "en,hi,es" : reqLang === "hi" ? "hi,en" : reqLang;
 
     // 1. Try official OpenSubtitles API if key configured
     if (config.OPENSUBTITLES_KEY) {
@@ -261,9 +263,9 @@ app.get("/searchSubtitles", async (req, res) => {
           });
           const end = endResp.data;
           let hash = computeOpenSubtitlesHash(start, end, size);
-          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?moviehash=${hash}&languages=en`;
+          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?moviehash=${hash}&languages=${encodeURIComponent(subLangs)}`;
         } else if (title) {
-          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=en`;
+          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=${encodeURIComponent(subLangs)}`;
         }
         if (subUrl) {
           const response = await axios.get(subUrl, {
@@ -313,7 +315,23 @@ app.get("/searchSubtitles", async (req, res) => {
           );
           const list = subsResp.data?.subtitles || [];
           if (Array.isArray(list) && list.length > 0) {
-            const mapped = list.slice(0, 35).map((sub: any) => ({
+            const sortedList = [...list].sort((a: any, b: any) => {
+              if (reqLang === "all") return 0;
+              const aLang = (a.lang || "").toLowerCase();
+              const bLang = (b.lang || "").toLowerCase();
+              const isMatch = (l: string) => {
+                if (reqLang === "hi") return l === "hin" || l === "hi";
+                if (reqLang === "es") return l === "spa" || l === "es";
+                if (reqLang === "en") return l === "eng" || l === "en";
+                return l === reqLang.toLowerCase();
+              };
+              const matchA = isMatch(aLang);
+              const matchB = isMatch(bLang);
+              if (matchA && !matchB) return -1;
+              if (!matchA && matchB) return 1;
+              return 0;
+            });
+            const mapped = sortedList.slice(0, 35).map((sub: any) => ({
               id: String(sub.id),
               type: "subtitle",
               attributes: {

@@ -5,6 +5,7 @@ export type DualAudioMode = "stereo" | "left" | "right";
 
 export interface PlayerSettingsState {
   liveCaptions: boolean;
+  captionLanguage: string; // "en" | "hi" | "es" | "all"
   quality: string; // "auto" | "1080p" | "720p" | "480p" | "360p"
   audioTrack: number; // 0, 1, 2...
   audioBoost: number; // 100, 150, 200, 300 (%)
@@ -17,6 +18,7 @@ export const PLAYER_SETTINGS_CHANGED_EVENT = "dipkri-player-settings-changed";
 
 export const getPlayerSettings = (): PlayerSettingsState => {
   let liveCaptions = false;
+  let captionLanguage = "en";
   let quality = "auto";
   let audioTrack = 0;
   let audioBoost = 100;
@@ -33,6 +35,9 @@ export const getPlayerSettings = (): PlayerSettingsState => {
         const savedLC = localStorage.getItem("dipkri-live-captions");
         if (savedLC === "true") liveCaptions = true;
       }
+
+      const savedLang = localStorage.getItem("dipkri-caption-language");
+      if (savedLang) captionLanguage = savedLang;
 
       if (local.playbackQuality) {
         quality = local.playbackQuality;
@@ -68,7 +73,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
     } catch {}
   }
 
-  return { liveCaptions, quality, audioTrack, audioBoost, dualAudioMode, audioMode, showStatsOverlay };
+  return { liveCaptions, captionLanguage, quality, audioTrack, audioBoost, dualAudioMode, audioMode, showStatsOverlay };
 };
 
 export const setPlayerSettings = (
@@ -84,6 +89,9 @@ export const setPlayerSettings = (
       }
       if (partial.liveCaptions !== undefined) {
         localStorage.setItem("dipkri-live-captions", String(partial.liveCaptions));
+      }
+      if (partial.captionLanguage !== undefined) {
+        localStorage.setItem("dipkri-caption-language", partial.captionLanguage);
       }
       if (partial.quality !== undefined) {
         localStorage.setItem("dipkri-playback-quality", partial.quality);
@@ -107,6 +115,7 @@ export const setPlayerSettings = (
         JSON.stringify({
           ...local,
           liveCaptions: next.liveCaptions,
+          captionLanguage: next.captionLanguage,
           playbackQuality: next.quality,
           audioBoost: next.audioBoost,
           audioMode: next.audioMode,
