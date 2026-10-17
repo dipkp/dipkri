@@ -310,88 +310,12 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }
       }
 
-      // 2. Search OpenSubtitles / Stremio API for matching dialogue track in requested language
-      if (cleanTitle && cleanTitle.length > 2 && parsedCuesRef.current.length === 0) {
-        const langDisplay =
-          captionLanguage === "hi"
-            ? "Hindi"
-            : captionLanguage === "es"
-            ? "Spanish"
-            : "English";
-        setSyncStatus(`Auto-syncing ${langDisplay} dialogue stream for "${cleanTitle}"...`);
-        try {
-          const langParam =
-            captionLanguage && captionLanguage !== "all"
-              ? `&lang=${encodeURIComponent(captionLanguage)}`
-              : "";
-          const sResp = await fetch(
-            `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}${langParam}`
-          );
-          if (sResp.ok) {
-            const list = await sResp.json();
-            if (Array.isArray(list) && list.length > 0) {
-              let topSub = null;
-              if (captionLanguage === "hi") {
-                topSub = list.find((r: any) => {
-                  const l = (r.attributes?.language || "").toUpperCase();
-                  return l === "HI" || l === "HIN" || l === "HINDI";
-                });
-              } else if (captionLanguage === "es") {
-                topSub = list.find((r: any) => {
-                  const l = (r.attributes?.language || "").toUpperCase();
-                  return l === "ES" || l === "SPA" || l === "SPANISH";
-                });
-              } else if (captionLanguage === "en") {
-                topSub = list.find((r: any) => {
-                  const l = (r.attributes?.language || "").toUpperCase();
-                  return l === "EN" || l === "ENG" || l === "ENGLISH";
-                });
-              }
-              if (!topSub) {
-                // Fallback to English, then first available
-                topSub =
-                  list.find((r: any) => {
-                    const l = (r.attributes?.language || "").toUpperCase();
-                    return l === "EN" || l === "ENG" || l === "ENGLISH";
-                  }) || list[0];
-              }
-
-              if (topSub) {
-                const fileId = topSub.attributes?.files?.[0]?.file_id;
-                const dlUrl = topSub.attributes?.downloadUrl || "";
-                const q = new URLSearchParams();
-                if (dlUrl) q.set("downloadUrl", dlUrl);
-                if (fileId) q.set("file_id", fileId);
-                const dResp = await fetch(`${serverPath}/downloadSubtitles?${q.toString()}`);
-                if (dResp.ok) {
-                  const dJson = await dResp.json();
-                  if (dJson?.link) {
-                    const subFileResp = await fetch(`${serverPath}${dJson.link}`);
-                    if (subFileResp.ok) {
-                      const sText = await subFileResp.text();
-                      const cues = parseSubtitleText(sText);
-                      if (cues.length > 0 && !isDisposed) {
-                        parsedCuesRef.current = cues;
-                        setSyncStatus("");
-                        return;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.warn("[LiveCaptions] Auto-search notice:", err);
-        }
-      }
-
-      // Clear sync status notice after 4s
+      // Clear sync status notice after 2.5s
       setTimeout(() => {
         if (!isDisposed && parsedCuesRef.current.length === 0) {
           setSyncStatus("");
         }
-      }, 4000);
+      }, 2500);
     };
 
     autoDiscoverSubtitles();
