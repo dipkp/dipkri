@@ -40,7 +40,14 @@ export class RoomTranscriber {
       this.cachedCues = [];
       this.lastSliceEnd = 0;
       this.io.of(this.roomId).emit("REC:clearAutoCaptions");
-      if (this.activeUsers.size > 0 && !this.isRoomPaused()) {
+      if (
+        this.activeUsers.size > 0 &&
+        !this.isRoomPaused() &&
+        !url.startsWith("magnet:") &&
+        !url.includes("/stream?torrent=") &&
+        !url.includes("youtube.com") &&
+        !url.includes("youtu.be")
+      ) {
         this.triggerLookahead();
       }
     }
@@ -53,7 +60,14 @@ export class RoomTranscriber {
       this.cachedCues = [];
       this.lastSliceEnd = 0;
       this.io.of(this.roomId).emit("REC:clearAutoCaptions");
-      if (this.activeUsers.size > 0 && !this.isRoomPaused()) {
+      if (
+        this.activeUsers.size > 0 &&
+        !this.isRoomPaused() &&
+        !this.videoUrl.startsWith("magnet:") &&
+        !this.videoUrl.includes("/stream?torrent=") &&
+        !this.videoUrl.includes("youtube.com") &&
+        !this.videoUrl.includes("youtu.be")
+      ) {
         this.triggerLookahead();
       }
     }
@@ -99,6 +113,16 @@ export class RoomTranscriber {
       clearTimeout(this.seekDebounceTimer);
     }
 
+    if (
+      !this.videoUrl ||
+      this.videoUrl.startsWith("magnet:") ||
+      this.videoUrl.includes("/stream?torrent=") ||
+      this.videoUrl.includes("youtube.com") ||
+      this.videoUrl.includes("youtu.be")
+    ) {
+      return;
+    }
+
     // 1. Check if the newly sought timestamp is already inside our in-memory cache
     const hasCachedCoverage = this.cachedCues.some(
       (c) => c.start >= newTS && c.start <= newTS + 25,
@@ -133,7 +157,18 @@ export class RoomTranscriber {
   }
 
   private triggerLookahead() {
-    if (this.isProcessing || !this.videoUrl || this.isRoomPaused()) return;
+    if (
+      this.isProcessing ||
+      !this.videoUrl ||
+      this.isRoomPaused() ||
+      this.activeUsers.size === 0 ||
+      this.videoUrl.startsWith("magnet:") ||
+      this.videoUrl.includes("/stream?torrent=") ||
+      this.videoUrl.includes("youtube.com") ||
+      this.videoUrl.includes("youtu.be")
+    ) {
+      return;
+    }
     const currentTS = Math.max(0, this.getRoomVideoTS());
     // If we have already sliced ahead of current time + 25s, wait for playback to advance
     if (this.lastSliceEnd > currentTS + 25) {
@@ -144,16 +179,22 @@ export class RoomTranscriber {
   }
 
   private async fetchLookaheadSlice(startSec: number) {
-    if (this.isProcessing || !this.videoUrl) return;
+    if (
+      this.isProcessing ||
+      !this.videoUrl ||
+      this.activeUsers.size === 0 ||
+      this.videoUrl.startsWith("magnet:") ||
+      this.videoUrl.includes("/stream?torrent=") ||
+      this.videoUrl.includes("youtube.com") ||
+      this.videoUrl.includes("youtu.be")
+    ) {
+      return;
+    }
     this.isProcessing = true;
 
     try {
       const apiKey = config.GROQ_API_KEY || process.env.GROQ_API_KEY;
       if (!apiKey) {
-        this.io.of(this.roomId).emit("REC:autoCaptionNotice", {
-          type: "warning",
-          message: "Groq API key not configured. Add GROQ_API_KEY to server environment.",
-        });
         return;
       }
 

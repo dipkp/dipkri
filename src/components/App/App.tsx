@@ -699,17 +699,14 @@ export class App extends React.Component<AppProps, AppState> {
             this.setState({ roomSubtitle: data.subtitle });
             this.Player().loadSubtitles(data.subtitle);
           } else if (currentMedia && !data.subtitle) {
-            // Auto-detect and attach subtitles for Torrents, Magnet Links, HLS m3u8, and Direct Video Streams
-            const detectAndAttachSubtitles = async () => {
+            // Auto-detect and attach embedded subtitle files for torrent streams if present
+            const detectTorrentSubtitles = async () => {
               if (this.state.roomSubtitle) return;
-
-              // 1. If it's a torrent or magnet stream, check for embedded .srt / .vtt files with retry
               if (currentMedia.includes("/stream?torrent=") || currentMedia.startsWith("magnet:")) {
                 const dataUrl = currentMedia.includes("/stream?")
                   ? currentMedia.replace("/stream?", "/data?")
                   : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
 
-                // Retry fetching metadata up to 5 times (torrent peers take a few seconds to connect)
                 for (let attempt = 0; attempt < 5; attempt++) {
                   if (this.state.roomSubtitle) return;
                   try {
@@ -730,49 +727,14 @@ export class App extends React.Component<AppProps, AppState> {
                           return;
                         }
                       }
-                      if (meta?.name) {
-                        break;
-                      }
+                      if (meta?.name) break;
                     }
                   } catch {}
                   await new Promise((r) => setTimeout(r, 1200));
                 }
               }
-
-              // 2. Auto-search OpenSubtitles using cleaned movie/series title from URL, magnet dn, or path
-              const cleanTitle = cleanMovieTitle(currentMedia);
-              if (cleanTitle && cleanTitle.length > 2 && !this.state.roomSubtitle) {
-                try {
-                  const sResp = await fetch(
-                    `${serverPath}/searchSubtitles?title=${encodeURIComponent(cleanTitle)}`
-                  );
-                  const sJson = await sResp.json();
-                  if (Array.isArray(sJson) && sJson.length > 0) {
-                    const topSub = sJson.find(
-                      (r: any) => (r.attributes?.language || "").toUpperCase() === "EN"
-                    ) || sJson[0];
-                    if (topSub) {
-                      const fileId = topSub.attributes?.files?.[0]?.file_id;
-                      const dlUrl = topSub.attributes?.downloadUrl || "";
-                      const q = new URLSearchParams();
-                      if (dlUrl) q.set("downloadUrl", dlUrl);
-                      if (fileId) q.set("file_id", fileId);
-                      const dResp = await fetch(`${serverPath}/downloadSubtitles?${q.toString()}`);
-                      const dJson = await dResp.json();
-                      if (dJson?.link) {
-                        const finalSubUrl = `${serverPath}${dJson.link}`;
-                        this.setState({ roomSubtitle: finalSubUrl });
-                        this.Player().loadSubtitles(finalSubUrl);
-                      }
-                    }
-                  }
-                } catch (err) {
-                  console.warn("[AutoSub] Lookup error:", err);
-                }
-              }
             };
-
-            detectAndAttachSubtitles();
+            detectTorrentSubtitles();
           }
           if (data.playbackRate) {
             this.Player().setPlaybackRate(data.playbackRate);
@@ -826,54 +788,103 @@ export class App extends React.Component<AppProps, AppState> {
               } catch {}
             }
           }
-          if (isMagnet(src)) {
+
+          // Clean up any lingering Hls/Dash instances from previous stream
+          if (window.watchparty?.hls) {
+            try {
+              window.watchparty.hls.destroy();
+            } catch {}
+            window.watchparty.hls = undefined;
+          }
+          if (window.watchparty?.dash) {
+            try {
+              window.watchparty.dash.destroy();
+            } catch {}
+            window.watchparty.dash = undefined;
+          }
+
+          if (isMagnet(src) || src.includes("/stream?torrent=")) {
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
-            const streamUrl = `/stream?torrent=${encodeURIComponent(src)}`;
+            const streamUrl = isMagnet(src)
+              ? `/stream?torrent=${encodeURIComponent(src)}`
+              : src;
             await this.Player().setSrcAndTime(streamUrl, time);
           } else if (isDash(src)) {
-            if (!window.watchparty.dash) {
-              const Dash = await import("dashjs");
-              window.watchparty.dash = Dash.MediaPlayer().create();
-              window.watchparty.dash.on("streamInitialized", (_e: any) => {
-                // for a live stream:
-                // html.currenttime is time since stream start
-                // html.duration is infinite
-                // player.duration is the seekable range
-                const isLiveStream = this.Player().getDuration() >= Infinity;
-                console.log("DASH stream initialized: isLive %s", isLiveStream);
-                this.setState({
-                  isLiveStream,
-                });
+            const Dash = await import("dashjs");
+            window.watchparty.dash = Dash.MediaPlayer().create();
+            window.watchparty.dash.on("streamInitialized", (_e: any) => {
+              const isLiveStream = this.Player().getDuration() >= Infinity;
+              console.log("DASH stream initialized: isLive %s", isLiveStream);
+              this.setState({
+                isLiveStream,
               });
-            }
+            });
             window.watchparty.dash.initialize(leftVideo, src);
           } else if (isHls(src) && window.MediaSource) {
             // Prefer using hls.js if MediaSource Extensions are supported
-            // otherwise fallback to native HLS support using video tag (i.e. iPhones)
-            if (!window.watchparty.hls) {
-              const Hls = (await import("hls.js")).default;
-              window.watchparty.hls = new Hls();
-              window.watchparty.hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
-                const isLiveStream = data.details.live;
+            const Hls = (await import("hls.js")).default;
+            if (Hls.isSupported()) {
+              if (leftVideo) {
+                leftVideo.removeAttribute("src");
+                leftVideo.src = "";
+                leftVideo.load();
+              }
+              const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+              });
+              window.watchparty.hls = hls;
+
+              hls.on(Hls.Events.ERROR, (_e: any, hlsData: any) => {
+                if (hlsData.fatal) {
+                  switch (hlsData.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                      console.warn("[HLS] Network error, recovering...", hlsData);
+                      hls.startLoad();
+                      break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                      console.warn("[HLS] Media error, recovering...", hlsData);
+                      hls.recoverMediaError();
+                      break;
+                    default:
+                      console.warn("[HLS] Fatal error, destroying instance:", hlsData);
+                      hls.destroy();
+                      window.watchparty.hls = undefined;
+                      if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
+                        leftVideo.src = src;
+                      } else {
+                        this.setState({ loading: false, nonPlayableMedia: true });
+                      }
+                      break;
+                  }
+                }
+              });
+
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                this.setLoadingFalse();
+                this.setState({ nonPlayableMedia: false });
+                if (time > 0 && leftVideo) {
+                  try {
+                    leftVideo.currentTime = time;
+                  } catch {}
+                }
+                if (!data.paused) {
+                  this.localPlay();
+                }
+              });
+
+              hls.on(Hls.Events.LEVEL_LOADED, (_, lvlData: any) => {
+                const isLiveStream = lvlData?.details?.live;
                 this.setState({ isLiveStream });
                 console.log("HLS level loaded: isLive %s", isLiveStream);
               });
+
+              hls.loadSource(src);
+              hls.attachMedia(leftVideo);
+            } else if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
+              await this.Player().setSrcAndTime(src, time);
             }
-            window.watchparty.hls.loadSource(src);
-            window.watchparty.hls.attachMedia(leftVideo);
-          }
-          // else if (isMpegTs(src)) {
-          //   const mpegts = (await import('mpegts.js')).default;
-          //   let player = mpegts.createPlayer({
-          //     type: 'mse', // could also be mpegts, m2ts, flv
-          //     // isLive: true,
-          //     url: src,
-          //   });
-          //   player.attachMediaElement(leftVideo);
-          //   player.load();
-          //   player.play();
-          // }
-          else if (
+          } else if (
             this.state.convertEnabled &&
             isClientTranscodeSupported() &&
             isDirectVideoUrl(src)
@@ -882,22 +893,14 @@ export class App extends React.Component<AppProps, AppState> {
           } else {
             await this.Player().setSrcAndTime(src, time);
           }
-          // Start this video
-          if (!data.paused) {
-            this.localPlay();
-          }
-          // Do right before playing
+
+          // Listen for canplay to safely finalize time and playback state
           leftVideo?.addEventListener(
             "canplay",
             () => {
               this.setLoadingFalse();
-              if (leftVideo) {
-                audioEnhancer.attachToElement(leftVideo);
-                const currentSettings = getPlayerSettings();
-                if (currentSettings.audioBoost) {
-                  audioEnhancer.setBoost(currentSettings.audioBoost);
-                }
-              }
+              this.setState({ nonPlayableMedia: false });
+
               // Restore playback position on refresh or load
               let ts = typeof time === "number" && time > 0 ? time : undefined;
               if (ts === undefined) {
@@ -914,9 +917,10 @@ export class App extends React.Component<AppProps, AppState> {
                 this.localSeek(ts);
               }
               if (data.playbackRate) {
-                // Set playback rate again since it might have been lost
-                console.log("setting playback rate again", data.playbackRate);
                 this.Player().setPlaybackRate(data.playbackRate);
+              }
+              if (!data.paused && leftVideo.paused) {
+                this.localPlay();
               }
             },
             { once: true },
@@ -2180,9 +2184,13 @@ export class App extends React.Component<AppProps, AppState> {
         try {
           await this.Player().playVideo();
         } catch (e: any) {
-          console.warn(e, e.name);
-          if (e.name === "NotSupportedError" && this.usingNative()) {
-            this.setState({ loading: false, nonPlayableMedia: true });
+          console.warn("playVideo notice:", e?.name, e?.message);
+          if (e?.name === "NotAllowedError") {
+            // Autoplay with sound was blocked by browser policy; mute and retry playback
+            this.localSetMute(true);
+            try {
+              await this.Player().playVideo();
+            } catch {}
           }
         }
       },
@@ -2749,11 +2757,23 @@ export class App extends React.Component<AppProps, AppState> {
               maxHeight: isMobileLayout ? "100%" : VIDEO_MAX_HEIGHT_CSS,
             }}
             id="leftVideo"
-            onPlay={(e) => {
-              audioEnhancer.attachToElement(e.currentTarget);
-              const s = getPlayerSettings();
-              if (s.audioBoost) {
-                audioEnhancer.setBoost(s.audioBoost);
+            onCanPlay={() => {
+              this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
+            }}
+            onPlaying={() => {
+              this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
+            }}
+            onError={(e) => {
+              const err = e.currentTarget.error;
+              console.warn("leftVideo error event:", err?.code, err?.message);
+              if (
+                err &&
+                (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+                  err.code === MediaError.MEDIA_ERR_DECODE)
+              ) {
+                this.setState({ loading: false, nonPlayableMedia: true });
               }
             }}
             onEnded={(e) => this.onVideoEnded(e.currentTarget.src)}

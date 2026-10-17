@@ -40,7 +40,13 @@ export class HTML implements Player {
   setSrcAndTime = async (src: string, time: number) => {
     const leftVideo = this.getVideoEl();
     if (leftVideo) {
-      if (leftVideo.src !== src && leftVideo.currentSrc !== src) {
+      let absoluteSrc = src;
+      if (typeof window !== "undefined" && src) {
+        try {
+          absoluteSrc = new URL(src, window.location.href).href;
+        } catch {}
+      }
+      if (leftVideo.src !== absoluteSrc && leftVideo.currentSrc !== absoluteSrc) {
         leftVideo.src = src;
       }
       if (typeof time === "number" && time > 0) {
@@ -153,7 +159,24 @@ export class HTML implements Player {
       return;
     }
 
+    // Clean up any active MSE streaming engines first
+    if (typeof window !== "undefined" && (window as any).watchparty) {
+      if ((window as any).watchparty.hls) {
+        try {
+          (window as any).watchparty.hls.destroy();
+        } catch {}
+        (window as any).watchparty.hls = undefined;
+      }
+      if ((window as any).watchparty.dash) {
+        try {
+          (window as any).watchparty.dash.destroy();
+        } catch {}
+        (window as any).watchparty.dash = undefined;
+      }
+    }
+
     // Clear src and srcObject
+    leftVideo.removeAttribute("src");
     leftVideo.src = "";
     leftVideo.srcObject = null;
 

@@ -117,10 +117,25 @@ class AudioEnhancerManager {
   private streamDest: MediaStreamAudioDestinationNode | null = null;
 
   /**
-   * Safely attach Web Audio nodes to the HTML video element once
+   * Safely attach Web Audio nodes to the HTML video element when custom audio processing is needed.
+   * If volume is normal 100% and mode is standard stereo, we avoid intercepting native audio
+   * so cross-origin media (m3u8, CDN streams) never suffers from browser CORS restrictions.
    */
-  public attachToElement(element: HTMLMediaElement) {
-    if (!element || this.currentVideoEl === element) {
+  public attachToElement(element: HTMLMediaElement, force?: boolean) {
+    if (!element) {
+      return;
+    }
+
+    const s = getPlayerSettings();
+    const needsBoost = (s.audioBoost && s.audioBoost > 100) || this.currentBoost > 100;
+    const needsDualAudio = s.dualAudioMode && s.dualAudioMode !== "stereo";
+
+    if (!force && !needsBoost && !needsDualAudio) {
+      // Normal playback: let native audio play cleanly without CORS taint
+      return;
+    }
+
+    if (this.currentVideoEl === element && this.sourceNode) {
       return;
     }
 
@@ -136,7 +151,7 @@ class AudioEnhancerManager {
       // Resume context on user gesture if suspended
       if (this.ctx.state === "suspended") {
         const resumeCtx = () => {
-          this.ctx?.resume();
+          this.ctx?.resume().catch(() => {});
           window.removeEventListener("click", resumeCtx);
           window.removeEventListener("keydown", resumeCtx);
         };
@@ -162,7 +177,7 @@ class AudioEnhancerManager {
         this.sourceNode.connect(this.splitterNode);
 
         // Apply saved or default dual audio routing
-        this.currentDualAudioMode = getPlayerSettings().dualAudioMode || "stereo";
+        this.currentDualAudioMode = s.dualAudioMode || "stereo";
         this.applyRouting(this.currentDualAudioMode);
 
         // Connect merger -> gain -> destination
@@ -172,7 +187,7 @@ class AudioEnhancerManager {
 
       this.currentVideoEl = element;
     } catch (err) {
-      console.warn("AudioEnhancer attach notice:", err);
+      console.warn("AudioEnhancer safe attach notice:", err);
     }
   }
 
@@ -243,8 +258,19 @@ class AudioEnhancerManager {
   /**
    * Set volume gain boost (100 = 1.0x, 150 = 1.5x, 200 = 2.0x, 300 = 3.0x)
    */
-  public setBoost(percentage: number) {
+  public setBoost(percentage: number, videoEl?: HTMLMediaElement) {
     this.currentBoost = percentage;
+    const targetEl =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
+    if (percentage > 100 && targetEl && !this.sourceNode) {
+      this.attachToElement(targetEl, true);
+    }
+
     const gainValue = Math.max(0.1, percentage / 100);
 
     if (this.ctx && this.ctx.state === "suspended") {
@@ -267,8 +293,18 @@ class AudioEnhancerManager {
   /**
    * Set Dual Audio Channel Mode (Stereo, Left Channel / Audio 1, Right Channel / Audio 2)
    */
-  public setDualAudioMode(mode: DualAudioMode) {
+  public setDualAudioMode(mode: DualAudioMode, videoEl?: HTMLMediaElement) {
     this.currentDualAudioMode = mode;
+    const targetEl =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
+    if (mode !== "stereo" && targetEl && !this.sourceNode) {
+      this.attachToElement(targetEl, true);
+    }
     this.applyRouting(mode);
   }
 
