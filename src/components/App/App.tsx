@@ -131,6 +131,7 @@ interface AppProps {
 interface AppState {
   state: "starting" | "connected";
   roomMedia: string;
+  detectedMediaName?: string;
   roomVideoTS?: number;
   roomSubtitle: string;
   roomPaused: boolean;
@@ -206,6 +207,7 @@ interface AppState {
   desktopSidebarTab?: "chat" | "people" | "playlist" | "settings";
   audioBoost: number;
   copiedLink: boolean;
+  quickQueueUrl: string;
 }
 
 const checkIsMobileDevice = () => {
@@ -245,6 +247,7 @@ export class App extends React.Component<AppProps, AppState> {
     isTyping: false,
     desktopSidebarTab: "chat",
     roomMedia: "",
+    detectedMediaName: "",
     roomVideoTS: 0,
     roomPaused: false,
     roomSubtitle: "",
@@ -253,6 +256,7 @@ export class App extends React.Component<AppProps, AppState> {
     rosterUpdateTS: Date.now(),
     chat: [],
     playlist: [],
+    quickQueueUrl: "",
     tsMap: {},
     nameMap: {},
     pictureMap: {},
@@ -336,6 +340,7 @@ export class App extends React.Component<AppProps, AppState> {
   consumerConn?: RTCPeerConnection;
   progressUpdater?: number;
   heartbeat: number | undefined = undefined;
+  tsInterval: number | undefined = undefined;
   YouTubeInterface: YouTube = new YouTube(null);
   HTMLInterface: HTML = new HTML("leftVideo");
   Player = () => {
@@ -366,6 +371,36 @@ export class App extends React.Component<AppProps, AppState> {
       sessionStorage.setItem(`wp_playback_${cleanRoomId}`, payload);
       localStorage.setItem(`wp_playback_${cleanRoomId}`, payload);
       localStorage.setItem("wp_last_room", cleanRoomId);
+
+      let mediaTitle = this.state.roomTitle || "";
+      if (!mediaTitle && media) {
+        if (media.startsWith("magnet:")) {
+          const dnMatch = media.match(/[?&]dn=([^&]+)/);
+          if (dnMatch) {
+            mediaTitle = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+          }
+        } else if (media.includes("youtube.com") || media.includes("youtu.be")) {
+          mediaTitle = "YouTube Video";
+        } else {
+          try {
+            const urlObj = new URL(media);
+            const pathParts = urlObj.pathname.split("/").filter(Boolean);
+            if (pathParts.length > 0) {
+              mediaTitle = decodeURIComponent(pathParts[pathParts.length - 1]);
+            }
+          } catch {}
+        }
+      }
+
+      const activeParty = {
+        roomId: cleanRoomId,
+        roomTitle: this.state.roomTitle || undefined,
+        mediaTitle: mediaTitle || undefined,
+        savedTime: Math.floor(time || 0),
+        paused: Boolean(paused),
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem("wp_active_party", JSON.stringify(activeParty));
     } catch {}
   };
 
@@ -391,11 +426,11 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   handleBeforeUnload = () => {
-    if (this.state.roomMedia && this.roomId) {
+    if (this.state.roomMedia && this.state.roomId) {
       const curTime = this.Player().getCurrentTime();
       if (curTime > 0) {
         this.savePlaybackTime(
-          this.roomId,
+          this.state.roomId,
           this.state.roomMedia,
           curTime,
           this.state.roomPaused,
@@ -490,8 +525,10 @@ export class App extends React.Component<AppProps, AppState> {
     window.removeEventListener("beforeunload", this.handleBeforeUnload);
     window.removeEventListener("pagehide", this.handleBeforeUnload);
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
-    document.removeEventListener("fullscreenchange", this.onFullScreenChange);
-    document.removeEventListener("keydown", this.onKeydown);
+    // Assigned as document properties in componentDidMount, so
+    // removeEventListener() never removed them (they kept firing after unmount).
+    document.onfullscreenchange = null;
+    document.onkeydown = null;
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("orientationchange", this.handleResize);
     if (typeof window !== "undefined") {
@@ -502,6 +539,7 @@ export class App extends React.Component<AppProps, AppState> {
       window.removeEventListener("scroll", this.onWindowScroll);
     }
     window.clearInterval(this.heartbeat);
+    window.clearInterval(this.tsInterval);
   }
 
   handleResize = () => {
@@ -530,6 +568,12 @@ export class App extends React.Component<AppProps, AppState> {
       }
       roomId = data.roomId;
     }
+    const cleanRoomId = roomId.replace(/^\//, "");
+    if (cleanRoomId) {
+      try {
+        localStorage.setItem("wp_last_room", cleanRoomId);
+      } catch {}
+    }
     this.setState({ roomId }, () => {
       this.join(roomId);
     });
@@ -552,6 +596,9 @@ export class App extends React.Component<AppProps, AppState> {
       },
     });
     this.socket = socket;
+    (window as any).watchparty = (window as any).watchparty || {};
+    (window as any).watchparty.socket = socket;
+    (window as any).watchparty.app = this;
     socket.on("connect", async () => {
       this.setState({
         state: "connected",
@@ -683,6 +730,8 @@ export class App extends React.Component<AppProps, AppState> {
           isLiveStream: false,
         },
         async () => {
+          const displayName = this.getMediaDisplayName(currentMedia);
+          audioEnhancer.setMediaName(displayName || currentMedia, currentMedia);
           const leftVideo = this.HTMLInterface.getVideoEl();
 
           // Stop all players
@@ -714,6 +763,10 @@ export class App extends React.Component<AppProps, AppState> {
                     const resp = await fetch(dataUrl);
                     if (resp.ok) {
                       const meta = await resp.json();
+                      if (meta?.name) {
+                        this.setState({ detectedMediaName: meta.name });
+                        audioEnhancer.setMediaName(meta.name, currentMedia);
+                      }
                       if (meta?.files && Array.isArray(meta.files)) {
                         const subFile = meta.files.find((f: any) =>
                           f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
@@ -726,6 +779,40 @@ export class App extends React.Component<AppProps, AppState> {
                           this.setState({ roomSubtitle: subUrl });
                           this.Player().loadSubtitles(subUrl);
                           return;
+                        }
+                      }
+                      // If no embedded subtitle file found, automatically search OpenSubtitles!
+                      if (!this.state.roomSubtitle) {
+                        try {
+                          const movieTitle = meta?.name || this.getMediaDisplayName(currentMedia);
+                          if (movieTitle && movieTitle !== "Torrent" && movieTitle !== "Torrent Stream") {
+                            const osRes = await fetch(`${serverPath}/searchSubtitles?query=${encodeURIComponent(movieTitle)}&lang=en`);
+                            if (osRes.ok) {
+                              const osList = await osRes.json();
+                              if (Array.isArray(osList) && osList.length > 0) {
+                                const firstSub = osList[0];
+                                const fileId = firstSub.attributes?.files?.[0]?.file_id;
+                                const downloadUrl = firstSub.attributes?.downloadUrl || "";
+                                if (fileId || downloadUrl) {
+                                  const dlParams = new URLSearchParams();
+                                  if (downloadUrl) dlParams.set("downloadUrl", downloadUrl);
+                                  if (fileId) dlParams.set("file_id", fileId);
+                                  const dlResp = await fetch(`${serverPath}/downloadSubtitles?${dlParams.toString()}`);
+                                  if (dlResp.ok) {
+                                    const dlData = await dlResp.json();
+                                    if (dlData?.link) {
+                                      const fullSubLink = serverPath + dlData.link;
+                                      this.setState({ roomSubtitle: fullSubLink });
+                                      this.Player().loadSubtitles(fullSubLink);
+                                      return;
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        } catch (osErr) {
+                          console.warn("[OpenSubtitles Automation notice]:", osErr);
                         }
                       }
                       if (meta?.name) break;
@@ -781,7 +868,7 @@ export class App extends React.Component<AppProps, AppState> {
           const src = resolveMediaUrl(data.video);
           let time = data.videoTS ?? 0;
           if (time <= 0 && src) {
-            const savedTime = this.getSavedPlaybackTime(this.roomId, src);
+            const savedTime = this.getSavedPlaybackTime(this.state.roomId, src);
             if (savedTime > 0) {
               time = savedTime;
               try {
@@ -883,6 +970,16 @@ export class App extends React.Component<AppProps, AppState> {
                 console.log("HLS level loaded: isLive %s", isLiveStream);
               });
 
+              hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+                window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+              });
+
+              hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_: any, data: any) => {
+                if (typeof data?.id === "number") {
+                  setPlayerSettings({ audioTrack: data.id });
+                }
+              });
+
               hls.loadSource(src);
               hls.attachMedia(leftVideo);
             } else if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
@@ -908,7 +1005,7 @@ export class App extends React.Component<AppProps, AppState> {
               // Restore playback position on refresh or load
               let ts = typeof time === "number" && time > 0 ? time : undefined;
               if (ts === undefined) {
-                const savedTime = this.getSavedPlaybackTime(this.roomId, src);
+                const savedTime = this.getSavedPlaybackTime(this.state.roomId, src);
                 if (savedTime > 0) {
                   ts = savedTime;
                 }
@@ -977,6 +1074,10 @@ export class App extends React.Component<AppProps, AppState> {
         this.state.currentTab === "chat" &&
         (this.state.isMobileView || this.state.showChatColumn);
 
+      if (isChatVisible) {
+        socket.emit("CMD:chatSeen");
+      }
+
       this.setState({
         chat: [...this.state.chat],
         scrollTimestamp: Date.now(),
@@ -985,6 +1086,22 @@ export class App extends React.Component<AppProps, AppState> {
           ? { emoji: trimmed, ts: Date.now(), senderId: data.id }
           : this.state.incomingReaction,
       });
+    });
+    socket.on("REC:chatSeen", ({ seenBy }: { seenBy: string }) => {
+      let updated = false;
+      const newChat = this.state.chat.map((msg) => {
+        if (msg.id !== seenBy) {
+          const seen = msg.seenBy || [];
+          if (!seen.includes(seenBy)) {
+            updated = true;
+            return { ...msg, seenBy: [...seen, seenBy] };
+          }
+        }
+        return msg;
+      });
+      if (updated) {
+        this.setState({ chat: newChat });
+      }
     });
     socket.on("REC:reaction", (data: { emoji: string; senderId?: string; ts?: number }) => {
       this.setState({
@@ -1206,14 +1323,17 @@ export class App extends React.Component<AppProps, AppState> {
       },
     );
     socket.on("REC:getRoomState", this.handleRoomState);
-    window.setInterval(() => {
+    if (this.tsInterval) {
+      window.clearInterval(this.tsInterval);
+    }
+    this.tsInterval = window.setInterval(() => {
       if (this.state.roomMedia) {
         const curTime = this.Player().getCurrentTime();
         const toSend = this.getRoomTSToSet(curTime);
         this.socket.emit("CMD:ts", toSend);
-        if (curTime > 0 && this.roomId) {
+        if (curTime > 0 && this.state.roomId) {
           this.savePlaybackTime(
-            this.roomId,
+            this.state.roomId,
             this.state.roomMedia,
             curTime,
             this.state.roomPaused,
@@ -1520,7 +1640,7 @@ export class App extends React.Component<AppProps, AppState> {
         audioEnhancer.setBoost(s.audioBoost);
       }
     }
-    leftVideo.play();
+    leftVideo.play().catch(() => {});
     const captureStreamFn =
       (leftVideo as any)?.captureStream ||
       (leftVideo as any)?.mozCaptureStream;
@@ -2247,9 +2367,9 @@ export class App extends React.Component<AppProps, AppState> {
     } else {
       this.socket.emit("CMD:pause");
       this.localPause();
-      if (this.state.roomMedia && this.roomId) {
+      if (this.state.roomMedia && this.state.roomId) {
         this.savePlaybackTime(
-          this.roomId,
+          this.state.roomId,
           this.state.roomMedia,
           this.Player().getCurrentTime(),
           true,
@@ -2259,14 +2379,18 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   roomSeek = (time: number) => {
+    if (!this.haveLock()) {
+      // The server rejects CMD:seek without the lock; a local seek would desync us.
+      return;
+    }
     let target = time;
     target = Math.max(target, 0);
     this.Player().seekVideo(target);
     const toSend = this.getRoomTSToSet(target);
     this.socket.emit("CMD:seek", toSend);
-    if (this.state.roomMedia && this.roomId) {
+    if (this.state.roomMedia && this.state.roomId) {
       this.savePlaybackTime(
-        this.roomId,
+        this.state.roomId,
         this.state.roomMedia,
         target,
         this.state.roomPaused,
@@ -2415,6 +2539,9 @@ export class App extends React.Component<AppProps, AppState> {
     if (!input) {
       return "";
     }
+    if (this.state?.detectedMediaName) {
+      return this.state.detectedMediaName;
+    }
     // Show the whole URL for youtube
     if (this.usingYoutube()) {
       return input;
@@ -2429,6 +2556,16 @@ export class App extends React.Component<AppProps, AppState> {
     }
     if (input.startsWith("vbrowser://")) {
       return "Virtual Browser" + (this.state.isVBrowserLarge ? "+" : "");
+    }
+    const dnMatch = input.match(/[?&]dn=([^&]+)/i);
+    if (dnMatch) {
+      try {
+        let name = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+        if (name.includes("%")) {
+          try { name = decodeURIComponent(name); } catch {}
+        }
+        return name;
+      } catch {}
     }
     if (isMagnet(input)) {
       const magnetParsed = new URLSearchParams(input.replace(/^magnet:\?/, ""));
@@ -2450,13 +2587,10 @@ export class App extends React.Component<AppProps, AppState> {
         const magnetParsed = new URLSearchParams(magnetUrl.replace(/^magnet:\?/, ""));
         const dn = magnetParsed.get("dn") ?? searchParsed.get("dn");
         const index = searchParsed.get("fileIndex");
-        return (
-          (dn ? decodeURIComponent(dn.replace(/\+/g, " ")) : "Torrent Stream") +
-          (index != null ? ` (file ${index})` : "")
-        );
-      } catch {
-        return "Torrent Stream";
-      }
+        if (dn) {
+          return decodeURIComponent(dn.replace(/\+/g, " ")) + (index != null ? ` (file ${index})` : "");
+        }
+      } catch {}
     }
     if (input.includes("/proxy")) {
       const urlParsed = new URLSearchParams(input);
@@ -2482,7 +2616,7 @@ export class App extends React.Component<AppProps, AppState> {
         return this.state.roomVideoTS;
       }
       const saved = this.getSavedPlaybackTime(
-        this.roomId,
+        this.state.roomId,
         this.state.roomMedia,
       );
       if (saved > 0) {
@@ -2567,7 +2701,7 @@ export class App extends React.Component<AppProps, AppState> {
     };
     const controls = (
       <Controls
-        key={this.state.controlsTimestamp}
+        key={this.state.roomMedia || "controls"}
         video={this.state.roomMedia}
         paused={this.state.roomPaused}
         roomPlaybackRate={this.state.roomPlaybackRate}
@@ -2596,8 +2730,12 @@ export class App extends React.Component<AppProps, AppState> {
         localSetSubtitleMode={(
           mode?: TextTrackMode,
           trackIndexOrLang?: number | string,
+          trackIndex?: number,
         ) => {
-          this.Player().setSubtitleMode(mode, trackIndexOrLang);
+          this.Player().setSubtitleMode(
+            mode,
+            trackIndex ?? trackIndexOrLang,
+          );
           this.setState({ controlsTimestamp: Date.now() });
         }}
         roomPlaylistPlay={this.roomPlaylistPlay}
@@ -2642,10 +2780,16 @@ export class App extends React.Component<AppProps, AppState> {
             : undefined
         }
       >
-        {!this.state.isAutoPlayable && this.state.roomMedia && (
+        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && this.Player().isMuted() && (
           <div
             className={styles.unmuteOverlay}
             onClick={() => {
+              this.setState({ isAutoPlayable: true });
+              this.localSetMute(false);
+              this.localSetVolume(1);
+              this.Player().playVideo().catch(() => {});
+            }}
+            onTouchEnd={() => {
               this.setState({ isAutoPlayable: true });
               this.localSetMute(false);
               this.localSetVolume(1);
@@ -2759,16 +2903,13 @@ export class App extends React.Component<AppProps, AppState> {
         ) : (
           <video
             style={{
-              display:
-                (this.usingNative() && !this.state.loading) ||
-                this.state.fullScreen
-                  ? "block"
-                  : "none",
+              display: this.usingNative() ? "block" : "none",
               width: "100%",
               maxHeight: isMobileLayout ? "100%" : VIDEO_MAX_HEIGHT_CSS,
             }}
             id="leftVideo"
             crossOrigin="anonymous"
+            preload="auto"
             onPlay={(e) => {
               this.setLoadingFalse();
               this.setState({ nonPlayableMedia: false });
@@ -2791,41 +2932,29 @@ export class App extends React.Component<AppProps, AppState> {
             onClick={this.roomTogglePlay}
           ></video>
         )}
-        {Boolean(this.state.total || this.state.convertProgress !== undefined) &&
-          getPlayerSettings().showStatsOverlay && (
-          <div
-            style={{
-              color: "rgba(240, 240, 245, 0.9)",
-              fontWeight: 500,
-              fontSize: 11,
-              position: "absolute",
-              bottom: 54,
-              right: 12,
-              zIndex: 35,
-              background: "rgba(9, 10, 15, 0.78)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              padding: "4px 10px",
-              borderRadius: "8px",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              pointerEvents: "none",
-              boxShadow: "0 2px 10px rgba(0, 0, 0, 0.5)",
-            }}
-          >
+        {Boolean(
+          this.state.total ||
+          this.state.convertProgress !== undefined ||
+          (this.state.roomMedia && (isMagnet(this.state.roomMedia) || this.state.roomMedia.includes("torrent=")))
+        ) &&
+          getPlayerSettings().showStatsOverlay !== false && (
+          <div className={styles.torrentStatsBadge}>
+            <span style={{ fontSize: 13 }}>🧲</span>
             {[
-              Boolean(this.state.total) &&
-                Math.min(
-                  (this.state.downloaded / this.state.total) * 100,
-                  100,
-                ).toFixed(2) + "% downloaded",
+              this.state.total
+                ? Math.min(
+                    (this.state.downloaded / this.state.total) * 100,
+                    100,
+                  ).toFixed(1) + "% downloaded"
+                : "Connecting to peers...",
               Boolean(this.state.total) && formatSpeed(this.state.speed),
               Boolean(this.state.total) &&
-                this.state.connections + " connections",
+                this.state.connections + " peers",
               this.state.convertProgress !== undefined &&
                 (this.state.convertProgress * 100).toFixed(1) + "% converted",
             ]
               .filter(Boolean)
-              .join(" - ")}
+              .join(" • ")}
           </div>
         )}
         {this.state.roomMedia && controls}
@@ -3166,6 +3295,36 @@ export class App extends React.Component<AppProps, AppState> {
                         {playlist.length}
                       </Badge>
                     </div>
+
+                    <div className={styles.queueAddBox} style={{ marginTop: 8 }}>
+                      <input
+                        type="text"
+                        placeholder="Paste YouTube, magnet, or video URL..."
+                        className={styles.queueAddInput}
+                        value={this.state.quickQueueUrl}
+                        onChange={(e) => this.setState({ quickQueueUrl: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && this.state.quickQueueUrl?.trim()) {
+                            this.roomPlaylistAdd(this.state.quickQueueUrl.trim());
+                            this.setState({ quickQueueUrl: "" });
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={styles.queueAddBtn}
+                        disabled={!this.state.quickQueueUrl?.trim() || !this.haveLock()}
+                        onClick={() => {
+                          if (this.state.quickQueueUrl?.trim()) {
+                            this.roomPlaylistAdd(this.state.quickQueueUrl.trim());
+                            this.setState({ quickQueueUrl: "" });
+                          }
+                        }}
+                        title="Add to queue"
+                      >
+                        + Add
+                      </button>
+                    </div>
                     {playlist.length === 0 ? (
                       <div className={styles.emptyQueueNotice}>
                         No videos in queue. Enter a link above to add items!
@@ -3283,7 +3442,10 @@ export class App extends React.Component<AppProps, AppState> {
                 className={`${styles.bottomNavTab} ${
                   this.state.currentTab === "chat" ? styles.activeTab : ""
                 }`}
-                onClick={() => this.setState({ currentTab: "chat", unreadCount: 0 })}
+                onClick={() => {
+                  this.setState({ currentTab: "chat", unreadCount: 0 });
+                  this.socket?.emit("CMD:chatSeen");
+                }}
               >
                 <div className={styles.tabIconWrapper}>
                   <WPIconChat size={18} />
@@ -3625,13 +3787,12 @@ export class App extends React.Component<AppProps, AppState> {
                   <button
                     type="button"
                     className={`${styles.desktopNavTab} ${
-                      this.state.desktopSidebarTab === "media" ||
                       this.state.desktopSidebarTab === "playlist"
                         ? styles.desktopNavTabActive
                         : ""
                     }`}
                     onClick={() => {
-                      this.setState({ desktopSidebarTab: "media" });
+                      this.setState({ desktopSidebarTab: "playlist" });
                     }}
                   >
                     <WPIconPlaylist size={15} />
@@ -3750,6 +3911,36 @@ export class App extends React.Component<AppProps, AppState> {
                           Clear All
                         </button>
                       )}
+                    </div>
+
+                    <div className={styles.queueAddBox}>
+                      <input
+                        type="text"
+                        placeholder="Paste YouTube, magnet, or video URL..."
+                        className={styles.queueAddInput}
+                        value={this.state.quickQueueUrl}
+                        onChange={(e) => this.setState({ quickQueueUrl: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && this.state.quickQueueUrl?.trim()) {
+                            this.roomPlaylistAdd(this.state.quickQueueUrl.trim());
+                            this.setState({ quickQueueUrl: "" });
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={styles.queueAddBtn}
+                        disabled={!this.state.quickQueueUrl?.trim() || !this.haveLock()}
+                        onClick={() => {
+                          if (this.state.quickQueueUrl?.trim()) {
+                            this.roomPlaylistAdd(this.state.quickQueueUrl.trim());
+                            this.setState({ quickQueueUrl: "" });
+                          }
+                        }}
+                        title="Add to queue"
+                      >
+                        + Add
+                      </button>
                     </div>
 
                     {playlist.length === 0 ? (

@@ -36,7 +36,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
   let audioBoost = 100;
   let dualAudioMode: DualAudioMode = "stereo";
   let audioMode: "stereo" | "mono" = "stereo";
-  let showStatsOverlay = false;
+  let showStatsOverlay = true;
 
   if (typeof window !== "undefined") {
     try {
@@ -100,7 +100,7 @@ export const getPlayerSettings = (): PlayerSettingsState => {
       }
 
       const savedStats = localStorage.getItem("dipkri-stats-overlay");
-      if (savedStats === "true") showStatsOverlay = true;
+      if (savedStats === "false") showStatsOverlay = false;
 
       const savedT = localStorage.getItem("dipkri-audio-track");
       if (savedT) audioTrack = Number(savedT) || 0;

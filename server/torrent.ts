@@ -1,4 +1,6 @@
 import WebTorrent from "webtorrent";
+import { spawn, execFile } from "node:child_process";
+import config from "./config.ts";
 
 // Singleton WebTorrent client for server-side torrent streaming
 let torrentClient: WebTorrent.Instance | null = null;
@@ -34,12 +36,28 @@ const pendingTorrents = new Map<string, Promise<WebTorrent.Torrent>>();
  */
 export function extractInfoHash(magnetUri: string): string | null {
   if (!magnetUri) return null;
-  const match = magnetUri.match(/xt=urn:btih:([a-zA-Z0-9]+)/i);
+  let decoded = magnetUri;
+  for (let i = 0; i < 3; i++) {
+    if (decoded.includes("%")) {
+      try {
+        decoded = decodeURIComponent(decoded);
+      } catch {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  const match = decoded.match(/xt=urn:btih:([a-zA-Z0-9]+)/i);
   if (match) {
     return match[1].toLowerCase();
   }
-  if (/^[a-fA-F0-9]{40}$/.test(magnetUri.trim())) {
-    return magnetUri.trim().toLowerCase();
+  const hexMatch = decoded.match(/(?:^|[=/?&])([a-fA-F0-9]{40})(?:[&/?#]|$)/);
+  if (hexMatch) {
+    return hexMatch[1].toLowerCase();
+  }
+  if (/^[a-fA-F0-9]{40}$/.test(decoded.trim())) {
+    return decoded.trim().toLowerCase();
   }
   return null;
 }
@@ -53,20 +71,51 @@ export function extractMagnetFromRequest(req: any): string {
   const idx = fullUrl.indexOf("torrent=");
   if (idx !== -1) {
     let sub = fullUrl.slice(idx + 8);
-    const fileIdx = sub.indexOf("&fileIndex=");
-    if (fileIdx !== -1) {
-      sub = sub.slice(0, fileIdx);
+    const cutParams = ["&fileIndex=", "&track=", "&ss=", "&streamIndex="];
+    let minIdx = -1;
+    for (const param of cutParams) {
+      const pIdx = sub.indexOf(param);
+      if (pIdx !== -1 && (minIdx === -1 || pIdx < minIdx)) {
+        minIdx = pIdx;
+      }
     }
-    try {
-      return decodeURIComponent(sub);
-    } catch {
-      return sub;
+    if (minIdx !== -1) {
+      sub = sub.slice(0, minIdx);
     }
+    for (let i = 0; i < 3; i++) {
+      if (sub.includes("%")) {
+        try {
+          sub = decodeURIComponent(sub);
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+    if (sub.includes("torrent=")) {
+      const nested = sub.indexOf("torrent=");
+      sub = sub.slice(nested + 8);
+      try { sub = decodeURIComponent(sub); } catch {}
+    }
+    return sub;
   }
 
   const queryTorrent = req.query?.torrent;
   if (queryTorrent) {
-    return String(queryTorrent);
+    let sub = String(queryTorrent);
+    for (let i = 0; i < 3; i++) {
+      if (sub.includes("%")) {
+        try {
+          sub = decodeURIComponent(sub);
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+    return sub;
   }
   return "";
 }
@@ -395,5 +444,229 @@ export async function handleTorrentStream(req: any, res: any) {
     if (!res.headersSent) {
       res.status(500).send("Torrent streaming error: " + (err?.message || "unknown"));
     }
+  }
+}
+
+const streamInfoCache = new Map<string, any>();
+
+/**
+ * GET /streamInfo?torrent=...
+ * Probes the actual stream tracks (audio languages, codecs, subtitle streams) using ffprobe.
+ */
+export async function handleTorrentInfo(req: any, res: any) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  const magnetUri = extractMagnetFromRequest(req);
+  if (!magnetUri) {
+    return res.status(400).json({ error: "Missing torrent parameter" });
+  }
+
+  const infoHash = extractInfoHash(magnetUri) || magnetUri;
+  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
+  if (streamInfoCache.has(infoHash)) {
+    return res.json(streamInfoCache.get(infoHash));
+  }
+
+  try {
+    let streamUrl = magnetUri;
+    if (magnetUri.startsWith("/")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+    }
+
+    execFile(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "stream=index,codec_name,codec_type:stream_tags=language,title",
+        "-of",
+        "json",
+        streamUrl,
+      ],
+      { timeout: 15000 },
+      (err, stdout) => {
+        if (err || !stdout) {
+          return res.json({ audioTracks: [], subtitleTracks: [] });
+        }
+        try {
+          const parsed = JSON.parse(stdout);
+          const streams: any[] = parsed.streams || [];
+          const audioStreams = streams.filter((s) => s.codec_type === "audio");
+          const subStreams = streams.filter((s) => s.codec_type === "subtitle");
+
+          const audioTracks = audioStreams.map((s, idx) => ({
+            id: idx,
+            streamIndex: s.index,
+            language: s.tags?.language || undefined,
+            label: s.tags?.title || s.tags?.language || `Track ${idx + 1}`,
+            codec: s.codec_name,
+          }));
+
+          const subtitleTracks = subStreams.map((s, idx) => ({
+            id: idx,
+            streamIndex: s.index,
+            language: s.tags?.language || undefined,
+            label: s.tags?.title || s.tags?.language || `Subtitle ${idx + 1}`,
+            codec: s.codec_name,
+          }));
+
+          const result = { audioTracks, subtitleTracks };
+          if (audioTracks.length > 0) {
+            streamInfoCache.set(infoHash, result);
+          }
+          return res.json(result);
+        } catch {
+          return res.json({ audioTracks: [], subtitleTracks: [] });
+        }
+      }
+    );
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Probe error" });
+  }
+}
+
+/**
+ * GET /streamAudio?torrent=...&track=0&ss=0
+ * Streams a discrete extracted audio track on-the-fly using ffmpeg in MP3 format for universal browser playback.
+ */
+export async function handleTorrentAudio(req: any, res: any) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Cache-Control", "no-cache, no-store");
+  res.setHeader("Accept-Ranges", "none");
+
+  const magnetUri = extractMagnetFromRequest(req);
+  if (!magnetUri) {
+    return res.status(400).send("Missing torrent parameter");
+  }
+
+  const track = parseInt(req.query?.track || "0", 10);
+  const ss = parseFloat(req.query?.ss || "0");
+  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
+
+  try {
+    let streamUrl = magnetUri;
+    if (magnetUri.startsWith("/")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+    }
+
+    const args: string[] = ["-nostdin", "-v", "error"];
+    if (ss > 0) {
+      args.push("-ss", String(ss));
+    }
+    args.push("-i", streamUrl);
+    args.push("-vn", "-map", `0:a:${track}`, "-c:a", "libmp3lame", "-ac", "2", "-b:a", "192k", "-f", "mp3", "pipe:1");
+
+    const ff = spawn("ffmpeg", args);
+    const cleanup = () => { try { ff.kill("SIGKILL"); } catch {} };
+    req.on("close", cleanup);
+    res.on("close", cleanup);
+
+    ff.on("error", (err) => {
+      console.warn("[TorrentAudio ffmpeg error]:", err?.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    ff.stderr?.on("data", (chunk) => {
+      console.warn("[TorrentAudio ffmpeg stderr]:", chunk.toString());
+    });
+
+    ff.stdout.pipe(res);
+  } catch (err: any) {
+    console.error("[TorrentAudio handler error]:", err?.message);
+    if (!res.headersSent) res.status(500).end();
+  }
+}
+
+/**
+ * GET /streamSubtitle?torrent=...&streamIndex=...
+ * Extracts embedded subtitle tracks to WebVTT format on demand.
+ */
+export async function handleTorrentSubtitle(req: any, res: any) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Content-Type", "text/vtt; charset=utf-8");
+
+  const magnetUri = extractMagnetFromRequest(req);
+  if (!magnetUri) {
+    return res.status(400).send("Missing torrent parameter");
+  }
+
+  const streamIndex = parseInt(req.query?.streamIndex || "0", 10);
+  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
+
+  try {
+    if (magnetUri.startsWith("http://") || magnetUri.startsWith("https://")) {
+      const args: string[] = [
+        "-nostdin",
+        "-v",
+        "error",
+        "-i",
+        magnetUri,
+        "-map",
+        `0:${streamIndex}`,
+        "-f",
+        "webvtt",
+        "pipe:1",
+      ];
+      const ff = spawn("ffmpeg", args);
+      const cleanup = () => { try { ff.kill("SIGKILL"); } catch {} };
+      req.on("close", cleanup);
+      res.on("close", cleanup);
+      ff.stdout.pipe(res);
+      return;
+    }
+
+    const torrent = await getOrAddTorrent(magnetUri);
+    const targetFile = fileIndex != null && torrent.files[fileIndex] ? torrent.files[fileIndex] : pickBestVideoFile(torrent.files);
+    if (!targetFile) {
+      return res.status(404).send("No video file found");
+    }
+
+    const args: string[] = [
+      "-nostdin",
+      "-v",
+      "error",
+      "-i",
+      "pipe:0",
+      "-map",
+      `0:${streamIndex}`,
+      "-f",
+      "webvtt",
+      "pipe:1",
+    ];
+
+    const ff = spawn("ffmpeg", args);
+    const readStream = targetFile.createReadStream();
+
+    const cleanup = () => {
+      try { (readStream as any).destroy?.(); } catch {}
+      try { ff.kill("SIGKILL"); } catch {}
+    };
+
+    req.on("close", cleanup);
+    res.on("close", cleanup);
+
+    readStream.on("error", (err) => {
+      console.warn("[TorrentSubtitle readStream error]:", err?.message);
+      cleanup();
+    });
+
+    ff.on("error", (err) => {
+      console.warn("[TorrentSubtitle ffmpeg error]:", err?.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    readStream.pipe(ff.stdin);
+    ff.stdout.pipe(res);
+  } catch (err: any) {
+    console.error("[TorrentSubtitle handler error]:", err?.message);
+    if (!res.headersSent) res.status(500).end();
   }
 }

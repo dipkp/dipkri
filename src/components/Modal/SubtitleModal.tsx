@@ -88,13 +88,19 @@ export function cleanMovieTitle(raw: string): string {
   // 3. Strip file extensions
   str = str.replace(/\.(mp4|mkv|avi|webm|mov|flv|ts|m4v|m3u8|mpd|srt|vtt)$/i, "");
 
-  // 4. Strip bracketed release tags like [YTS.MX], [RARBG], (2024), etc.
+  // 4. Strip bracketed release tags like [YTS.MX], [RARBG], [Tel + Tam + Hin], etc.
   str = str.replace(/\[.*?\]/g, " ");
 
-  // 5. Clean common release tags, resolutions, and scene groups
-  str = str.replace(/\b(1080p|720p|480p|2160p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-dl|webrip|web|hdrip|hdtv|dvdrip|x264|x265|h264|hevc|10bit|aac|ac3|dts|yify|yts|ettv|rarbg|psa|eztv)\b/gi, " ");
+  // 5. Strip parenthetical audio / codec / resolution tags like (AAC), (DTS), (720p), (x264)
+  str = str.replace(/\((?:aac|ac3|dts|mp3|eac3|hin|tam|tel|eng|dual|multi|audio|[0-9]{3,4}p)\)/gi, " ");
 
-  // 6. Clean punctuation & extra whitespace
+  // 6. Clean common release tags, resolutions, audio codecs, and scene groups
+  str = str.replace(/\b(1080p|720p|480p|2160p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-dl|webrip|web|hdrip|hdtv|dvdrip|x264|x265|h264|hevc|10bit|aac|ac3|dts|yify|yts|ettv|rarbg|psa|eztv|hq|predvd|camrip|esub|esubs|dual|triple|multi|audio|ddp|ddp5\.1|dd5\.1|atmos|xvid)\b/gi, " ");
+
+  // 7. Clean leftover empty parentheses
+  str = str.replace(/\(\s*\)/g, " ");
+
+  // 8. Clean punctuation & extra whitespace
   str = str.replace(/[._\-–—]/g, " ");
   str = str.replace(/\s+/g, " ").trim();
 

@@ -31,6 +31,9 @@ import {
   handleTorrentData,
   handleTorrentProgress,
   handleTorrentStream,
+  handleTorrentAudio,
+  handleTorrentInfo,
+  handleTorrentSubtitle,
 } from "./torrent.ts";
 
 if (process.env.NODE_ENV === "development") {
@@ -69,13 +72,18 @@ io.engine.use(async (req: any, res: Response, next: () => void) => {
   const key = "/" + roomId;
   // Check to make sure this shard should load this room
   const isCorrectShard = !config.SHARD || shard === Number(config.SHARD);
-  // Get the room data from postgres
-  const persistedRoom = (
-    await postgres?.query<PersistentRoom>(
-      `SELECT * from room where "roomId" = $1`,
-      [key],
-    )
-  )?.rows?.[0];
+  // Get the room data from postgres (never let a DB hiccup hang the handshake)
+  let persistedRoom: PersistentRoom | undefined;
+  try {
+    persistedRoom = (
+      await postgres?.query<PersistentRoom>(
+        `SELECT * from room where "roomId" = $1`,
+        [key],
+      )
+    )?.rows?.[0];
+  } catch (e: any) {
+    console.warn("[WARNING]: room preload query failed: %s", e?.message ?? e);
+  }
   // Don't await after this because we may have a race condition where 2 rquests both try to load the room
   if (isCorrectShard && !rooms.has(key)) {
     const data = persistedRoom?.data
@@ -95,10 +103,19 @@ io.engine.use(async (req: any, res: Response, next: () => void) => {
 });
 
 const rooms = new Map<string, Room>();
-// Following functions iterate over in-memory rooms
-setInterval(minuteMetrics, 60 * 1000);
-setInterval(release, releaseInterval);
-setInterval(saveRooms, 1000);
+// Following functions iterate over in-memory rooms. They are async, and a
+// rejected promise from a bare setInterval callback is an unhandled rejection
+// (Node 22 exits the process), so always catch.
+const runSafely = (fn: () => unknown, label: string) => {
+  Promise.resolve()
+    .then(fn)
+    .catch((e: any) =>
+      console.warn(`[WARNING]: ${label} failed: %s`, e?.message ?? e),
+    );
+};
+setInterval(() => runSafely(minuteMetrics, "minuteMetrics"), 60 * 1000);
+setInterval(() => runSafely(release, "release"), releaseInterval);
+setInterval(() => runSafely(saveRooms, "saveRooms"), 1000);
 if (process.env.NODE_ENV === "development") {
   try {
     import("./vmWorker.ts");
@@ -170,7 +187,7 @@ app.post("/subtitle", async (req, res) => {
 
 app.get("/downloadSubtitles", async (req, res) => {
   try {
-    const downloadUrl = req.query.downloadUrl ? String(req.query.downloadUrl) : "";
+    const downloadUrl = (req.query.downloadUrl || req.query.url) ? String(req.query.downloadUrl || req.query.url) : "";
     const fileId = req.query.file_id ? String(req.query.file_id) : "";
 
     let directDownloadLink = downloadUrl;
@@ -206,13 +223,21 @@ app.get("/downloadSubtitles", async (req, res) => {
       responseType: "arraybuffer",
       timeout: 10000,
     });
-    const data = subResp.data;
+    const rawBuffer = Buffer.from(subResp.data);
+    const rawText = rawBuffer.toString("utf8");
+
+    // Convert standard SRT to WebVTT format so all HTML5 video players can parse it
+    let vttText = rawText;
+    if (!rawText.trim().startsWith("WEBVTT")) {
+      vttText = "WEBVTT\n\n" + rawText.replace(/\r\n|\r/g, "\n").replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+    }
+
+    const gzipData = gzipSync(Buffer.from(vttText, "utf8"));
     const hash = crypto
       .createHash("sha256")
-      .update(data, "utf8")
+      .update(gzipData)
       .digest()
       .toString("hex");
-    let gzipData = gzipSync(data);
 
     if (redis) {
       await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
@@ -224,7 +249,7 @@ app.get("/downloadSubtitles", async (req, res) => {
     }
 
     redisCount("subDownloadsOS");
-    res.json({ link: "/subtitle/" + hash });
+    res.json({ url: "/subtitle/" + hash, link: "/subtitle/" + hash });
   } catch (e: any) {
     if (isAxiosError(e)) {
       console.warn("downloadSubtitles error:", e.message);
@@ -235,10 +260,32 @@ app.get("/downloadSubtitles", async (req, res) => {
 
 app.get("/searchSubtitles", async (req, res) => {
   try {
-    const title = req.query.title ? String(req.query.title).trim() : "";
+    let title = req.query.title
+      ? String(req.query.title).trim()
+      : req.query.query
+        ? String(req.query.query).trim()
+        : "";
     const url = req.query.url ? String(req.query.url).trim() : "";
     const reqLang = req.query.lang ? String(req.query.lang).trim() : "en";
     const subLangs = reqLang === "all" ? "en,hi,es" : reqLang === "hi" ? "hi,en" : reqLang;
+
+    if (!title && url) {
+      const dnMatch = url.match(/[?&]dn=([^&]+)/i);
+      if (dnMatch) {
+        try {
+          title = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+        } catch {}
+      }
+      if (!title) {
+        try {
+          const u = new URL(url, "http://127.0.0.1");
+          const p = u.pathname.split("/").filter(Boolean).pop();
+          if (p && p !== "stream") {
+            title = decodeURIComponent(p);
+          }
+        } catch {}
+      }
+    }
 
     // 1. Try official OpenSubtitles API if key configured
     if (config.OPENSUBTITLES_KEY) {
@@ -276,8 +323,33 @@ app.get("/searchSubtitles", async (req, res) => {
             timeout: 5000,
           });
           if (response.data?.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+            const mappedOfficial = response.data.data.map((item: any) => {
+              const rel = item.attributes?.release || item.attributes?.files?.[0]?.file_name || "Subtitle Track";
+              const lang = (item.attributes?.language || "EN").toUpperCase();
+              const fid = item.attributes?.files?.[0]?.file_id;
+              const directUrl = item.attributes?.downloadUrl || item.url || "";
+              return {
+                id: String(item.id || fid),
+                type: "subtitle",
+                name: rel,
+                title: rel,
+                release: rel,
+                lang,
+                language: lang,
+                format: (item.attributes?.format || "SRT").toUpperCase(),
+                file_id: fid,
+                url: directUrl,
+                downloadUrl: directUrl,
+                attributes: {
+                  ...item.attributes,
+                  release: rel,
+                  language: lang,
+                  format: item.attributes?.format || "SRT",
+                },
+              };
+            });
             redisCount("subSearchesOS");
-            res.json(response.data.data);
+            res.json(mappedOfficial);
             return;
           }
         }
@@ -290,7 +362,17 @@ app.get("/searchSubtitles", async (req, res) => {
     if (title) {
       let imdbId = "";
       try {
-        const cleanTitle = title.replace(/\.(mp4|mkv|avi|webm|mov|flv)$/i, "").replace(/[._-]/g, " ").trim();
+        let cleanTitle = title.replace(/\.(mp4|mkv|avi|webm|mov|flv|ts)$/i, "");
+        // Strip pirate sites, domains, release group watermarks e.g. www.1TamilMV.capital, TamilBlasters, etc.
+        cleanTitle = cleanTitle.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
+        cleanTitle = cleanTitle.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+        cleanTitle = cleanTitle.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
+
+        const yearMatch = cleanTitle.match(/[\(\[]?\b(19\d\d|20\d\d)\b[\)\]]?/);
+        if (yearMatch && typeof yearMatch.index === "number") {
+          cleanTitle = cleanTitle.slice(0, yearMatch.index + yearMatch[0].length).trim();
+        }
+
         const movieSearch = await axios.get(
           `https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(cleanTitle)}.json`,
           { timeout: 5000 }
@@ -331,17 +413,29 @@ app.get("/searchSubtitles", async (req, res) => {
               if (!matchA && matchB) return 1;
               return 0;
             });
-            const mapped = sortedList.slice(0, 35).map((sub: any) => ({
-              id: String(sub.id),
-              type: "subtitle",
-              attributes: {
-                release: sub.movieReleaseName || sub.subtitleFileName || "Subtitle Track",
-                language: (sub.lang || "en").toUpperCase(),
+            const mapped = sortedList.slice(0, 35).map((sub: any) => {
+              const releaseName = sub.subtitleFileName || sub.movieReleaseName || "Subtitle Track";
+              const langCode = (sub.lang || "en").toUpperCase();
+              return {
+                id: String(sub.id),
+                type: "subtitle",
+                name: releaseName,
+                title: releaseName,
+                release: releaseName,
+                lang: langCode,
+                language: langCode,
                 format: "SRT",
-                files: [{ file_id: String(sub.id), file_name: sub.subtitleFileName }],
+                url: sub.url,
                 downloadUrl: sub.url,
-              },
-            }));
+                attributes: {
+                  release: releaseName,
+                  language: langCode,
+                  format: "SRT",
+                  files: [{ file_id: String(sub.id), file_name: sub.subtitleFileName || releaseName }],
+                  downloadUrl: sub.url,
+                },
+              };
+            });
             redisCount("subSearchesOS");
             res.json(mapped);
             return;
@@ -445,6 +539,38 @@ app.post("/createRoom", async (req, res) => {
   }
   rooms.set(name, newRoom);
   res.json({ name });
+});
+
+app.post("/terminateRoom", async (req, res) => {
+  const roomId = req.body?.roomId;
+  if (!roomId) {
+    res.status(400).json({ error: "Missing roomId" });
+    return;
+  }
+  const cleanId = String(roomId).replace(/^\//, "");
+  const key = "/" + cleanId;
+  const room = rooms.get(key);
+  if (room) {
+    try {
+      console.log("[TERMINATE_ROOM] Terminating room %s", key);
+      try {
+        io.of(key).emit("REC:chat", {
+          system: true,
+          text: "This watch party has been terminated by the host.",
+        });
+        io.of(key).disconnectSockets(true);
+      } catch {}
+      room.destroy();
+      rooms.delete(key);
+      io._nsps.delete(key);
+      if (postgres) {
+        await postgres.query(`DELETE FROM room WHERE "roomId" = $1`, [key]).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Failed to terminate room %s:", key, e);
+    }
+  }
+  res.json({ success: true, terminated: cleanId });
 });
 
 app.post("/checkoutSub", async (req, res) => {
@@ -558,13 +684,15 @@ app.get("/metadata", async (req, res) => {
     decoded?.email != null &&
     Boolean(config.BETA_USER_EMAILS.split(",").includes(decoded?.email));
   const streamPath = config.STREAM_PATH || "";
-  // log metrics but don't wait for it
+  // log metrics but don't wait for it (an unhandled rejection would crash the process)
   if (postgres && decoded?.uid) {
     upsertObject(
       postgres,
       "active_user",
       { uid: decoded?.uid, lastActiveTime: new Date() },
       { uid: true },
+    ).catch((e: any) =>
+      console.warn("[WARNING]: active_user upsert failed: %s", e?.message ?? e),
     );
   }
   res.json({
@@ -579,6 +707,9 @@ app.get("/metadata", async (req, res) => {
 app.get("/data", handleTorrentData);
 app.get("/stream", handleTorrentStream);
 app.get("/progress", handleTorrentProgress);
+app.get("/streamAudio", handleTorrentAudio);
+app.get("/streamInfo", handleTorrentInfo);
+app.get("/streamSubtitle", handleTorrentSubtitle);
 
 app.get("/resolveRoom/:vanity", async (req, res) => {
   const vanity = req.params.vanity;

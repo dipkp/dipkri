@@ -16,7 +16,6 @@ import {
 import twitch from "twitch-m3u8";
 import { type QueryResult } from "pg";
 import { Docker } from "./vm/docker.ts";
-import { autoCaptionManager, RoomTranscriber } from "./autoCaption.ts";
 import { resolveMediaUrl } from "./utils/regex.ts";
 
 // Stateless pool instance to use for VMs if full management isn't needed
@@ -68,7 +67,6 @@ export class Room {
   public isChatDisabled: boolean | undefined = undefined;
   public lastUpdateTime: Date = new Date();
   private preventTSUpdate = false;
-  public autoCaption: RoomTranscriber;
   // Not really a queue since there's no ordering, we just retry as long as this is set
   // If we want a real queue then we need external processing of the jobs and a way to update the room from outside
   public vBrowserQueue:
@@ -90,19 +88,12 @@ export class Room {
     this.roomId = roomId;
     this.io = io;
 
-    this.autoCaption = autoCaptionManager.getOrCreate(
-      io,
-      this.roomId,
-      () => this.videoTS,
-      () => this.paused,
-    );
 
     if (roomData) {
       this.deserialize(roomData);
     }
 
     if (this.video) {
-      this.autoCaption.setVideo(this.video);
     }
 
     this.tsInterval = setInterval(async () => {
@@ -272,7 +263,11 @@ export class Room {
         }
       });
       socket.on("CMD:host", (data: unknown) => {
-        validateLock() && this.startHosting(socket, String(data));
+        validateLock() &&
+          this.startHosting(socket, String(data)).catch((e: any) => {
+            console.warn("startHosting failed:", e?.message ?? e);
+            socket.emit("errorMessage", "Couldn't load that video.");
+          });
       });
       socket.on("CMD:play", () => {
         validateLock() && this.playVideo(socket);
@@ -334,17 +329,6 @@ export class Room {
       socket.on("CMD:subtitle", (data: unknown) => {
         validateLock() && this.addSubtitles(String(data));
       });
-      socket.on("CMD:startAutoCaption", (data?: { lang?: string }) => {
-        this.autoCaption.userJoinedAutoCaption(socket, data?.lang);
-      });
-      socket.on("CMD:stopAutoCaption", () => {
-        this.autoCaption.userLeftAutoCaption(socket.id);
-      });
-      socket.on("CMD:changeAutoCaptionLang", (data?: { lang?: string }) => {
-        if (data?.lang) {
-          this.autoCaption.setLanguage(data.lang);
-        }
-      });
       socket.on("CMD:lock", async (data: unknown) => {
         const hasLock = validateLock();
         const isOwner = await validateOwner();
@@ -377,6 +361,9 @@ export class Room {
       });
       socket.on("CMD:deleteChatMessages", async (data: unknown) => {
         (await validateOwner()) && this.deleteChatMessages(data);
+      });
+      socket.on("CMD:chatSeen", () => {
+        this.markChatSeen(socket);
       });
 
       socket.on("signal", (data: unknown) =>
@@ -479,7 +466,6 @@ export class Room {
   };
 
   public destroy = () => {
-    autoCaptionManager.remove(this.roomId);
     if (this.tsInterval) {
       clearInterval(this.tsInterval);
     }
@@ -574,7 +560,6 @@ export class Room {
     }
     this.video = data;
     this.videoTS = 0;
-    this.autoCaption.setVideo(data);
     this.paused = false;
     this.subtitle = "";
     this.loop = false;
@@ -743,10 +728,14 @@ export class Room {
           magnetName = dnMatch[1];
         }
       }
+      magnetName = magnetName.replace(/\.(mkv|mp4|webm|avi|mov|flv|m4v|ts)$/i, "");
+      magnetName = magnetName.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
+      magnetName = magnetName.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+      magnetName = magnetName.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
     }
     const item = {
       name: isMag ? magnetName : data,
-      channel: isMag ? "Torrent" : "Video URL",
+      channel: isMag ? "🧲 Torrent Stream" : "Video URL",
       duration: 0,
       url: isMag ? `/stream?torrent=${encodeURIComponent(data)}` : data,
       type: isMag || data.includes("/stream?torrent=magnet") ? "magnet" : "file",
@@ -807,7 +796,6 @@ export class Room {
       msg: this.tsMap[socket.clientId]?.toString(),
     };
     this.paused = false;
-    this.autoCaption.onPlay();
     this.addChatMessage(socket, chatMsg);
   };
 
@@ -819,7 +807,6 @@ export class Room {
       msg: this.tsMap[socket.clientId]?.toString(),
     };
     this.paused = true;
-    this.autoCaption.onPause();
     if (
       socket?.clientId &&
       typeof this.tsMap[socket.clientId] === "number" &&
@@ -835,7 +822,6 @@ export class Room {
       return;
     }
     this.videoTS = data;
-    this.autoCaption.onSeek(data);
     socket.broadcast.emit("REC:seek", data);
     const chatMsg = { id: socket.clientId, cmd: "seek", msg: data?.toString() };
     this.addChatMessage(socket, chatMsg);
@@ -959,6 +945,11 @@ export class Room {
     if (!msg) {
       return;
     }
+    // Reject keys that collide with Object.prototype (e.g. "constructor",
+    // "__proto__"): they resolve to non-arrays and crash this handler.
+    if (data.value in Object.prototype) {
+      return;
+    }
     msg.reactions = msg.reactions || {};
     msg.reactions[data.value] = msg.reactions[data.value] || [];
 
@@ -983,6 +974,10 @@ export class Room {
       (m) => m.id === data.msgId && m.timestamp === data.msgTimestamp,
     );
     if (!msg || !msg.reactions?.[data.value]) {
+      return;
+    }
+    // Same prototype-key guard as addReaction: these are not arrays.
+    if (data.value in Object.prototype) {
       return;
     }
     msg.reactions[data.value] = msg.reactions[data.value].filter(
@@ -1458,7 +1453,6 @@ export class Room {
   };
 
   private onDisconnect = (socket: Socket) => {
-    this.autoCaption.userLeftAutoCaption(socket.id);
     const { clientId } = socket;
     // Disconnecting socket is the current one
     if (socket.id === this.socketIdMap[clientId]) {
@@ -1517,6 +1511,26 @@ export class Room {
     }
     this.io.of(this.roomId).emit("chatinit", this.chat);
     return;
+  };
+
+  private markChatSeen = (socket: Socket) => {
+    let changed = false;
+    for (const msg of this.chat) {
+      if (msg.id !== socket.clientId) {
+        if (!msg.seenBy) {
+          msg.seenBy = [];
+        }
+        if (!msg.seenBy.includes(socket.clientId)) {
+          msg.seenBy.push(socket.clientId);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this.io.of(this.roomId).emit("REC:chatSeen", {
+        seenBy: socket.clientId,
+      });
+    }
   };
 }
 

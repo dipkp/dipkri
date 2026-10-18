@@ -35,6 +35,12 @@ export async function createRoom(
   });
   const data = await response.json();
   const { name } = data;
+  const cleanName = (name || "").replace(/^\//, "");
+  if (cleanName) {
+    try {
+      localStorage.setItem("wp_last_room", cleanName);
+    } catch {}
+  }
   if (openNewTab) {
     window.open("/watch" + name);
   } else {
@@ -235,6 +241,34 @@ export const TopBar = (props: {
             title="Copy invite link to share with friends"
           >
             <span>{copied ? "Copied! ✓" : "Share"}</span>
+          </button>
+        )}
+        {props.roomId && (
+          <button
+            type="button"
+            className={styles.terminateBtn}
+            onClick={async () => {
+              const confirmTerminate = window.confirm(
+                "Terminate this watch party? It will end the room session and remove it from your active parties on the home screen."
+              );
+              if (confirmTerminate) {
+                const cleanId = props.roomId?.replace(/^\//, "");
+                try {
+                  fetch("/terminateRoom", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ roomId: cleanId }),
+                  }).catch(() => {});
+                  localStorage.removeItem("wp_last_room");
+                  localStorage.removeItem("wp_active_party");
+                  if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
+                } catch {}
+                window.location.assign("/");
+              }
+            }}
+            title="Terminate this watch party and clear from home screen"
+          >
+            <span>Terminate Room</span>
           </button>
         )}
         {!props.hideNewRoom && <JoinRoomButton size="sm" />}

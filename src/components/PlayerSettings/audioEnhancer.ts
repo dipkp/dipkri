@@ -67,32 +67,37 @@ export const formatAudioLanguageLabel = (
   rawLang?: string,
   index: number = 0,
 ): string => {
+  let cleanRaw = (rawLabel || "").trim();
+  cleanRaw = cleanRaw.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
+  cleanRaw = cleanRaw.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital|www)\b\s*[-_–—:]*\s*/gi, "");
+  cleanRaw = cleanRaw.replace(/^[-–—:\s]+|[-–—:\s]+$/g, "").trim();
+
   const normLang = (rawLang || "").toLowerCase().trim();
-  const normLabel = (rawLabel || "").toLowerCase().trim();
+  const normLabel = cleanRaw.toLowerCase();
 
   // 1. Check if rawLang is in LANG_MAP
   if (normLang && LANG_MAP[normLang]) {
     const langName = LANG_MAP[normLang];
-    return rawLabel && rawLabel.trim() && !rawLabel.toLowerCase().includes(normLang)
-      ? `${langName} - ${rawLabel}`
-      : `${langName} (${rawLang})`;
+    return cleanRaw && !cleanRaw.toLowerCase().includes(normLang)
+      ? `${langName} (${cleanRaw})`
+      : `${langName}`;
   }
 
-  // 2. Search inside rawLabel for known language names or keys
+  // 2. Search inside normLabel for known language names or keys
   for (const [key, val] of Object.entries(LANG_MAP)) {
     if (normLabel === key || normLabel.startsWith(`${key} `) || normLabel.includes(`(${key})`)) {
-      return `${val} Audio`;
+      return `${val}`;
     }
     if (normLabel.includes(val.toLowerCase())) {
-      return rawLabel && rawLabel.trim() ? rawLabel : `${val} Audio`;
+      return cleanRaw ? cleanRaw : `${val}`;
     }
   }
 
   // 3. Fallback
-  if (rawLabel && rawLabel.trim()) {
-    return rawLabel;
+  if (cleanRaw) {
+    return cleanRaw;
   }
-  return `Audio Track ${index + 1}`;
+  return `Track ${index + 1}`;
 };
 
 export interface AudioTrackInfo {
@@ -337,28 +342,237 @@ class AudioEnhancerManager {
     this.isMonoMode = mode === "mono";
   }
 
+  private mediaName: string = "";
+  private mediaTracks: AudioTrackInfo[] = [];
+  private selectedTrackIndex: number = 0;
+
+  /**
+   * Parse multi-language tags from media name/torrent filename,
+   * e.g. "[Tel + Tam + Hin]", "Dual Audio [Hindi - English]", "[Hin + Eng + Tam]"
+   */
+  public extractLanguagesFromMediaName(name: string): AudioTrackInfo[] {
+    if (!name) return [];
+    let s = name;
+    for (let i = 0; i < 3; i++) {
+      try {
+        if (s.includes("%")) s = decodeURIComponent(s);
+      } catch {}
+    }
+    const dnMatch = s.match(/[?&]dn=([^&]+)/i);
+    if (dnMatch) {
+      let dn = dnMatch[1];
+      for (let i = 0; i < 2; i++) {
+        try {
+          if (dn.includes("%")) dn = decodeURIComponent(dn);
+        } catch {}
+      }
+      s = dn;
+    }
+
+    const tracks: AudioTrackInfo[] = [];
+    const bracketMatches = s.matchAll(/\[([^\]]+)\]|\(([^)]+)\)/g);
+    for (const m of bracketMatches) {
+      const content = m[1] || m[2];
+      if (!content) continue;
+      const tokens = content
+        .split(/[\+\-\/&,]+|\s{2,}/)
+        .map((tok) => tok.trim())
+        .filter(Boolean);
+      const langs: { code: string; name: string; raw: string }[] = [];
+      for (const tok of tokens) {
+        const clean = tok.toLowerCase().replace(/[^a-z]/g, "");
+        if (LANG_MAP[clean]) {
+          langs.push({ code: clean, name: LANG_MAP[clean], raw: tok });
+        }
+      }
+      if (langs.length >= 2) {
+        langs.forEach((l, idx) => {
+          tracks.push({
+            id: idx,
+            label: `Track ${idx + 1}: ${l.name} (${l.raw})`,
+            language: l.code,
+            enabled: idx === this.selectedTrackIndex,
+            isAttached: true,
+          });
+        });
+        break;
+      }
+      if (langs.length < 2) {
+        const spaceTokens = content
+          .split(/\s+/)
+          .map((tok) => tok.trim())
+          .filter(Boolean);
+        const spaceLangs: { code: string; name: string; raw: string }[] = [];
+        for (const tok of spaceTokens) {
+          const clean = tok.toLowerCase().replace(/[^a-z]/g, "");
+          if (LANG_MAP[clean]) {
+            spaceLangs.push({ code: clean, name: LANG_MAP[clean], raw: tok });
+          }
+        }
+        if (spaceLangs.length >= 2) {
+          spaceLangs.forEach((l, idx) => {
+            tracks.push({
+              id: idx,
+              label: `Track ${idx + 1}: ${l.name} (${l.raw})`,
+              language: l.code,
+              enabled: idx === this.selectedTrackIndex,
+              isAttached: true,
+            });
+          });
+          break;
+        }
+      }
+    }
+
+    // Secondary check for language keywords across the filename
+    if (tracks.length === 0) {
+      const allLangsRegex =
+        /\b(hindi|english|tamil|telugu|kannada|malayalam|bengali|marathi|gujarati|punjabi|urdu|spanish|french|german|japanese|korean|russian|italian|chinese|hin|eng|tam|tel|mal|kan)\b/gi;
+      const matches = [...s.matchAll(allLangsRegex)];
+      const uniqueLangs: { code: string; name: string; raw: string }[] = [];
+      for (const m of matches) {
+        const raw = m[0];
+        const clean = raw.toLowerCase();
+        const mappedName = LANG_MAP[clean];
+        if (mappedName && !uniqueLangs.some((u) => u.name === mappedName)) {
+          uniqueLangs.push({ code: clean, name: mappedName, raw });
+        }
+      }
+      if (uniqueLangs.length >= 2) {
+        uniqueLangs.forEach((l, idx) => {
+          tracks.push({
+            id: idx,
+            label: `Track ${idx + 1}: ${l.name} (${l.raw})`,
+            language: l.code,
+            enabled: idx === this.selectedTrackIndex,
+            isAttached: true,
+          });
+        });
+      }
+    }
+
+    return tracks;
+  }
+
+  private auxAudio: HTMLAudioElement | null = null;
+  private currentMediaTorrent: string = "";
+  private auxAttachedVideo: HTMLMediaElement | null = null;
+  private auxAudioStartOffset: number = 0;
+  private isProbingStreams: boolean = false;
+
+  /**
+   * Set the current media name so embedded language tags can be extracted immediately,
+   * and fetch real probe data from the server if it's a torrent stream.
+   */
+  public setMediaName(name: string, mediaUrl?: string) {
+    if (!name && !mediaUrl) return;
+    const effectiveName = name || mediaUrl || "";
+    if (mediaUrl) {
+      this.currentMediaTorrent = mediaUrl;
+    } else if (effectiveName.includes("/stream?torrent=") || effectiveName.startsWith("magnet:")) {
+      this.currentMediaTorrent = effectiveName;
+    }
+    if (this.mediaName === effectiveName && (mediaUrl ? this.currentMediaTorrent === mediaUrl : true)) return;
+    this.mediaName = effectiveName;
+    this.mediaTracks = this.extractLanguagesFromMediaName(effectiveName);
+
+    // Fetch ffprobe stream details from server if playing a torrent stream or direct multi-track media
+    const target = mediaUrl || effectiveName;
+    const isProbeableMedia =
+      target.includes("/stream?torrent=") ||
+      target.startsWith("magnet:") ||
+      (!target.includes("youtube.com") && !target.includes("youtu.be") && /^https?:\/\/.+\.(mkv|mp4|webm|avi|mov|m4v)($|\?)/i.test(target));
+
+    if (isProbeableMedia && !this.isProbingStreams) {
+      this.probeStreamTracks(target);
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+    }
+  }
+
+  private async probeStreamTracks(torrentUri: string) {
+    this.isProbingStreams = true;
+    try {
+      const clean = torrentUri.replace(/^.*\/stream\?torrent=/, "");
+      const res = await fetch(`/streamInfo?torrent=${encodeURIComponent(clean)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.audioTracks && Array.isArray(data.audioTracks) && data.audioTracks.length > 0) {
+          this.mediaTracks = data.audioTracks.map((t: any, idx: number) => ({
+            id: idx,
+            label: formatAudioLanguageLabel(t.label, t.language, idx),
+            language: t.language,
+            enabled: idx === this.selectedTrackIndex,
+            isAttached: true,
+          }));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("probeStreamTracks notice:", e);
+    } finally {
+      this.isProbingStreams = false;
+    }
+  }
+
   /**
    * Check if multiple discrete audio streams are attached to the video
    */
-  public hasMultiAudioStreams(videoEl?: HTMLMediaElement | null): boolean {
-    if (videoEl && (videoEl as any).audioTracks && (videoEl as any).audioTracks.length > 1) {
+  public hasMultiAudioStreams(videoEl?: HTMLMediaElement | null, mediaName?: string): boolean {
+    if (mediaName && this.mediaTracks.length === 0) {
+      this.setMediaName(mediaName);
+    }
+
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
+    if (el && (el as any).audioTracks && (el as any).audioTracks.length > 1) {
       return true;
     }
-    if (typeof window !== "undefined" && window.watchparty?.hls?.audioTracks && window.watchparty.hls.audioTracks.length > 1) {
+    if (
+      typeof window !== "undefined" &&
+      window.watchparty?.hls?.audioTracks &&
+      window.watchparty.hls.audioTracks.length > 1
+    ) {
+      return true;
+    }
+    if (this.mediaTracks.length > 1) {
       return true;
     }
     return false;
   }
 
   /**
-   * Get list of audio tracks available from HTML5 video, HLS, or YouTube
+   * Get list of audio tracks available from HTML5 video, HLS, or extracted from multi-language media
    */
-  public getAvailableTracks(videoEl?: HTMLMediaElement | null): AudioTrackInfo[] {
+  public getAvailableTracks(
+    videoEl?: HTMLMediaElement | null,
+    mediaName?: string,
+  ): AudioTrackInfo[] {
+    if (mediaName && this.mediaTracks.length === 0) {
+      this.setMediaName(mediaName);
+    }
+
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
     const tracks: AudioTrackInfo[] = [];
 
-    // 1. Native HTMLMediaElement audioTracks
-    if (videoEl && (videoEl as any).audioTracks) {
-      const nativeTracks = (videoEl as any).audioTracks;
+    // 1. Native HTMLMediaElement audioTracks (if browser supports multiple elementary streams)
+    if (el && (el as any).audioTracks && (el as any).audioTracks.length > 0) {
+      const nativeTracks = (el as any).audioTracks;
       for (let i = 0; i < nativeTracks.length; i++) {
         const t = nativeTracks[i];
         tracks.push({
@@ -369,11 +583,15 @@ class AudioEnhancerManager {
           isAttached: true,
         });
       }
-      if (tracks.length > 0) return tracks;
+      if (tracks.length > 1) return tracks;
     }
 
     // 2. HLS.js audio tracks
-    if (typeof window !== "undefined" && window.watchparty?.hls?.audioTracks) {
+    if (
+      typeof window !== "undefined" &&
+      window.watchparty?.hls?.audioTracks &&
+      window.watchparty.hls.audioTracks.length > 0
+    ) {
       const hlsTracks = window.watchparty.hls.audioTracks;
       const currentTrack = window.watchparty.hls.audioTrack;
       hlsTracks.forEach((t, idx) => {
@@ -385,10 +603,20 @@ class AudioEnhancerManager {
           isAttached: true,
         });
       });
-      if (tracks.length > 0) return tracks;
+      if (tracks.length > 1) return tracks;
     }
 
-    // 3. Fallback: Default Primary Stereo Track
+    // 3. Multi-language tracks extracted from torrent/media name (e.g. MKV with [Tel + Tam + Hin])
+    if (this.mediaTracks.length > 1) {
+      return this.mediaTracks.map((t, idx) => ({
+        ...t,
+        enabled: idx === this.selectedTrackIndex,
+      }));
+    }
+
+    if (tracks.length > 0) return tracks;
+
+    // 4. Fallback: Default Primary Stereo Track
     tracks.push({
       id: 0,
       label: "Default Audio (Stream 1)",
@@ -400,24 +628,198 @@ class AudioEnhancerManager {
   }
 
   /**
-   * Switch the active audio track
+   * Switch the active audio track and update speaker audio output immediately
    */
   public selectTrack(index: number, videoEl?: HTMLMediaElement | null) {
+    this.selectedTrackIndex = index;
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
     // 1. Native HTMLMediaElement audioTracks
-    if (videoEl && (videoEl as any).audioTracks) {
-      const nativeTracks = (videoEl as any).audioTracks;
+    let nativeHandled = false;
+    if (el && (el as any).audioTracks && (el as any).audioTracks.length > 1) {
+      const nativeTracks = (el as any).audioTracks;
       for (let i = 0; i < nativeTracks.length; i++) {
         nativeTracks[i].enabled = i === index;
       }
+      nativeHandled = true;
     }
 
     // 2. HLS.js audio track
     if (typeof window !== "undefined" && window.watchparty?.hls) {
-      if (window.watchparty.hls.audioTracks?.length) {
+      if (
+        window.watchparty.hls.audioTracks &&
+        window.watchparty.hls.audioTracks.length > 0
+      ) {
         window.watchparty.hls.audioTrack = index;
+        nativeHandled = true;
       }
+    }
+
+    // 3. Multi-Audio auxiliary playback for MKV / BitTorrent streams
+    if (!nativeHandled) {
+      this.mediaTracks.forEach((t, i) => {
+        t.enabled = i === index;
+      });
+
+      if (index === 0) {
+        this.stopAuxAudio(el);
+      } else {
+        this.playAuxAudio(index, el);
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+    }
+  }
+
+  private stopAuxAudio(videoEl?: HTMLMediaElement | null) {
+    if (this.auxAudio) {
+      try {
+        this.auxAudio.pause();
+        this.auxAudio.src = "";
+      } catch {}
+    }
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+    if (el) {
+      el.muted = false;
+    }
+  }
+
+  private playAuxAudio(trackIndex: number, videoEl?: HTMLMediaElement | null) {
+    if (typeof document === "undefined") return;
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (document.getElementById("leftVideo") as HTMLMediaElement) ||
+      null;
+    if (!el) return;
+
+    // Silence video's native audio so only the user-selected language track plays
+    el.muted = true;
+
+    if (!this.auxAudio) {
+      this.auxAudio = document.createElement("audio");
+      this.auxAudio.id = "watchpartyAuxAudio";
+      this.auxAudio.style.display = "none";
+      this.auxAudio.preload = "auto";
+      this.auxAudio.onerror = (e) => {
+        console.warn("[WatchParty AudioTrack] Aux audio error", e);
+        if (el && this.selectedTrackIndex === 0) el.muted = false;
+      };
+      this.auxAudio.onplaying = () => {
+        if (el && this.selectedTrackIndex > 0) {
+          el.muted = true;
+        }
+      };
+      document.body.appendChild(this.auxAudio);
+    }
+
+    if (this.auxAttachedVideo !== el) {
+      this.auxAttachedVideo = el;
+      el.addEventListener("play", () => {
+        if (this.selectedTrackIndex > 0 && this.auxAudio) {
+          this.auxAudio.play().catch(() => {});
+        }
+      });
+      el.addEventListener("pause", () => {
+        if (this.auxAudio) {
+          this.auxAudio.pause();
+        }
+      });
+      el.addEventListener("ratechange", () => {
+        if (this.auxAudio && el) {
+          this.auxAudio.playbackRate = el.playbackRate;
+        }
+      });
+      el.addEventListener("volumechange", () => {
+        if (this.auxAudio && el) {
+          this.auxAudio.volume = el.volume;
+          // Notice: el.muted is intentionally true to silence the main stream, so do not copy it
+        }
+      });
+      el.addEventListener("seeked", () => {
+        if (this.selectedTrackIndex > 0 && el) {
+          this.resyncAuxAudio(this.selectedTrackIndex, el);
+        }
+      });
+      el.addEventListener("timeupdate", () => {
+        if (
+          this.selectedTrackIndex > 0 &&
+          this.auxAudio &&
+          !el.paused &&
+          !this.auxAudio.paused &&
+          this.auxAudio.readyState >= 2
+        ) {
+          const currentAudioPos = this.auxAudio.currentTime + this.auxAudioStartOffset;
+          if (Math.abs(el.currentTime - currentAudioPos) > 1.0) {
+            this.resyncAuxAudio(this.selectedTrackIndex, el);
+          }
+        }
+      });
+    }
+
+    this.resyncAuxAudio(trackIndex, el);
+  }
+
+  private resyncAuxAudio(trackIndex: number, videoEl: HTMLMediaElement) {
+    if (!this.auxAudio) return;
+    const ss = Math.max(0, videoEl.currentTime);
+    this.auxAudioStartOffset = ss;
+
+    let torrentRef = this.currentMediaTorrent;
+    if (!torrentRef && videoEl) {
+      torrentRef = videoEl.currentSrc || videoEl.src || "";
+    }
+    if (!torrentRef && typeof document !== "undefined") {
+      const leftEl = document.getElementById("leftVideo") as HTMLMediaElement;
+      torrentRef = leftEl?.currentSrc || leftEl?.src || "";
+    }
+    let fileParam = "";
+    const fIdx = torrentRef.match(/[?&]fileIndex=(\d+)/);
+    if (fIdx) {
+      fileParam = `&fileIndex=${fIdx[1]}`;
+    }
+
+    let cleanTorrent = torrentRef.replace(/^.*\/stream\?torrent=/, "");
+    const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+    if (cutIdx !== -1) {
+      cleanTorrent = cleanTorrent.slice(0, cutIdx);
+    }
+    try {
+      cleanTorrent = decodeURIComponent(cleanTorrent);
+    } catch {}
+
+    if (!cleanTorrent) return;
+
+    const url = `/streamAudio?torrent=${encodeURIComponent(cleanTorrent)}&track=${trackIndex}&ss=${ss.toFixed(1)}${fileParam}`;
+    this.auxAudio.src = url;
+    this.auxAudio.playbackRate = videoEl.playbackRate || 1;
+    this.auxAudio.volume = videoEl.volume;
+    // CRITICAL FIX: auxAudio must NOT be muted! It should play audible sound.
+    this.auxAudio.muted = false;
+    // Primary video stream must remain muted so there is no echo or clash
+    videoEl.muted = true;
+
+    if (!videoEl.paused) {
+      this.auxAudio.play().catch((err) => {
+        console.warn("[WatchParty AudioTrack] Play rejected:", err);
+      });
     }
   }
 }
 
 export const audioEnhancer = new AudioEnhancerManager();
+if (typeof window !== "undefined") {
+  (window as any).watchpartyAudioEnhancer = audioEnhancer;
+}

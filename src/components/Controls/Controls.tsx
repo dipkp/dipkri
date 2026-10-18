@@ -33,6 +33,8 @@ import {
   WPIconVideoOff,
   WPIconMicrophone,
   WPIconMicrophoneOff,
+  WPIconLock,
+  WPIconLockOpen,
 } from "../Icons/CustomIcons";
 import {
   getWebcamSettings,
@@ -52,6 +54,58 @@ import {
 import { qualityManager, QUALITY_PRESETS } from "../PlayerSettings/qualityManager";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import { Chat } from "../Chat/Chat";
+import { PlayerSettingsMenu } from "./PlayerSettingsMenu";
+
+export const cleanMovieTitle = (raw: string): { title: string; meta: string } => {
+  if (!raw) return { title: "", meta: "" };
+  let name = raw;
+  const dnMatch = name.match(/[?&]dn=([^&]+)/i);
+  if (dnMatch) {
+    try {
+      name = decodeURIComponent(dnMatch[1].replace(/\+/g, " "));
+      if (name.includes("%")) {
+        try { name = decodeURIComponent(name); } catch {}
+      }
+    } catch {}
+  } else if (name.startsWith("magnet:")) {
+    const match = name.match(/dn=([^&]+)/i);
+    if (match) {
+      name = decodeURIComponent(match[1].replace(/\+/g, " "));
+    }
+  } else if (name.startsWith("http://") || name.startsWith("https://") || name.startsWith("/")) {
+    try {
+      const u = new URL(name, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+      const torrentParam = u.searchParams.get("torrent");
+      if (torrentParam) {
+        const tDn = torrentParam.match(/[?&]dn=([^&]+)/i);
+        if (tDn) {
+          name = decodeURIComponent(tDn[1].replace(/\+/g, " "));
+        }
+      } else {
+        const last = u.pathname.split("/").filter(Boolean).pop();
+        if (last && last !== "stream") {
+          name = decodeURIComponent(last);
+        }
+      }
+    } catch {}
+  }
+  name = name.replace(/\.(mkv|mp4|webm|avi|mov|flv|m4v|ts)$/i, "");
+
+  // Strip website watermarks / domains e.g. www.1TamilMV.capital, [1TamilMV.org], etc.
+  name = name.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
+  name = name.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+
+  name = name.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
+
+  const yearMatch = name.match(/[\(\[]?\b(19\d\d|20\d\d)\b[\)\]]?/);
+  if (yearMatch && typeof yearMatch.index === "number") {
+    const endIdx = yearMatch.index + yearMatch[0].length;
+    const titlePart = name.slice(0, endIdx).trim();
+    const metaPart = name.slice(endIdx).replace(/^[\)\]\s\-_.]+/, "").trim();
+    return { title: titlePart, meta: metaPart };
+  }
+  return { title: name.trim(), meta: "" };
+};
 
 interface ControlsProps {
   duration: number;
@@ -125,6 +179,7 @@ export const Controls = (props: ControlsProps) => {
   const [visible, setVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
+  const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [isPipActive, setIsPipActive] = useState(Boolean(document.pictureInPictureElement));
   const [isPipSupported, setIsPipSupported] = useState(false);
   const [doubleTapRipple, setDoubleTapRipple] = useState<"rewind" | "forward" | "play" | "pause" | null>(null);
@@ -149,6 +204,114 @@ export const Controls = (props: ControlsProps) => {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        (window as any).__watchparty_controls_visible = visible;
+      }
+      window.dispatchEvent(
+        new CustomEvent("controls-visibility", { detail: { visible } })
+      );
+    } catch {}
+  }, [visible]);
+
+  const [aspectRatio, setAspectRatio] = useState<string>("default");
+  const [videoFlip, setVideoFlip] = useState<string>("normal");
+  const [subtitleOffset, setSubtitleOffset] = useState<number>(0);
+  const [isScreenLocked, setIsScreenLocked] = useState<boolean>(false);
+  const [showLockOnly, setShowLockOnly] = useState<boolean>(false);
+  const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPlayerSettingsOpen, setIsPlayerSettingsOpen] = useState<boolean>(false);
+  const [audioBoost, setAudioBoost] = useState<number>(1);
+  const [selectedQuality, setSelectedQuality] = useState<string>("auto");
+
+  const isPlayerSettingsOpenRef = useRef(isPlayerSettingsOpen);
+  isPlayerSettingsOpenRef.current = isPlayerSettingsOpen;
+
+  // Real video transform (flip)
+  useEffect(() => {
+    const leftVideo = document.getElementById("leftVideo") as HTMLVideoElement | null;
+    if (!leftVideo) return;
+    if (videoFlip === "horizontal") {
+      leftVideo.style.transform = "scaleX(-1)";
+    } else if (videoFlip === "vertical") {
+      leftVideo.style.transform = "scaleY(-1)";
+    } else {
+      leftVideo.style.transform = "none";
+    }
+  }, [videoFlip]);
+
+  // Real aspect ratio
+  useEffect(() => {
+    const leftVideo = document.getElementById("leftVideo") as HTMLVideoElement | null;
+    if (!leftVideo) return;
+    if (aspectRatio === "fill") {
+      leftVideo.style.objectFit = "cover";
+      leftVideo.style.aspectRatio = "initial";
+      leftVideo.style.width = "100%";
+      leftVideo.style.height = "100%";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    } else if (aspectRatio === "fit") {
+      leftVideo.style.objectFit = "contain";
+      leftVideo.style.aspectRatio = "initial";
+      leftVideo.style.width = "100%";
+      leftVideo.style.height = "100%";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    } else if (aspectRatio === "16:9") {
+      leftVideo.style.objectFit = "fill";
+      leftVideo.style.aspectRatio = "16 / 9";
+      leftVideo.style.width = "100%";
+      leftVideo.style.height = "auto";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    } else if (aspectRatio === "4:3") {
+      leftVideo.style.objectFit = "fill";
+      leftVideo.style.aspectRatio = "4 / 3";
+      leftVideo.style.width = "auto";
+      leftVideo.style.height = "100%";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    } else if (aspectRatio === "21:9") {
+      leftVideo.style.objectFit = "fill";
+      leftVideo.style.aspectRatio = "21 / 9";
+      leftVideo.style.width = "100%";
+      leftVideo.style.height = "auto";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    } else {
+      leftVideo.style.objectFit = "contain";
+      leftVideo.style.aspectRatio = "initial";
+      leftVideo.style.width = "100%";
+      leftVideo.style.height = "auto";
+      leftVideo.style.maxHeight = "100%";
+      leftVideo.style.margin = "0 auto";
+    }
+  }, [aspectRatio]);
+
+  // Real subtitle offset
+  useEffect(() => {
+    const leftVideo = document.getElementById("leftVideo") as HTMLVideoElement | null;
+    if (!leftVideo || !leftVideo.textTracks) return;
+    for (let t = 0; t < leftVideo.textTracks.length; t++) {
+      const track = leftVideo.textTracks[t];
+      if (track && track.cues) {
+        for (let i = 0; i < track.cues.length; i++) {
+          const cue = track.cues[i] as any;
+          if (cue) {
+            if (typeof cue.origStart !== "number") {
+              cue.origStart = cue.startTime;
+              cue.origEnd = cue.endTime;
+            }
+            cue.startTime = cue.origStart + subtitleOffset;
+            cue.endTime = cue.origEnd + subtitleOffset;
+          }
+        }
+      }
+    }
+  }, [subtitleOffset]);
+
   const [playerSettingsState, setPlayerSettingsState] = useState<PlayerSettingsState>(() => getPlayerSettings());
   const [settingsTab, setSettingsTab] = useState<"audio" | "subtitles" | "quality" | "more">("audio");
 
@@ -164,17 +327,60 @@ export const Controls = (props: ControlsProps) => {
     };
   }, []);
 
+  const [audioTracksRevision, setAudioTracksRevision] = useState(0);
+
+  useEffect(() => {
+    const handleAudioTracksUpdate = () => {
+      setAudioTracksRevision((v) => v + 1);
+    };
+    window.addEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
+    const video = document.getElementById("leftVideo") as HTMLVideoElement | null;
+    if (video) {
+      video.addEventListener("loadedmetadata", handleAudioTracksUpdate);
+    }
+    return () => {
+      window.removeEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
+      if (video) {
+        video.removeEventListener("loadedmetadata", handleAudioTracksUpdate);
+      }
+    };
+  }, [props.video]);
+
+  const currentMediaTitle = useMemo(() => {
+    return props.getMediaDisplayName
+      ? props.getMediaDisplayName(props.video)
+      : props.video || "";
+  }, [props.video, props.getMediaDisplayName]);
+
+  useEffect(() => {
+    if (currentMediaTitle || props.video) {
+      audioEnhancer.setMediaName(currentMediaTitle || props.video || "", props.video);
+    }
+  }, [currentMediaTitle, props.video]);
+
   const audioTracks = useMemo(() => {
     return audioEnhancer.getAvailableTracks(
-      typeof document !== "undefined" ? (document.getElementById("leftVideo") as HTMLMediaElement) : null,
+      typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null,
+      currentMediaTitle || props.video,
     );
-  }, [props.video, isMenuOpen]);
+  }, [
+    props.video,
+    currentMediaTitle,
+    isMenuOpen,
+    audioTracksRevision,
+    playerSettingsState.audioTrack,
+  ]);
 
   const hasMultipleAudioTracks = useMemo(() => {
     return audioEnhancer.hasMultiAudioStreams(
-      typeof document !== "undefined" ? (document.getElementById("leftVideo") as HTMLMediaElement) : null,
+      typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null,
+      currentMediaTitle || props.video,
     );
-  }, [props.video, isMenuOpen]);
+  }, [props.video, currentMediaTitle, isMenuOpen, audioTracksRevision]);
 
   const attachedSubtitleTracks = useMemo(() => {
     if (typeof document === "undefined") return [];
@@ -200,8 +406,19 @@ export const Controls = (props: ControlsProps) => {
     return `${video.videoWidth}x${video.videoHeight}`;
   }, [props.video, isMenuOpen]);
 
+  const hasAdaptiveQuality = useMemo(() => {
+    if (props.isYouTube) return true;
+    if (typeof window !== "undefined") {
+      const hlsLevels = ((window as any).watchparty?.hls?.levels?.length ?? 0) > 1;
+      const dashLevels = (((window as any).watchparty?.dash as any)?.getBitrateInfoListFor?.("video")?.length ?? 0) > 1;
+      return hlsLevels || dashLevels;
+    }
+    return false;
+  }, [props.isYouTube, isMenuOpen, props.video]);
+
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
+  const lastTouchTimeRef = useRef<number>(0);
   const rippleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const stripTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastChatLenRef = useRef(props.chat?.length || 0);
@@ -227,7 +444,7 @@ export const Controls = (props: ControlsProps) => {
     nameMap,
   } = props;
 
-  // Auto-hide controls logic
+  // Auto-hide controls logic (default 6500ms for generous comfortable touch interaction)
   const isMenuOpenRef = useRef(isMenuOpen);
   isMenuOpenRef.current = isMenuOpen;
   const isDrawerOpenRef = useRef(isChatDrawerOpen || isVideoDrawerOpen);
@@ -235,18 +452,18 @@ export const Controls = (props: ControlsProps) => {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
-  const scheduleHide = useCallback((delay = 3200) => {
+  const scheduleHide = useCallback((delay = 3500) => {
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
-    // Don't auto-hide while a dropdown menu or video/chat drawer is open
-    if (isMenuOpenRef.current || isDrawerOpenRef.current) {
+    // Don't auto-hide when paused, or while a dropdown menu, video/chat drawer, or settings menu is open
+    if (pausedRef.current || isMenuOpenRef.current || isDrawerOpenRef.current || isPlayerSettingsOpenRef.current) {
       setVisible(true);
       return;
     }
     hideTimerRef.current = setTimeout(() => {
-      if (!isMenuOpenRef.current && !isDrawerOpenRef.current) {
+      if (!pausedRef.current && !isMenuOpenRef.current && !isDrawerOpenRef.current && !isPlayerSettingsOpenRef.current) {
         setVisible(false);
       }
     }, delay);
@@ -254,7 +471,7 @@ export const Controls = (props: ControlsProps) => {
 
   const resetHideTimer = useCallback(() => {
     setVisible(true);
-    scheduleHide(pausedRef.current ? 4500 : 3200);
+    scheduleHide(pausedRef.current ? 8000 : 3500);
   }, [scheduleHide]);
 
   // Global activity listener on window / player
@@ -266,8 +483,6 @@ export const Controls = (props: ControlsProps) => {
     };
 
     window.addEventListener("mousemove", onUserActivity, { passive: true });
-    window.addEventListener("pointermove", onUserActivity, { passive: true });
-    window.addEventListener("touchstart", onUserActivity, { passive: true });
     window.addEventListener("keydown", onUserActivity, { passive: true });
 
     return () => {
@@ -275,21 +490,19 @@ export const Controls = (props: ControlsProps) => {
         clearTimeout(hideTimerRef.current);
       }
       window.removeEventListener("mousemove", onUserActivity);
-      window.removeEventListener("pointermove", onUserActivity);
-      window.removeEventListener("touchstart", onUserActivity);
       window.removeEventListener("keydown", onUserActivity);
     };
   }, [resetHideTimer]);
 
   useEffect(() => {
-    if (isMenuOpen || isChatDrawerOpen || isVideoDrawerOpen) {
+    if (isMenuOpen || isChatDrawerOpen || isVideoDrawerOpen || paused) {
       setVisible(true);
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
         hideTimerRef.current = null;
       }
     } else {
-      scheduleHide(paused ? 4500 : 3200);
+      scheduleHide(3500);
     }
   }, [isMenuOpen, isChatDrawerOpen, isVideoDrawerOpen, paused, scheduleHide]);
 
@@ -306,6 +519,7 @@ export const Controls = (props: ControlsProps) => {
       );
       const isLand = isLandscape && (isMobileDevice || window.matchMedia("(orientation: landscape)").matches);
       setIsLandscapeMobile(isLand);
+      setIsPortraitMobile(Boolean(isMobileDevice && !isLandscape));
     };
     checkLandscape();
     window.addEventListener("resize", checkLandscape);
@@ -412,12 +626,23 @@ export const Controls = (props: ControlsProps) => {
     setShowTimestamp(false);
   };
   const onMouseMove = (e: any) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const max = rect.width;
-    const pct = Math.max(0, Math.min(1, x / max));
-    const target = getStart() + pct * getLength();
-    setHoverState({ hoverTimestamp: target, hoverPos: pct });
+    try {
+      const rect = e.currentTarget?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      let clientX = e.clientX;
+      if (typeof clientX !== "number" && e.touches?.[0]) clientX = e.touches[0].clientX;
+      if (typeof clientX !== "number" && e.changedTouches?.[0]) clientX = e.changedTouches[0].clientX;
+      if (typeof clientX !== "number" || !Number.isFinite(clientX)) return;
+
+      const x = clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      const len = getLength();
+      if (!Number.isFinite(len) || len <= 0) return;
+      const target = getStart() + pct * len;
+      if (Number.isFinite(target)) {
+        setHoverState({ hoverTimestamp: target, hoverPos: pct });
+      }
+    } catch {}
   };
 
   // Quick 10s seek
@@ -443,29 +668,81 @@ export const Controls = (props: ControlsProps) => {
     }, 700);
   };
 
+  const controlsOpenedAtRef = useRef<number>(Date.now());
+
   // Gesture handler on video container:
-  // Double-tap left (< 32%) -> -10s
-  // Double-tap right (> 68%) -> +10s
-  // Double-tap center (32% - 68%) -> Toggle Play/Pause
-  // Single-tap -> toggle controls overlay visibility
+  // Double-tap left (< 35%) -> -10s
+  // Double-tap right (> 65%) -> +10s
+  // Double-tap center -> Toggle Play/Pause
+  // Single-tap -> toggle controls overlay visibility safely without accidental vanishing
   const handleVideoGesture = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     try {
       if (!e) return;
+
+      // Ignore synthetic click event generated by touch devices within 750ms of a touch event
+      if (e.type === "click" && Date.now() - lastTouchTimeRef.current < 750) {
+        return;
+      }
+      if (e.type === "touchend") {
+        lastTouchTimeRef.current = Date.now();
+      }
+
+      // If screen is locked, do not trigger any gestures on the video canvas,
+      // but briefly reveal the lock button so user can tap it to unlock!
+      if (isScreenLocked) {
+        setShowLockOnly(true);
+        if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = setTimeout(() => {
+          setShowLockOnly(false);
+        }, 3000);
+        return;
+      }
+
+      // CRITICAL: If tapping controls, buttons, drawer, or open menus, NEVER handle as background video gesture!
+      const targetEl = (e.target as HTMLElement) || null;
+      if (
+        targetEl &&
+        (targetEl.closest(`.${styles.controlsContainer}`) ||
+          targetEl.closest(`.${styles.cornerSyncBtn}`) ||
+          targetEl.closest(`.${styles.fullscreenChatDrawer}`) ||
+          targetEl.closest(`.${styles.fullscreenChatBackdrop}`) ||
+          targetEl.closest(`.${styles.centerControlsRow}`) ||
+          targetEl.closest(`.${styles.screenLockBtn}`) ||
+          targetEl.closest(`.${styles.videoTitleOverlay}`) ||
+          targetEl.closest(`.${styles.settingsPopupWrapper}`) ||
+          targetEl.closest(`.${styles.settingsBackdrop}`) ||
+          targetEl.closest("[class*='topRightControlsContainer']") ||
+          targetEl.closest("[class*='floatingReactionsBar']") ||
+          targetEl.closest("[class*='reactionBtn']") ||
+          targetEl.closest(".mantine-Menu-dropdown") ||
+          targetEl.closest(".mantine-Menu-item"))
+      ) {
+        return;
+      }
+      if (isMenuOpenRef.current || isDrawerOpenRef.current || isPlayerSettingsOpenRef.current) {
+        return;
+      }
+
+      // Prevent default on handled touchend so mobile browsers do not fire synthetic mousemove/click
+      if (e.type === "touchend" && typeof e.preventDefault === "function") {
+        e.preventDefault();
+      }
       if (typeof e.stopPropagation === "function") {
         e.stopPropagation();
       }
-      const targetEl = e.currentTarget;
-      if (!targetEl || typeof targetEl.getBoundingClientRect !== "function") return;
 
-      const rect = targetEl.getBoundingClientRect();
+      const containerEl = e.currentTarget;
+      if (!containerEl || typeof containerEl.getBoundingClientRect !== "function") return;
+
+      const rect = containerEl.getBoundingClientRect();
       if (!rect || rect.width <= 10 || rect.height <= 10) return;
 
       let clientX: number | undefined = undefined;
       const anyEvent = e as any;
-      if (anyEvent.touches && anyEvent.touches.length > 0 && typeof anyEvent.touches[0].clientX === "number") {
-        clientX = anyEvent.touches[0].clientX;
-      } else if (anyEvent.changedTouches && anyEvent.changedTouches.length > 0 && typeof anyEvent.changedTouches[0].clientX === "number") {
+      if (anyEvent.changedTouches && anyEvent.changedTouches.length > 0 && typeof anyEvent.changedTouches[0].clientX === "number") {
         clientX = anyEvent.changedTouches[0].clientX;
+      } else if (anyEvent.touches && anyEvent.touches.length > 0 && typeof anyEvent.touches[0].clientX === "number") {
+        clientX = anyEvent.touches[0].clientX;
       } else if (typeof anyEvent.clientX === "number") {
         clientX = anyEvent.clientX;
       }
@@ -476,32 +753,46 @@ export const Controls = (props: ControlsProps) => {
       const now = Date.now();
       const timeDiff = now - lastTapRef.current.time;
 
-      if (timeDiff > 40 && timeDiff < 340) {
+      if (timeDiff > 100 && timeDiff < 380) {
         // Double tap detected!
-        if (relativeX < 0.32) {
+        if (relativeX < 0.35) {
           handleSeekDelta(-10);
           triggerRipple("rewind");
-        } else if (relativeX > 0.68) {
+        } else if (relativeX > 0.65) {
           handleSeekDelta(10);
           triggerRipple("forward");
         } else {
-          const nextPaused = !paused;
           roomTogglePlay();
-          triggerRipple(nextPaused ? "pause" : "play");
+          triggerRipple(paused ? "play" : "pause");
         }
         lastTapRef.current = { time: 0, x: 0 };
+        scheduleHide(3500);
       } else {
         // Single tap -> toggle controls overlay
         lastTapRef.current = { time: now, x: relativeX };
         setVisible((prev) => {
-          const next = !prev;
-          if (next) {
-            scheduleHide(3200);
-          } else if (hideTimerRef.current) {
-            clearTimeout(hideTimerRef.current);
-            hideTimerRef.current = null;
+          if (!prev) {
+            // Tapping to show controls: stay visible for 3.5s so user can comfortably use all buttons
+            controlsOpenedAtRef.current = Date.now();
+            scheduleHide(3500);
+            return true;
+          } else {
+            // If currently paused, keep controls visible so user can see playback controls and progress bar
+            if (pausedRef.current) {
+              return true;
+            }
+            // If controls were shown very recently (< 700ms), KEEP THEM VISIBLE! (Never vanish in a flash)
+            if (Date.now() - controlsOpenedAtRef.current < 700) {
+              scheduleHide(3500);
+              return true;
+            }
+            // Deliberate tap on empty background video while playing -> dismiss
+            if (hideTimerRef.current) {
+              clearTimeout(hideTimerRef.current);
+              hideTimerRef.current = null;
+            }
+            return false;
           }
-          return next;
         });
       }
     } catch (err) {
@@ -566,27 +857,57 @@ export const Controls = (props: ControlsProps) => {
     <div
       className={`${styles.playerOverlayWrapper} ${isControlsVisible ? styles.controlsVisible : styles.controlsHidden}`}
       onClick={handleVideoGesture}
+      onTouchEnd={handleVideoGesture}
       onMouseMove={resetHideTimer}
-      onTouchStart={resetHideTimer}
     >
-      {/* Top-Left Corner Smart Sync Option */}
-      <button
-        type="button"
-        className={`${styles.cornerSyncBtn} ${isBehind ? styles.behind : ""} ${isControlsVisible ? styles.visible : styles.hidden}`}
-        title={isBehind ? `Behind by ${behindTime.toFixed(1)}s - Tap to catch up` : "In sync with room"}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (isLiveStream) {
-            roomSeek(props.duration);
-          } else {
-            localSeek();
-          }
-          resetHideTimer();
-        }}
-      >
-        <WPIconSync size={13} />
-        <span>{isBehind ? `Sync (-${behindTime.toFixed(0)}s)` : "Sync"}</span>
-      </button>
+
+      {/* Screen Lock Toggle Button (Available in Fullscreen & Mobile Landscape) */}
+      {isFullBleedVideo && (
+        <button
+          type="button"
+          className={`${styles.screenLockBtn} ${isScreenLocked ? styles.screenLockBtnLocked : ""} ${(isControlsVisible || showLockOnly) ? styles.screenLockBtnVisible : styles.screenLockBtnHidden}`}
+          title={isScreenLocked ? "Unlock Screen Controls" : "Lock Screen Controls"}
+          onClick={(e) => {
+            e.stopPropagation();
+            const nextLocked = !isScreenLocked;
+            setIsScreenLocked(nextLocked);
+            if (nextLocked) {
+              // Clicked lock: briefly show locked feedback for 1.2s then fade out
+              setShowLockOnly(true);
+              setVisible(false);
+              if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+              lockTimerRef.current = setTimeout(() => {
+                setShowLockOnly(false);
+              }, 1200);
+            } else {
+              // Unlocked: restore controls
+              setShowLockOnly(false);
+              setVisible(true);
+              resetHideTimer();
+            }
+          }}
+        >
+          {isScreenLocked ? (
+            <WPIconLock size={19} color="#ffffff" />
+          ) : (
+            <WPIconLockOpen size={19} color="#ffffff" />
+          )}
+        </button>
+      )}
+
+      {/* Video Title Overlay (Top-Left Position in Fullscreen / Mobile Landscape) */}
+      {isFullBleedVideo && !isScreenLocked && isControlsVisible && (
+        <div className={styles.videoTitleOverlay} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.videoTitleMain}>
+            {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle || "WatchParty"}
+          </div>
+          {cleanMovieTitle(currentMediaTitle).meta && (
+            <div className={styles.videoTitleSub}>
+              {cleanMovieTitle(currentMediaTitle).meta}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Double tap ripple indicators (Left -10s, Right +10s, Center Play/Pause) */}
       {doubleTapRipple === "rewind" && (
@@ -872,13 +1193,18 @@ export const Controls = (props: ControlsProps) => {
 
       {/* Bottom Controls Bar (Streamlined: Scrubber + Play/Pause + Speed + Captions + PiP + Theater + Chat + Fullscreen) */}
       <div
-        className={`${styles.controlsContainer} ${isControlsVisible ? styles.visible : styles.hidden}`}
+        className={`${styles.controlsContainer} ${(isControlsVisible && !isScreenLocked) ? styles.visible : styles.hidden}`}
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          resetHideTimer();
+        }}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
         {/* Row 1: Interactive Scrubber Timeline */}
         <div className={styles.timelineRow}>
           <span className={styles.timeText}>
-            {formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined)}
+            {formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined) || "00:00"}
           </span>
 
           <div
@@ -886,21 +1212,80 @@ export const Controls = (props: ControlsProps) => {
             onMouseOver={onMouseOver}
             onMouseOut={onMouseOut}
             onMouseMove={onMouseMove}
+            onClick={(e: any) => {
+              e.stopPropagation();
+              if (disabled) return;
+              try {
+                const rect = e.currentTarget?.getBoundingClientRect();
+                if (!rect || rect.width <= 0) return;
+                const clientX = e.clientX;
+                if (typeof clientX !== "number" || !Number.isFinite(clientX)) return;
+
+                const x = clientX - rect.left;
+                const pct = Math.max(0, Math.min(1, x / rect.width));
+                const len = getLength();
+                if (!Number.isFinite(len) || len <= 0) return;
+                const target = len * pct;
+                if (Number.isFinite(target)) {
+                  roomSeek(target);
+                  resetHideTimer();
+                }
+              } catch (err) {
+                console.warn("Seek error:", err);
+              }
+            }}
+            onTouchStart={(e: any) => {
+              e.stopPropagation();
+              if (disabled) return;
+              try {
+                const rect = e.currentTarget?.getBoundingClientRect();
+                if (!rect || rect.width <= 0) return;
+                const touch = e.touches?.[0] || e.changedTouches?.[0];
+                if (!touch || typeof touch.clientX !== "number") return;
+
+                const x = touch.clientX - rect.left;
+                const pct = Math.max(0, Math.min(1, x / rect.width));
+                const len = getLength();
+                if (!Number.isFinite(len) || len <= 0) return;
+                const target = len * pct;
+                if (Number.isFinite(target)) {
+                  roomSeek(target);
+                  resetHideTimer();
+                }
+              } catch (err) {
+                console.warn("Touch seek error:", err);
+              }
+            }}
+            onTouchMove={(e: any) => {
+              e.stopPropagation();
+              if (disabled) return;
+              try {
+                const rect = e.currentTarget?.getBoundingClientRect();
+                if (!rect || rect.width <= 0) return;
+                const touch = e.touches?.[0] || e.changedTouches?.[0];
+                if (!touch || typeof touch.clientX !== "number") return;
+
+                const x = touch.clientX - rect.left;
+                const pct = Math.max(0, Math.min(1, x / rect.width));
+                const len = getLength();
+                if (!Number.isFinite(len) || len <= 0) return;
+                const target = len * pct;
+                if (Number.isFinite(target)) {
+                  roomSeek(target);
+                  resetHideTimer();
+                }
+              } catch (err) {
+                console.warn("Touch drag seek error:", err);
+              }
+            }}
+            onTouchEnd={(e: any) => {
+              e.stopPropagation();
+              resetHideTimer();
+            }}
           >
             <Progress.Root
               radius="xl"
               className={styles.progressBar}
-              onClick={(e: any) => {
-                if (!disabled) {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const max = rect.width;
-                  const pct = Math.max(0, Math.min(1, x / max));
-                  const target = getLength() * pct;
-                  roomSeek(target);
-                  resetHideTimer();
-                }
-              }}
             >
               <Progress.Section
                 className={styles.progressSection}
@@ -908,31 +1293,35 @@ export const Controls = (props: ControlsProps) => {
                 value={getPercent() * 100}
               />
               {buffers}
-
-              {/* Progress glowing scrubber thumb */}
-              <div
-                className={styles.scrubberThumb}
-                style={{ left: `${getPercent() * 100}%` }}
-              />
-
-              {/* Hover preview timestamp tooltip */}
-              {getLength() < Infinity && showTimestamp && (
-                <div
-                  className={styles.hoverTooltip}
-                  style={{
-                    left: `clamp(28px, ${hoverState.hoverPos * 100}%, calc(100% - 28px))`,
-                  }}
-                >
-                  {formatTimestamp(
-                    hoverState.hoverTimestamp,
-                    isLiveStream ? zeroTime : undefined,
-                  )}
-                </div>
-              )}
             </Progress.Root>
+
+            {/* Progress glowing scrubber thumb (placed on progressWrapper to prevent Mantine overflow:hidden clipping) */}
+            <div
+              className={styles.scrubberThumb}
+              style={{ left: `${getPercent() * 100}%` }}
+            />
+
+            {/* Hover preview timestamp tooltip */}
+            {getLength() < Infinity && showTimestamp && (
+              <div
+                className={styles.hoverTooltip}
+                style={{
+                  left: `clamp(28px, ${hoverState.hoverPos * 100}%, calc(100% - 28px))`,
+                }}
+              >
+                {formatTimestamp(
+                  hoverState.hoverTimestamp,
+                  isLiveStream ? zeroTime : undefined,
+                )}
+              </div>
+            )}
           </div>
 
-          <span className={styles.timeText}>{formatTimestamp(getEnd())}</span>
+          {!isLiveStream && (
+            <span className={styles.timeText}>
+              {formatTimestamp(getEnd()) || "00:00"}
+            </span>
+          )}
 
           {isLiveStream && (
             <Badge size="xs" color="red" className={styles.liveBadge}>
@@ -946,35 +1335,83 @@ export const Controls = (props: ControlsProps) => {
           {/* Left Actions: Play/Pause, Next Video in Queue, and Volume */}
           <div className={styles.actionsLeft}>
             {/* Play/Pause Button */}
-            <div
+            <button
+              type="button"
               className={styles.action}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 roomTogglePlay();
                 resetHideTimer();
               }}
               title={paused ? "Play" : "Pause"}
             >
               {paused ? <WPIconPlay size={22} /> : <WPIconPause size={22} />}
-            </div>
+            </button>
 
             {/* Skip to next queue item (if queue active) */}
             {playlist.length > 0 && (
-              <div
+              <button
+                type="button"
                 className={styles.action}
                 title="Next video in queue"
-                onClick={() => roomPlaylistPlay(0)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  roomPlaylistPlay(0);
+                  resetHideTimer();
+                }}
               >
                 <WPIconSkipForward size={20} />
-              </div>
+              </button>
             )}
+
+            {/* Volume & Mute Control */}
+            <div className={styles.volumeContainer}>
+              <button
+                type="button"
+                className={styles.action}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.localToggleMute();
+                  resetHideTimer();
+                }}
+                title={props.muted || props.volume === 0 ? "Unmute" : "Mute"}
+              >
+                {props.muted || props.volume === 0 ? (
+                  <WPIconVolumeOff size={20} />
+                ) : props.volume < 0.5 ? (
+                  <WPIconVolumeLow size={20} />
+                ) : (
+                  <WPIconVolumeOn size={20} />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={props.muted ? 0 : props.volume}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  props.localSetVolume(val);
+                  if (props.muted && val > 0) {
+                    props.localToggleMute();
+                  }
+                  resetHideTimer();
+                }}
+                className={styles.volumeSlider}
+                title={`Volume: ${Math.round((props.muted ? 0 : props.volume) * 100)}%`}
+              />
+            </div>
           </div>
 
           {/* Right Actions */}
           <div className={styles.actionsRight}>
             {/* Quick In-Bar Sync Button */}
-            <div
+            <button
+              type="button"
               className={`${styles.action} ${isBehind ? styles.syncBehind : ""}`}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 if (isLiveStream) {
                   roomSeek(props.duration);
                 } else {
@@ -985,201 +1422,47 @@ export const Controls = (props: ControlsProps) => {
               title={isBehind ? `Behind by ${behindTime.toFixed(1)}s - Tap to catch up` : "In sync with room"}
             >
               <WPIconSync size={18} />
-            </div>
+            </button>
 
-            {/* Playback Speed Menu */}
-            <Menu
-              disabled={disabled}
-              position="top-end"
-              withinPortal={true}
-              portalProps={{
-                target:
-                  typeof document !== "undefined"
-                    ? (document.fullscreenElement as HTMLElement) || document.body
-                    : undefined,
-              }}
-              onOpen={() => setIsMenuOpen(true)}
-              onClose={() => {
-                setIsMenuOpen(false);
-                resetHideTimer();
-              }}
-            >
-              <Menu.Target>
-                <div className={styles.speedButton} title="Playback Speed">
-                  <WPIconSpeed size={16} />
-                  <span>{props.playbackRate ? `${props.playbackRate.toFixed(2).replace(/\.00$/, "")}x` : "1x"}</span>
-                </div>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>Playback Speed</Menu.Label>
-                {[
-                  { key: "0.25", text: "0.25x", value: 0.25 },
-                  { key: "0.5", text: "0.5x", value: 0.5 },
-                  { key: "0.75", text: "0.75x", value: 0.75 },
-                  { key: "1", text: "1.0x (Normal)", value: 1 },
-                  { key: "1.25", text: "1.25x", value: 1.25 },
-                  { key: "1.5", text: "1.5x", value: 1.5 },
-                  { key: "1.75", text: "1.75x", value: 1.75 },
-                  { key: "2", text: "2.0x", value: 2 },
-                  { key: "3", text: "3.0x", value: 3 },
-                ].map((item) => (
-                  <Menu.Item
-                    key={item.key}
-                    onClick={() => roomSetPlaybackRate(item.value)}
-                    rightSection={
-                      roomPlaybackRate === item.value ? (
-                        <WPIconCheck size={16} color="#6366f1" />
-                      ) : null
-                    }
-                  >
-                    {item.text}
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
-
-            {/* Closed Captions / Subtitles Menu (Both YouTube and Native videos, visible in fullscreen and landscape) */}
-            <Menu
-              position="top-end"
-              withinPortal={true}
-              portalProps={{
-                target:
-                  typeof document !== "undefined"
-                    ? (document.fullscreenElement as HTMLElement) || document.body
-                    : undefined,
-              }}
-              onOpen={() => setIsMenuOpen(true)}
-              onClose={() => {
-                setIsMenuOpen(false);
-                resetHideTimer();
-              }}
-            >
-              <Menu.Target>
-                <div
-                  className={`${styles.action} ${subtitled ? styles.activeFeature : ""}`}
-                  title="Subtitles / Captions"
-                >
-                  <WPIconCaptions size={20} />
-                </div>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>Captions & Subtitles</Menu.Label>
-                {props.isYouTube ? (
-                  [
-                    { key: "hidden", text: "Off", value: "hidden" },
-                    { key: "en", text: "English", value: "showing" },
-                    { key: "es", text: "Spanish", value: "showing" },
-                  ].map((item) => (
-                    <Menu.Item
-                      key={item.key}
-                      onClick={() =>
-                        props.localSetSubtitleMode(
-                          item.value as TextTrackMode,
-                          item.key,
-                        )
-                      }
-                      rightSection={
-                        (subtitled && item.key !== "hidden") || (!subtitled && item.key === "hidden") ? (
-                          <WPIconCheck size={16} color="#6366f1" />
-                        ) : null
-                      }
-                    >
-                      {item.text}
-                    </Menu.Item>
-                  ))
-                ) : (
-                  <>
-                    <Menu.Item
-                      onClick={() => {
-                        props.localSetSubtitleMode("hidden");
-                        setPlayerSettings({ liveCaptions: false });
-                      }}
-                      rightSection={!subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
-                    >
-                      Captions: Off
-                    </Menu.Item>
-                    <Menu.Item
-                      onClick={() => {
-                        props.localSetSubtitleMode("showing");
-                        setPlayerSettings({ liveCaptions: true });
-                      }}
-                      rightSection={subtitled ? <WPIconCheck size={16} color="#6366f1" /> : null}
-                    >
-                      Captions: On {props.roomSubtitle ? "(Room File)" : "(Track)"}
-                    </Menu.Item>
-
-                    {/* Attached Subtitle Tracks from Video / MKV / MP4 File */}
-                    {attachedSubtitleTracks.length > 0 && (
-                      <>
-                        <Menu.Divider />
-                        <Menu.Label>Attached Subtitles ({attachedSubtitleTracks.length})</Menu.Label>
-                        {attachedSubtitleTracks.map((t) => (
-                          <Menu.Item
-                            key={t.index}
-                            onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
-                            rightSection={t.active ? <WPIconCheck size={16} color="#6366f1" /> : null}
-                          >
-                            {t.label}
-                          </Menu.Item>
-                        ))}
-                      </>
-                    )}
-
-                    <Menu.Divider />
-                    <Menu.Divider />
-                    <Menu.Item
-                      leftSection={<WPIconCaptions size={16} />}
-                      onClick={localSubtitleModal}
-                    >
-                      Search & Auto-Load Subtitles (.srt)...
-                    </Menu.Item>
-                    <Menu.Divider />
-                    <Menu.Item
-                      leftSection={<WPIconCaptions size={16} />}
-                      onClick={() => {
-                        const next = !playerSettingsState.liveCaptions;
-                        setPlayerSettings({ liveCaptions: next });
-                      }}
-                      rightSection={
-                        playerSettingsState.liveCaptions ? (
-                          <WPIconCheck size={16} color="#34d399" />
-                        ) : null
-                      }
-                    >
-                      Live Audio Transcribe: {playerSettingsState.liveCaptions ? "On" : "Off"}
-                    </Menu.Item>
-                  </>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-
-            {/* Picture-in-Picture (Hidden in Fullscreen or Landscape) */}
-            {isPipSupported && !isFullscreen && !isLandscapeMobile && (
-              <div
+            {/* Picture-in-Picture (Hidden on Mobile to preserve uncluttered touch targets) */}
+            {isPipSupported && !isFullscreen && !isLandscapeMobile && !props.isMobileView && (
+              <button
+                type="button"
                 className={`${styles.action} ${isPipActive ? styles.activeFeature : ""}`}
-                onClick={togglePictureInPicture}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePictureInPicture();
+                  resetHideTimer();
+                }}
                 title={isPipActive ? "Exit Picture-in-Picture" : "Picture-in-Picture"}
               >
-                <WPIconPictureInPicture size={20} />
-              </div>
+                <WPIconPictureInPicture size={20} filled={isPipActive} />
+              </button>
             )}
 
             {/* Theater Mode (Desktop only, hidden in true fullscreen) */}
             {!isFullscreen && !props.isMobileView && (
-              <div
+              <button
+                type="button"
                 className={`${styles.action} ${styles.desktopOnlyBtn}`}
-                onClick={() => localFullScreen(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  localFullScreen(false);
+                  resetHideTimer();
+                }}
                 title="Theater Mode"
               >
                 <WPIconTheater size={20} />
-              </div>
+              </button>
             )}
 
             {/* In-Video Floating Chat Button */}
             {canShowInVideoChat && (
-              <div
+              <button
+                type="button"
                 className={`${styles.action} ${styles.fullscreenChatBtn} ${isChatDrawerOpen ? styles.activeFeature : ""}`}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setIsChatDrawerOpen((prev) => {
                     const next = !prev;
                     if (next && props.onClearUnread) {
@@ -1187,670 +1470,68 @@ export const Controls = (props: ControlsProps) => {
                     }
                     return next;
                   });
+                  resetHideTimer();
                 }}
                 title={isChatDrawerOpen ? "Close Chat" : "Open Chat"}
                 style={{ position: "relative" }}
               >
-                <WPIconChat size={20} />
+                <WPIconChat size={20} filled={isChatDrawerOpen} />
                 {Boolean(props.unreadCount && props.unreadCount > 0 && !isChatDrawerOpen) && (
                   <span className={styles.chatBadge}>
                     {(props.unreadCount ?? 0) > 99 ? "99+" : props.unreadCount}
                   </span>
                 )}
-              </div>
+              </button>
             )}
 
             {/* In-Video Voice & Webcams Button (Available in Full-Bleed / Landscape / Fullscreen, or Desktop) */}
             {Boolean(isFullBleedVideo || (!props.isMobileView && props.participants)) && (
-              <div
+              <button
+                type="button"
                 className={`${styles.action} ${styles.fullscreenChatBtn} ${isVideoDrawerOpen ? styles.activeFeature : ""}`}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setIsVideoDrawerOpen((prev) => !prev);
                   if (!isVideoDrawerOpen) {
                     setIsChatDrawerOpen(false);
                   }
+                  resetHideTimer();
                 }}
                 title={isVideoDrawerOpen ? "Close Webcams" : "Voice & Webcams"}
                 style={{ position: "relative" }}
               >
-                <WPIconVideo size={20} color={hasOurStream ? "#10b981" : undefined} />
+                <WPIconVideo size={20} filled={isVideoDrawerOpen} />
                 {videoUsersCount > 0 && (
-                  <span className={styles.chatBadge} style={{ background: "#10b981" }}>
+                  <span className={styles.chatBadge}>
                     {videoUsersCount}
                   </span>
                 )}
-              </div>
+              </button>
             )}
 
-            {/* Player Settings Menu: Webcam Bubbles Drag, Size & Preferences */}
-            <Menu
-              position="top-end"
-              withinPortal={true}
-              portalProps={{
-                target:
-                  typeof document !== "undefined"
-                    ? (document.fullscreenElement as HTMLElement) || document.body
-                    : undefined,
-              }}
-              onOpen={() => setIsMenuOpen(true)}
-              onClose={() => {
-                setIsMenuOpen(false);
+            {/* Player Settings Menu Trigger */}
+            <button
+              type="button"
+              className={`${styles.action} ${isPlayerSettingsOpen ? styles.activeFeature : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPlayerSettingsOpen((prev) => !prev);
                 resetHideTimer();
               }}
+              title="Player Settings"
             >
-              <Menu.Target>
-                <div
-                  className={`${styles.action} ${webcamState.dragUnlocked ? styles.activeFeature : ""}`}
-                  title="Player & Webcam Settings"
-                >
-                  <WPIconSettings size={20} />
-                </div>
-              </Menu.Target>
-              <Menu.Dropdown className={styles.compactSettingsDropdown}>
-                {/* Compact Category Tabs */}
-                <div className={styles.settingsTabHeader}>
-                  <button
-                    type="button"
-                    className={`${styles.settingsTabBtn} ${settingsTab === "audio" ? styles.settingsTabBtnActive : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSettingsTab("audio");
-                    }}
-                  >
-                    <WPIconVolumeOn size={13} /> Audio
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.settingsTabBtn} ${settingsTab === "subtitles" ? styles.settingsTabBtnActive : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSettingsTab("subtitles");
-                    }}
-                  >
-                    <WPIconCaptions size={13} /> Subtitles
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.settingsTabBtn} ${settingsTab === "quality" ? styles.settingsTabBtnActive : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSettingsTab("quality");
-                    }}
-                  >
-                    <WPIconMonitor size={13} /> Quality
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.settingsTabBtn} ${settingsTab === "more" ? styles.settingsTabBtnActive : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSettingsTab("more");
-                    }}
-                  >
-                    <WPIconSettings size={13} /> More
-                  </button>
-                </div>
-
-                {/* Fixed-Size Stable Tab Content Container */}
-                <div className={styles.settingsTabContent}>
-                  {/* TAB 1: AUDIO & DUAL AUDIO */}
-                  {settingsTab === "audio" && (
-                    <div>
-                      {/* Audio Tracks / Discrete Language Detection */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Audio Tracks</span>
-                          <span className={`${styles.statusBadge} ${hasMultipleAudioTracks ? styles.badgeActive : ""}`}>
-                            {hasMultipleAudioTracks
-                              ? `🟢 ${audioTracks.length} Attached`
-                              : "1 Track Attached"}
-                          </span>
-                        </div>
-                        <div className={styles.settingsList}>
-                          {audioTracks.map((t, idx) => (
-                            <div
-                              key={t.id}
-                              className={`${styles.settingsRowItem} ${playerSettingsState.audioTrack === idx ? styles.settingsRowItemActive : ""}`}
-                              onClick={() => {
-                                setPlayerSettings({ audioTrack: idx });
-                                audioEnhancer.selectTrack(
-                                  idx,
-                                  document.getElementById("leftVideo") as HTMLMediaElement,
-                                );
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden" }}>
-                                <WPIconVolumeLow size={13} style={{ flexShrink: 0 }} />
-                                <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                                  {t.label}
-                                </span>
-                              </div>
-                              {playerSettingsState.audioTrack === idx && (
-                                <WPIconCheck size={13} color="#6366f1" style={{ flexShrink: 0 }} />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {!hasMultipleAudioTracks && (
-                          <div className={styles.settingsHint}>
-                            1 audio stream detected. For dual-language files with Left/Right channels (Hindi & English), use Channel Switch below.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Dual-Audio Channel Switcher */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Dual Audio (Channel Switch)</span>
-                          <span className={styles.settingsBadge}>
-                            {playerSettingsState.dualAudioMode === "stereo"
-                              ? "STEREO"
-                              : playerSettingsState.dualAudioMode === "left"
-                              ? "L CHANNEL"
-                              : "R CHANNEL"}
-                          </span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          <button
-                            type="button"
-                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "stereo" ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              setPlayerSettings({ dualAudioMode: "stereo" });
-                              audioEnhancer.setDualAudioMode("stereo");
-                            }}
-                            title="Normal Stereo (Both channels)"
-                          >
-                            Stereo
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "left" ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              setPlayerSettings({ dualAudioMode: "left" });
-                              audioEnhancer.setDualAudioMode("left");
-                            }}
-                            title="Audio 1 (Left Channel - e.g. Hindi)"
-                          >
-                            Audio 1 (Left)
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.settingsPill} ${playerSettingsState.dualAudioMode === "right" ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              setPlayerSettings({ dualAudioMode: "right" });
-                              audioEnhancer.setDualAudioMode("right");
-                            }}
-                            title="Audio 2 (Right Channel - e.g. English)"
-                          >
-                            Audio 2 (Right)
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Dialogue Boost */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Dialogue Boost</span>
-                          <span className={styles.settingsBadge}>
-                            {playerSettingsState.audioBoost}%
-                          </span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { val: 100, label: "100%" },
-                            { val: 150, label: "150%" },
-                            { val: 200, label: "200%" },
-                            { val: 300, label: "300%" },
-                          ].map((b) => (
-                            <button
-                              key={b.val}
-                              type="button"
-                              className={`${styles.settingsPill} ${playerSettingsState.audioBoost === b.val ? styles.settingsPillActive : ""}`}
-                              onClick={() => {
-                                setPlayerSettings({ audioBoost: b.val });
-                                audioEnhancer.setBoost(b.val);
-                              }}
-                            >
-                              {b.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 2: SUBTITLES */}
-                  {settingsTab === "subtitles" && (
-                    <div>
-                      {/* Subtitle On/Off */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Subtitles</span>
-                          <span className={`${styles.statusBadge} ${props.subtitled ? styles.badgeActive : ""}`}>
-                            {props.subtitled ? "ACTIVE" : "OFF"}
-                          </span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          <button
-                            type="button"
-                            className={`${styles.settingsPill} ${!props.subtitled ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              props.localSetSubtitleMode("hidden");
-                              setPlayerSettings({ liveCaptions: false });
-                            }}
-                          >
-                            Off
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.settingsPill} ${props.subtitled ? styles.settingsPillActive : ""}`}
-                            onClick={() => {
-                              props.localSetSubtitleMode("showing");
-                              setPlayerSettings({ liveCaptions: true });
-                            }}
-                          >
-                            On {props.roomSubtitle ? "(Room File)" : ""}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Attached Subtitles from Video or YouTube CC */}
-                      {props.isYouTube ? (
-                        <div className={styles.settingsGroup}>
-                          <div className={styles.settingsGroupTitle}>YouTube Captions</div>
-                          <div className={styles.settingsPillsRow}>
-                            {[
-                              { key: "hidden", label: "Off", value: "hidden" },
-                              { key: "en", label: "English", value: "showing" },
-                              { key: "es", label: "Spanish", value: "showing" },
-                            ].map((item) => (
-                              <button
-                                key={item.key}
-                                type="button"
-                                className={`${styles.settingsPill} ${(props.subtitled && item.key !== "hidden") || (!props.subtitled && item.key === "hidden") ? styles.settingsPillActive : ""}`}
-                                onClick={() => props.localSetSubtitleMode(item.value as TextTrackMode, item.key)}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        attachedSubtitleTracks.length > 0 && (
-                          <div className={styles.settingsGroup}>
-                            <div className={styles.settingsHeaderRow}>
-                              <span className={styles.settingsGroupTitle}>Attached Tracks</span>
-                              <span className={styles.settingsBadge}>{attachedSubtitleTracks.length}</span>
-                            </div>
-                            <div className={styles.settingsList}>
-                              {attachedSubtitleTracks.map((t) => (
-                                <div
-                                  key={t.index}
-                                  className={`${styles.settingsRowItem} ${t.active ? styles.settingsRowItemActive : ""}`}
-                                  onClick={() => props.localSetSubtitleMode("showing", undefined, t.index)}
-                                >
-                                  <span>{t.label}</span>
-                                  {t.active && <WPIconCheck size={14} color="#6366f1" />}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      )}
-
-                      {/* Load External Subtitle */}
-                      <div className={styles.settingsGroup}>
-                        <button
-                          type="button"
-                          className={styles.settingsActionBtn}
-                          onClick={() => {
-                            props.localSubtitleModal();
-                            setIsMenuOpen(false);
-                          }}
-                        >
-                          <WPIconSearch size={14} /> Search & Auto-Load Subtitles (.srt)...
-                        </button>
-                      </div>
-
-                      {/* Live Speech Transcribe */}
-                      <div className={styles.settingsGroup}>
-                        <div
-                          className={`${styles.settingsRowItem} ${playerSettingsState.liveCaptions ? styles.settingsRowItemActive : ""}`}
-                          onClick={() => {
-                            const next = !playerSettingsState.liveCaptions;
-                            setPlayerSettings({ liveCaptions: next });
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600 }}>Live Audio Transcribe</div>
-                            <div className={styles.settingsHint}>Video source audio • 0.03s zero gap</div>
-                          </div>
-                          {playerSettingsState.liveCaptions ? (
-                            <span className={styles.badgeActiveText}>ON</span>
-                          ) : (
-                            <span className={styles.badgeOffText}>OFF</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Auto-Caption Language Selector */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Auto-Caption Language</span>
-                          <span className={styles.settingsBadge}>{(playerSettingsState.captionLanguage || "en").toUpperCase()}</span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { code: "en", label: "English" },
-                            { code: "hi", label: "हिन्दी (Hindi)" },
-                            { code: "es", label: "Español" },
-                            { code: "all", label: "All / Auto" },
-                          ].map((l) => (
-                            <button
-                              key={l.code}
-                              type="button"
-                              className={`${styles.settingsPill} ${(playerSettingsState.captionLanguage || "en") === l.code ? styles.settingsPillActive : ""}`}
-                              onClick={() => setPlayerSettings({ captionLanguage: l.code })}
-                            >
-                              {(playerSettingsState.captionLanguage || "en") === l.code && "✓ "}
-                              {l.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Subtitle Font Size Selector */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Subtitle Size</span>
-                          <span className={styles.settingsBadge}>{(playerSettingsState.captionSize || "medium").toUpperCase()}</span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { key: "small", label: "Small (16px)" },
-                            { key: "medium", label: "Medium (22px)" },
-                            { key: "large", label: "Large (30px)" },
-                          ].map((s) => (
-                            <button
-                              key={s.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${(playerSettingsState.captionSize || "medium") === s.key ? styles.settingsPillActive : ""}`}
-                              onClick={() => setPlayerSettings({ captionSize: s.key as CaptionSize })}
-                            >
-                              {(playerSettingsState.captionSize || "medium") === s.key && "✓ "}
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Subtitle Text Color Selector */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Text Color</span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { key: "white", label: "White", color: "#ffffff" },
-                            { key: "yellow", label: "Yellow", color: "#facc15" },
-                            { key: "cyan", label: "Cyan", color: "#38bdf8" },
-                            { key: "green", label: "Green", color: "#4ade80" },
-                          ].map((c) => (
-                            <button
-                              key={c.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${(playerSettingsState.captionColor || "white") === c.key ? styles.settingsPillActive : ""}`}
-                              style={{ display: "flex", alignItems: "center", gap: 5 }}
-                              onClick={() => setPlayerSettings({ captionColor: c.key as CaptionColor })}
-                            >
-                              <span style={{ width: 10, height: 10, borderRadius: "50%", background: c.color, display: "inline-block" }} />
-                              {c.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Subtitle Background / Style Effect */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Text Style & Effect</span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { key: "shadow", label: "Netflix Shadow" },
-                            { key: "box", label: "YouTube Box" },
-                            { key: "outline", label: "Outline" },
-                          ].map((st) => (
-                            <button
-                              key={st.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${(playerSettingsState.captionStyle || "shadow") === st.key ? styles.settingsPillActive : ""}`}
-                              onClick={() => setPlayerSettings({ captionStyle: st.key as CaptionStyle })}
-                            >
-                              {(playerSettingsState.captionStyle || "shadow") === st.key && "✓ "}
-                              {st.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Subtitle Vertical Position */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Screen Position</span>
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {[
-                            { key: "bottom", label: "Bottom (Default)" },
-                            { key: "top", label: "Top" },
-                          ].map((pos) => (
-                            <button
-                              key={pos.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${(playerSettingsState.captionPosition || "bottom") === pos.key ? styles.settingsPillActive : ""}`}
-                              onClick={() => setPlayerSettings({ captionPosition: pos.key as CaptionPosition })}
-                            >
-                              {(playerSettingsState.captionPosition || "bottom") === pos.key && "✓ "}
-                              {pos.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Live Subtitle Preview */}
-                      <div className={styles.settingsSubtitleStyleBox}>
-                        <div className={styles.settingsSubtitleStyleLabel}>Live Preview:</div>
-                        <div
-                          style={{
-                            padding: "8px 14px",
-                            textAlign: "center",
-                            fontSize:
-                              (playerSettingsState.captionSize || "medium") === "small"
-                                ? "14px"
-                                : (playerSettingsState.captionSize || "medium") === "large"
-                                  ? "20px"
-                                  : "16px",
-                            fontWeight: 600,
-                            color:
-                              (playerSettingsState.captionColor || "white") === "yellow"
-                                ? "#facc15"
-                                : (playerSettingsState.captionColor || "white") === "cyan"
-                                  ? "#38bdf8"
-                                  : (playerSettingsState.captionColor || "white") === "green"
-                                    ? "#4ade80"
-                                    : "#ffffff",
-                            background:
-                              (playerSettingsState.captionStyle || "shadow") === "box"
-                                ? "rgba(0, 0, 0, 0.78)"
-                                : "transparent",
-                            borderRadius: "6px",
-                            textShadow:
-                              (playerSettingsState.captionStyle || "shadow") === "outline"
-                                ? "-1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000"
-                                : "0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000",
-                            border:
-                              (playerSettingsState.captionStyle || "shadow") === "box"
-                                ? "1px solid rgba(255,255,255,0.1)"
-                                : "none",
-                          }}
-                        >
-                          The speech syncs in real-time!
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: QUALITY */}
-                  {settingsTab === "quality" && (
-                    <div>
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsHeaderRow}>
-                          <span className={styles.settingsGroupTitle}>Playback Quality</span>
-                          {nativeResolution && (
-                            <span className={styles.settingsBadge}>Source: {nativeResolution}</span>
-                          )}
-                        </div>
-                        <div className={styles.settingsPillsRow}>
-                          {QUALITY_PRESETS.map((q) => (
-                            <button
-                              key={q.key}
-                              type="button"
-                              className={`${styles.settingsPill} ${playerSettingsState.quality === q.key ? styles.settingsPillActive : ""}`}
-                              onClick={() => {
-                                setPlayerSettings({ quality: q.key });
-                                qualityManager.applyQuality(q.key, props.isYouTube);
-                              }}
-                            >
-                              {q.label} {q.badge ? `(${q.badge})` : ""}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 4: MORE */}
-                  {settingsTab === "more" && (
-                    <div>
-                      {/* Webcam Bubbles */}
-                      <div className={styles.settingsGroup}>
-                        <div className={styles.settingsGroupTitle}>Webcam Bubbles</div>
-                        <div
-                          className={styles.settingsRowItem}
-                          onClick={() => setWebcamSettings({ visible: !webcamState.visible })}
-                        >
-                          <span>Display Bubbles</span>
-                          <span className={webcamState.visible ? styles.badgeActiveText : styles.badgeOffText}>
-                            {webcamState.visible ? "Visible" : "Hidden"}
-                          </span>
-                        </div>
-                        <div
-                          className={styles.settingsRowItem}
-                          onClick={() => setWebcamSettings({ dragUnlocked: !webcamState.dragUnlocked })}
-                        >
-                          <span>Draggable</span>
-                          <span className={webcamState.dragUnlocked ? styles.badgeActiveText : styles.badgeOffText}>
-                            {webcamState.dragUnlocked ? "Unlocked (Movable)" : "Locked (Clean Video)"}
-                          </span>
-                        </div>
-                        <div style={{ marginTop: 4 }}>
-                          <div className={styles.settingsHint} style={{ marginBottom: 4 }}>
-                            Bubble Size:
-                          </div>
-                          <div className={styles.settingsPillsRow}>
-                            {[
-                              { key: "min", label: "48px" },
-                              { key: "small", label: "70px" },
-                              { key: "medium", label: "95px" },
-                              { key: "max", label: "145px" },
-                            ].map((item) => (
-                              <button
-                                key={item.key}
-                                type="button"
-                                className={`${styles.settingsPill} ${webcamState.size === item.key ? styles.settingsPillActive : ""}`}
-                                onClick={() => setWebcamSettings({ size: item.key as BubbleSize })}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Torrent Stats Overlay */}
-                      {Boolean(props.total || props.convertProgress !== undefined) && (
-                        <div className={styles.settingsGroup}>
-                          <div className={styles.settingsGroupTitle}>Torrent & Transcode</div>
-                          <div
-                            style={{
-                              padding: "6px 8px",
-                              background: "rgba(255, 255, 255, 0.04)",
-                              borderRadius: "6px",
-                              fontSize: "11px",
-                              lineHeight: "1.6",
-                            }}
-                          >
-                            {Boolean(props.total) && (
-                              <>
-                                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Downloaded:</span>
-                                  <strong style={{ color: "#34d399" }}>
-                                    {Math.min((props.downloaded! / props.total!) * 100, 100).toFixed(1)}%
-                                  </strong>
-                                </div>
-                                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Speed:</span>
-                                  <strong>{formatSpeed(props.speed || 0)}</strong>
-                                </div>
-                              </>
-                            )}
-                            {props.convertProgress !== undefined && (
-                              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>Transcode:</span>
-                                <strong>{(props.convertProgress * 100).toFixed(1)}%</strong>
-                              </div>
-                            )}
-                          </div>
-                          <div
-                            className={styles.settingsRowItem}
-                            style={{ marginTop: 4 }}
-                            onClick={() => {
-                              setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
-                            }}
-                          >
-                            <span>On-Screen Badge</span>
-                            <span className={playerSettingsState.showStatsOverlay ? styles.badgeActiveText : styles.badgeOffText}>
-                              {playerSettingsState.showStatsOverlay ? "ON" : "OFF"}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Room Settings */}
-                      {props.onOpenSettings && (
-                        <div className={styles.settingsGroup}>
-                          <button
-                            type="button"
-                            className={styles.settingsActionBtn}
-                            onClick={() => {
-                              props.onOpenSettings!();
-                              setIsMenuOpen(false);
-                            }}
-                          >
-                            <WPIconSettings size={14} /> All Room Settings...
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Menu.Dropdown>
-            </Menu>
+              <WPIconSettings size={20} />
+            </button>
 
             {/* Fullscreen Toggle */}
-            <div
+            <button
+              type="button"
               className={styles.action}
-              onClick={() => localFullScreen(!isFullscreen)}
+              onClick={(e) => {
+                e.stopPropagation();
+                localFullScreen(!isFullscreen);
+                resetHideTimer();
+              }}
               title={isFullscreen ? "Exit Fullscreen (F)" : "Fullscreen (F)"}
             >
               {isFullscreen ? (
@@ -1858,10 +1539,111 @@ export const Controls = (props: ControlsProps) => {
               ) : (
                 <WPIconFullscreen size={20} />
               )}
-            </div>
+            </button>
           </div>
         </div>
       </div>
+    
+      {/* Floating Settings Menu Popup (Images 2, 3, 4, 5) with Blue Theme (#38bdf8) */}
+      {isPlayerSettingsOpen && (
+        <>
+          <div
+            className={`${styles.settingsBackdrop} ${isPortraitMobile ? styles.settingsBackdropMobilePortrait : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsPlayerSettingsOpen(false);
+              resetHideTimer();
+            }}
+          />
+          <div
+            className={`${styles.settingsPopupWrapper} ${isPortraitMobile ? styles.settingsPopupWrapperMobilePortrait : ""}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PlayerSettingsMenu
+              isBottomSheet={isPortraitMobile}
+              onClose={() => {
+                setIsPlayerSettingsOpen(false);
+                resetHideTimer();
+              }}
+              playbackRate={props.playbackRate || 1}
+              onSetPlaybackRate={(rate) => {
+                roomSetPlaybackRate(rate);
+                resetHideTimer();
+              }}
+              aspectRatio={aspectRatio}
+              onSetAspectRatio={(ratio) => {
+                setAspectRatio(ratio);
+                resetHideTimer();
+              }}
+              videoFlip={videoFlip}
+              onSetVideoFlip={(flip) => {
+                setVideoFlip(flip);
+                resetHideTimer();
+              }}
+              subtitleOffset={subtitleOffset}
+              onSetSubtitleOffset={(offset) => {
+                setSubtitleOffset(offset);
+                resetHideTimer();
+              }}
+              subtitled={subtitled}
+              onToggleSubtitles={(show) => {
+                props.localSetSubtitleMode(show ? "showing" : "hidden");
+                setPlayerSettings({ liveCaptions: show });
+                resetHideTimer();
+              }}
+              onUploadSubtitle={() => {
+                localSubtitleModal();
+                setIsPlayerSettingsOpen(false);
+              }}
+              subtitleTracks={attachedSubtitleTracks}
+              onSelectSubtitleTrack={(idx) => {
+                props.localSetSubtitleMode("showing", undefined, idx);
+                resetHideTimer();
+              }}
+              currentSubtitleLabel={
+                attachedSubtitleTracks.find((t) => t.active)?.label ||
+                (props.roomSubtitle ? "Room Sub" : undefined)
+              }
+              audioBoost={audioBoost}
+              onSetAudioBoost={(boost) => {
+                setAudioBoost(boost);
+                const videoEl = document.getElementById("leftVideo") as HTMLMediaElement | null;
+                audioEnhancer.setBoost(boost * 100, videoEl || undefined);
+                resetHideTimer();
+              }}
+              quality={selectedQuality}
+              onSetQuality={(q) => {
+                setSelectedQuality(q);
+                qualityManager.applyQuality(q, props.isYouTube);
+                resetHideTimer();
+              }}
+              audioTracks={audioTracks}
+              currentAudioTrack={playerSettingsState.audioTrack ?? 0}
+              onSelectAudioTrack={(idx) => {
+                setPlayerSettings({ audioTrack: idx });
+                audioEnhancer.selectTrack(
+                  idx,
+                  document.getElementById("leftVideo") as HTMLMediaElement,
+                );
+                resetHideTimer();
+              }}
+              roomMedia={props.video}
+              socket={props.socket}
+              isYouTube={props.isYouTube}
+              downloaded={props.downloaded}
+              total={props.total}
+              speed={props.speed}
+              connections={props.connections}
+              convertProgress={props.convertProgress}
+              showStatsOverlay={playerSettingsState.showStatsOverlay}
+              onToggleStatsOverlay={() => {
+                setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
+                resetHideTimer();
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -9,6 +9,7 @@ export interface WPIconProps extends React.SVGAttributes<SVGSVGElement> {
   onClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   title?: string;
   disabled?: boolean;
+  filled?: boolean;
 }
 
 interface BaseIconProps extends WPIconProps {
@@ -292,30 +293,62 @@ export const WPIconLoop = React.forwardRef<SVGSVGElement, WPIconProps>(
 );
 WPIconLoop.displayName = "WPIconLoop";
 
-// 9. WPIconCaptions - Sleek closed captions rounded badge
+// 9. WPIconCaptions - Sleek closed captions rounded badge (Centered, supporting empty vs filled)
 export const WPIconCaptions = React.forwardRef<SVGSVGElement, WPIconProps>(
-  (props, ref) => (
+  ({ filled = false, ...props }, ref) => (
     <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
-      <rect
-        x="3"
-        y="5"
-        width="18"
-        height="14"
-        rx="3.5"
-        strokeWidth="1.8"
-      />
-      {/* First 'C' */}
-      <path
-        d="M10 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      {/* Second 'C' */}
-      <path
-        d="M16 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      {filled ? (
+        <>
+          <rect
+            x="2.5"
+            y="5"
+            width="19"
+            height="14"
+            rx="3.5"
+            fill="currentColor"
+            stroke="none"
+          />
+          {/* First 'C' cut out in dark */}
+          <path
+            d="M10.2 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
+            stroke="#090A0F"
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Second 'C' cut out in dark */}
+          <path
+            d="M15.8 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
+            stroke="#090A0F"
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </>
+      ) : (
+        <>
+          <rect
+            x="2.5"
+            y="5"
+            width="19"
+            height="14"
+            rx="3.5"
+            strokeWidth="1.8"
+          />
+          {/* First 'C' */}
+          <path
+            d="M10.2 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          {/* Second 'C' */}
+          <path
+            d="M15.8 9.8a2.2 2.2 0 0 0-2 0 2 2 0 0 0 0 4.4 2.2 2.2 0 0 0 2 0"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        </>
+      )}
     </WPIconBase>
   )
 );
@@ -470,6 +503,7 @@ export const WPIconVolumeOn = React.forwardRef<SVGSVGElement, WPIconProps>(
   )
 );
 WPIconVolumeOn.displayName = "WPIconVolumeOn";
+export const WPIconVolumeHigh = WPIconVolumeOn;
 
 // 16. WPIconVolumeLow - Speaker horn + single acoustic sound wave
 export const WPIconVolumeLow = React.forwardRef<SVGSVGElement, WPIconProps>(
@@ -520,18 +554,33 @@ export const WPIconVolumeOff = React.forwardRef<SVGSVGElement, WPIconProps>(
 );
 WPIconVolumeOff.displayName = "WPIconVolumeOff";
 
-// 18. WPIconChat - Modern speech bubble with 3 subtle rounded message dots
+// 18. WPIconChat - Modern speech bubble with 3 subtle rounded message dots (empty vs filled)
 export const WPIconChat = React.forwardRef<SVGSVGElement, WPIconProps>(
-  (props, ref) => (
+  ({ filled = false, ...props }, ref) => (
     <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
-      <path
-        d="M20.5 12a8.5 8.5 0 0 1-12.8 7.3L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <circle cx="8.5" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="15.5" cy="12" r="1" fill="currentColor" stroke="none" />
+      {filled ? (
+        <>
+          <path
+            d="M20.5 12a8.5 8.5 0 0 1-12.8 7.3L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"
+            fill="currentColor"
+            stroke="none"
+          />
+          <circle cx="8.5" cy="12" r="1.2" fill="#090A0F" stroke="none" />
+          <circle cx="12" cy="12" r="1.2" fill="#090A0F" stroke="none" />
+          <circle cx="15.5" cy="12" r="1.2" fill="#090A0F" stroke="none" />
+        </>
+      ) : (
+        <>
+          <path
+            d="M20.5 12a8.5 8.5 0 0 1-12.8 7.3L3.5 20.5l1.2-4.2A8.5 8.5 0 1 1 20.5 12z"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <circle cx="8.5" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="15.5" cy="12" r="1" fill="currentColor" stroke="none" />
+        </>
+      )}
     </WPIconBase>
   )
 );
@@ -923,6 +972,29 @@ export const WPIconLock = React.forwardRef<SVGSVGElement, WPIconProps>(
 );
 WPIconLock.displayName = "WPIconLock";
 
+// 39b. WPIconLockOpen - Unlocked padlock
+export const WPIconLockOpen = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <rect
+        x="4"
+        y="10"
+        width="16"
+        height="11"
+        rx="2.5"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M7 10V7a5 5 0 0 1 9.9-1"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="15" r="1.5" fill="currentColor" stroke="none" />
+    </WPIconBase>
+  )
+);
+WPIconLockOpen.displayName = "WPIconLockOpen";
+
 // 40. WPIconCopy - Two overlapping documents
 export const WPIconCopy = React.forwardRef<SVGSVGElement, WPIconProps>(
   (props, ref) => (
@@ -1242,17 +1314,30 @@ export const WPIconGoogle = React.forwardRef<
 });
 WPIconGoogle.displayName = "WPIconGoogle";
 
-// 59. WPIconVideo - Modern Rounded Camcorder
+// 59. WPIconVideo - Modern Rounded Camcorder (empty vs filled)
 export const WPIconVideo = React.forwardRef<SVGSVGElement, WPIconProps>(
-  (props, ref) => {
+  ({ filled = false, ...props }, ref) => {
     return (
       <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
-        <rect x="2" y="5" width="13" height="14" rx="3" strokeWidth="1.8" />
-        <path
-          d="M15 10l4.5-2.7a1 1 0 0 1 1.5.86v7.68a1 1 0 0 1-1.5.86L15 14v-4z"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
+        {filled ? (
+          <>
+            <rect x="2" y="5" width="13" height="14" rx="3" fill="currentColor" stroke="none" />
+            <path
+              d="M15 10l4.5-2.7a1 1 0 0 1 1.5.86v7.68a1 1 0 0 1-1.5.86L15 14v-4z"
+              fill="currentColor"
+              stroke="none"
+            />
+          </>
+        ) : (
+          <>
+            <rect x="2" y="5" width="13" height="14" rx="3" strokeWidth="1.8" />
+            <path
+              d="M15 10l4.5-2.7a1 1 0 0 1 1.5.86v7.68a1 1 0 0 1-1.5.86L15 14v-4z"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+          </>
+        )}
       </WPIconBase>
     );
   }
@@ -1350,4 +1435,152 @@ export const WPIconBan = React.forwardRef<SVGSVGElement, WPIconProps>(
   }
 );
 WPIconBan.displayName = "WPIconBan";
+
+// 66. WPIconSpeedGauge - Dashed circle with play triangle inside (Play Speed)
+export const WPIconSpeedGauge = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        strokeWidth="1.8"
+        strokeDasharray="4.5 3"
+        strokeLinecap="round"
+      />
+      <polygon
+        points="10 8.5 16 12 10 15.5"
+        fill="currentColor"
+        stroke="none"
+      />
+    </WPIconBase>
+  )
+);
+WPIconSpeedGauge.displayName = "WPIconSpeedGauge";
+
+// 67. WPIconAspectRatio - Rounded rect with horizontal expansion arrows (< >)
+export const WPIconAspectRatio = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <rect x="2.5" y="5" width="19" height="14" rx="3.5" strokeWidth="1.8" />
+      <path
+        d="M7.5 12l2.5-2.5M7.5 12l2.5 2.5"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16.5 12l-2.5-2.5M16.5 12l2.5 2.5"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </WPIconBase>
+  )
+);
+WPIconAspectRatio.displayName = "WPIconAspectRatio";
+
+// 68. WPIconVideoFlip - Mirrored triangles separated by center dashed line
+export const WPIconVideoFlip = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <line
+        x1="12"
+        y1="3"
+        x2="12"
+        y2="21"
+        strokeWidth="1.6"
+        strokeDasharray="2 2"
+        strokeLinecap="round"
+      />
+      <polygon
+        points="9 7 3.5 12 9 17"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <polygon
+        points="15 7 20.5 12 15 17"
+        fill="currentColor"
+        stroke="none"
+      />
+    </WPIconBase>
+  )
+);
+WPIconVideoFlip.displayName = "WPIconVideoFlip";
+
+// 69. WPIconSliders - Equalizer horizontal lines with adjustable slider knobs
+export const WPIconSliders = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <line x1="3" y1="7" x2="21" y2="7" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="7" y1="4" x2="7" y2="10" strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="3" y1="17" x2="21" y2="17" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="17" y1="14" x2="17" y2="20" strokeWidth="2.2" strokeLinecap="round" />
+    </WPIconBase>
+  )
+);
+WPIconSliders.displayName = "WPIconSliders";
+
+// 70. WPIconSubtitleBubble - Speech bubble with subtitle text lines
+export const WPIconSubtitleBubble = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <path
+        d="M20 14a3 3 0 0 1-3 3H7l-4 4V6a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3v8z"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <line x1="7" y1="8.5" x2="16" y2="8.5" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="7" y1="12" x2="13" y2="12" strokeWidth="1.8" strokeLinecap="round" />
+    </WPIconBase>
+  )
+);
+WPIconSubtitleBubble.displayName = "WPIconSubtitleBubble";
+
+// 71. WPIconOpenSubtitle - Speech bubble with dashed subtitle lines
+export const WPIconOpenSubtitle = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <path
+        d="M20 14a3 3 0 0 1-3 3H7l-4 4V6a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3v8z"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <line
+        x1="7"
+        y1="8.5"
+        x2="16"
+        y2="8.5"
+        strokeWidth="1.8"
+        strokeDasharray="2.5 2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="7"
+        y1="12"
+        x2="14"
+        y2="12"
+        strokeWidth="1.8"
+        strokeDasharray="2.5 2"
+        strokeLinecap="round"
+      />
+    </WPIconBase>
+  )
+);
+WPIconOpenSubtitle.displayName = "WPIconOpenSubtitle";
+
+// 72. WPIconQuality - Screen badge with HD / resolution indicator
+export const WPIconQuality = React.forwardRef<SVGSVGElement, WPIconProps>(
+  (props, ref) => (
+    <WPIconBase ref={ref} fill="none" stroke="currentColor" {...props}>
+      <rect x="2.5" y="4.5" width="19" height="15" rx="3.5" strokeWidth="1.8" />
+      {/* 'H' */}
+      <path d="M7 8.5v7M11 8.5v7M7 12h4" strokeWidth="1.8" strokeLinecap="round" />
+      {/* 'D' */}
+      <path d="M14 8.5v7h1.5a3.5 3.5 0 0 0 0-7H14z" strokeWidth="1.8" strokeLinejoin="round" />
+    </WPIconBase>
+  )
+);
+WPIconQuality.displayName = "WPIconQuality";
+
 

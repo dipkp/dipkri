@@ -117,6 +117,13 @@ time {
    Interactive & Mobile Responsive Base
    ========================================================================== */
 
+button {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  color: inherit;
+}
+
 button,
 a,
 input,
@@ -194,8 +201,23 @@ a:hover {
   background: var(--accent-primary);
 }
 
-::-webkit-scrollbar-corner {
-  background: transparent;
+/* ==========================================================================
+   Zero-Scrollbar Utility (preserves touch dragging & wheel scrolling)
+   ========================================================================== */
+
+.no-scrollbar,
+.mantine-Menu-dropdown,
+.mantine-Modal-body {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.mantine-Menu-dropdown::-webkit-scrollbar,
+.mantine-Modal-body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* ==========================================================================
@@ -329,6 +351,146 @@ a:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
+/* Media Search / Link ComboBox: Desktop & Mobile Responsive Styling */
+.watchparty-media-combobox .mantine-Autocomplete-input,
+.watchparty-media-combobox .mantine-Input-input {
+  padding-right: var(--combobox-padding-right, 14px) !important;
+  padding-inline-end: var(--combobox-padding-right, 14px) !important;
+}
+
+/* Desktop Action Buttons: 100% solid background so no scrolled text bleeds through */
+.watchparty-combobox-desktop-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 6px;
+  padding-left: 10px;
+  background: #0f1118 !important; /* Completely solid opaque to conceal any scrolled text */
+  height: 100%;
+  border-radius: 0 12px 12px 0;
+  z-index: 5;
+}
+
+.watchparty-combobox-pill-queue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(56, 189, 248, 0.75);
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.45);
+}
+
+.watchparty-combobox-pill-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(34, 197, 94, 0.75);
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.45);
+}
+
+.watchparty-combobox-mobile-clear {
+  display: none;
+}
+
+.watchparty-combobox-mobile-actions {
+  display: none;
+}
+
+/* Media ComboBox: Responsive Mobile Styles */
+@media (max-width: 600px) {
+  /* Hide cramped desktop buttons inside input on mobile */
+  .watchparty-combobox-desktop-actions {
+    display: none !important;
+  }
+
+  /* Show lightweight clear button */
+  .watchparty-combobox-mobile-clear {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 11px;
+    margin-right: 8px;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .watchparty-combobox-mobile-clear:active {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+  }
+
+  /* Reset right section width and input padding on mobile so text uses full width */
+  .watchparty-media-combobox .mantine-Input-section[data-position="right"],
+  .watchparty-media-combobox [data-position="right"] {
+    width: 38px !important;
+  }
+
+  .watchparty-media-combobox .mantine-Autocomplete-input,
+  .watchparty-media-combobox .mantine-Input-input {
+    padding-right: 38px !important;
+    padding-inline-end: 38px !important;
+  }
+
+  /* Show spacious, thumb-friendly mobile action buttons below the input */
+  .watchparty-combobox-mobile-actions {
+    display: flex !important;
+    gap: 8px;
+    margin-top: 8px;
+    width: 100%;
+  }
+
+  .watchparty-combobox-mobile-btn-queue,
+  .watchparty-combobox-mobile-btn-play {
+    flex: 1;
+    height: 38px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .watchparty-combobox-mobile-btn-queue {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    color: #ffffff;
+    border: 1px solid rgba(56, 189, 248, 0.7);
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+  }
+
+  .watchparty-combobox-mobile-btn-play {
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: #ffffff;
+    border: 1px solid rgba(34, 197, 94, 0.7);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+  }
+}
+
 /* Mantine Modals & Dropdowns */
 .mantine-Modal-root {
   --modal-z-index: 2000 !important;
@@ -458,27 +620,34 @@ a:hover {
 }
 
 /* ==========================================================================
-   Video Subtitle / Captions (Cue) Styling
+   Video Subtitle / Captions (Cue) Suppression
+   Suppress native browser cues so only custom high-res LiveCaptions render
    ========================================================================== */
 video::cue {
-  background-color: rgba(0, 0, 0, 0.75) !important;
-  background: rgba(0, 0, 0, 0.75) !important;
-  color: #ffffff !important;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-  font-size: 1.15rem !important;
-  font-weight: 600 !important;
-  line-height: 1.38 !important;
-  padding: 3px 10px !important;
-  border-radius: 5px !important;
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  font-size: 0px !important;
+  color: transparent !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  height: 0px !important;
+  width: 0px !important;
+  line-height: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
   border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
-  text-shadow:
-    0 0 2px #000000,
-    0 1px 2px #000000,
-    -1px -1px 0 #000000,
-    1px -1px 0 #000000,
-    -1px 1px 0 #000000,
-    1px 1px 0 #000000 !important;
-  white-space: pre-line !important;
+}
+
+video::-webkit-media-text-track-display {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+video::-webkit-media-text-track-container {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 

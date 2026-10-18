@@ -11,6 +11,7 @@ import {
 import { examples } from "../../utils/examples";
 import ChatVideoCard from "../ChatVideoCard/ChatVideoCard";
 import { Autocomplete, type AutocompleteProps } from "@mantine/core";
+import { cleanMovieTitle } from "../Controls/Controls";
 
 type ComboBoxProps = {
   roomSetMedia: (value: string) => void;
@@ -62,7 +63,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
       // Anything that doesn't pass this check we pass to YouTube as a search query
       (query && (isHttp(query) || isMagnet(query)))
     ) {
-      if (!value && this.props.mediaPath) {
+      if (!query && this.props.mediaPath) {
         items = await getMediaPathResults(this.props.mediaPath, "");
       }
       if (query) {
@@ -73,10 +74,15 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
         if (isMagnet(query)) {
           type = "magnet";
         }
+        const clean = cleanMovieTitle(query);
+        const displayName = clean.title
+          ? `${clean.title}${clean.meta ? ` (${clean.meta})` : ""}`
+          : (this.props.getMediaDisplayName ? this.props.getMediaDisplayName(query) : query);
         // Create entry from user input
         items = [
           {
-            name: query,
+            name: displayName,
+            channel: isMagnet(query) ? "🧲 Torrent Stream" : "Direct Video Stream",
             type,
             url: query,
             duration: 0,
@@ -103,6 +109,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     const { roomMedia: currentMedia, getMediaDisplayName } = this.props;
     const renderOption: AutocompleteProps["renderOption"] = ({ option }) => {
       const video = this.state.items.find((item) => item.url === option.value);
+      if (!video) return null;
       return (
         <div
           key={option.value}
@@ -110,37 +117,188 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             // Prevent input from immediately blurring before option click or + Queue fires
             e.preventDefault();
           }}
-          onClick={(e) => this.setMediaAndClose(option.value)}
-          style={{ width: "100%" }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "4px 6px",
+            borderRadius: "8px",
+            gap: "8px",
+          }}
         >
-          {video && (
+          <div
+            style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+            onClick={() => this.setMediaAndClose(option.value)}
+          >
             <ChatVideoCard
               video={video}
               index={0}
               onPlaylistAdd={this.props.playlistAdd}
             />
-          )}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              flexShrink: 0,
+            }}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                this.props.playlistAdd(option.value);
+                this.setState({ inputMedia: undefined, items: [] });
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                height: "28px",
+                padding: "0 9px",
+                borderRadius: "6px",
+                border: "1px solid rgba(56, 189, 248, 0.45)",
+                background: "rgba(56, 189, 248, 0.15)",
+                color: "#38bdf8",
+                fontSize: "11px",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+              title="Add to queue"
+            >
+              + Queue
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                this.setMediaAndClose(option.value);
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                height: "28px",
+                padding: "0 9px",
+                borderRadius: "6px",
+                border: "1px solid rgba(34, 197, 94, 0.45)",
+                background: "rgba(34, 197, 94, 0.15)",
+                color: "#4ade80",
+                fontSize: "11px",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+              title="Play immediately"
+            >
+              ▶ Play
+            </button>
+          </div>
         </div>
       );
     };
+    const hasInput = Boolean(this.state.inputMedia && this.state.inputMedia.trim());
     return (
-      <Autocomplete
-        maxDropdownHeight={400}
-        style={{ width: "100%" }}
-        disabled={this.props.disabled}
-        onChange={this.onChange}
-        styles={{
-          input: {
-            padding: "0 14px",
-            height: "42px",
-            fontSize: "14px",
-            backgroundColor: "rgba(255, 255, 255, 0.05)",
-            borderColor: "rgba(255, 255, 255, 0.12)",
-            borderRadius: "12px",
-            textOverflow: "ellipsis",
-            boxSizing: "border-box",
-          },
-        }}
+      <div className="watchparty-combobox-wrapper" style={{ width: "100%", position: "relative" }}>
+        <Autocomplete
+          className="watchparty-media-combobox"
+          maxDropdownHeight={400}
+          style={{
+            width: "100%",
+            ["--combobox-padding-right" as any]: hasInput ? "175px" : "14px",
+          }}
+          disabled={this.props.disabled}
+          onChange={this.onChange}
+          rightSectionWidth={hasInput ? 170 : undefined}
+          rightSection={
+            hasInput ? (
+              <React.Fragment>
+                {/* Desktop Action Buttons: 100% opaque solid background so no scrolled text bleeds through */}
+                <div className="watchparty-combobox-desktop-actions">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (this.state.inputMedia?.trim()) {
+                        const resolved = resolveMediaUrl(this.state.inputMedia.trim());
+                        this.props.playlistAdd(resolved);
+                        this.setState({ inputMedia: undefined, items: [] });
+                      }
+                    }}
+                    className="watchparty-combobox-pill-queue"
+                    title="Add link to queue"
+                  >
+                    + Queue
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (this.state.inputMedia?.trim()) {
+                        this.setMediaAndClose(this.state.inputMedia.trim());
+                      }
+                    }}
+                    className="watchparty-combobox-pill-play"
+                    title="Play immediately"
+                  >
+                    ▶ Play
+                  </button>
+                </div>
+
+                {/* Mobile Clear Button: Compact icon inside input on mobile */}
+                <button
+                  type="button"
+                  className="watchparty-combobox-mobile-clear"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    this.setState({ inputMedia: undefined, items: [] });
+                  }}
+                  title="Clear input"
+                >
+                  ✕
+                </button>
+              </React.Fragment>
+            ) : null
+          }
+          styles={{
+            input: {
+              padding: "0 14px",
+              paddingRight: hasInput ? "175px" : "14px",
+              paddingInlineEnd: hasInput ? "175px" : "14px",
+              height: "42px",
+              fontSize: "13.5px",
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              borderColor: "rgba(255, 255, 255, 0.12)",
+              borderRadius: "12px",
+              textOverflow: "ellipsis",
+              boxSizing: "border-box",
+            },
+          }}
         onFocus={(e: any) => {
           this.setState(
             {
@@ -176,8 +334,16 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
         }}
         onKeyDown={(e: any) => {
           if (e.key === "Enter") {
-            this.setMediaAndClose(this.state.inputMedia ?? "");
-            e.target.blur();
+            if (!this.state.inputMedia?.trim()) return;
+            const resolved = resolveMediaUrl(this.state.inputMedia.trim());
+            if (this.props.roomMedia && !e.shiftKey) {
+              this.props.playlistAdd(resolved);
+              this.setState({ inputMedia: undefined, items: [] });
+              e.target.blur();
+            } else {
+              this.setMediaAndClose(resolved);
+              e.target.blur();
+            }
           }
         }}
         placeholder="Enter video file URL, magnet link, YouTube link, or YouTube search term"
@@ -190,6 +356,55 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
         data={this.state.items.map((item) => item.url)}
         filter={({ options }) => options}
       />
+
+        {/* Mobile Action Bar: Thumb-friendly buttons below input on mobile when user types/pastes */}
+        {hasInput && (
+          <div className="watchparty-combobox-mobile-actions">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (this.state.inputMedia?.trim()) {
+                  const resolved = resolveMediaUrl(this.state.inputMedia.trim());
+                  this.props.playlistAdd(resolved);
+                  this.setState({ inputMedia: undefined, items: [] });
+                }
+              }}
+              className="watchparty-combobox-mobile-btn-queue"
+              title="Add link to playlist queue"
+            >
+              + Add to Queue
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (this.state.inputMedia?.trim()) {
+                  this.setMediaAndClose(this.state.inputMedia.trim());
+                }
+              }}
+              className="watchparty-combobox-mobile-btn-play"
+              title="Play immediately"
+            >
+              ▶ Play Now
+            </button>
+          </div>
+        )}
+      </div>
     );
   }
 }

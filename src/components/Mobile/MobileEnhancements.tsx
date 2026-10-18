@@ -120,48 +120,56 @@ export const MobileFloatingReactions = ({
         ))}
       </div>
 
-      {/* Floating Quick Resync Pill when behind */}
-      {isBehind && onSync && (
-        <button
-          type="button"
-          className={styles.mobileSyncPill}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSync();
-          }}
-          title="You are behind the host! Tap to catch up."
-        >
-          <WPIconSync size={14} />
-          <span>Tap to Sync</span>
-        </button>
-      )}
+      {/* Top-Right Container for Sync Pill and Reactions */}
+      <div className={styles.topRightControlsContainer}>
+        {/* Floating Quick Resync Pill when behind */}
+        {isBehind && onSync && (
+          <button
+            type="button"
+            className={styles.mobileSyncPill}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSync();
+            }}
+            title="You are behind the host! Tap to catch up."
+          >
+            <WPIconSync size={13} />
+            <span>Sync</span>
+          </button>
+        )}
 
-      {/* Quick Reaction Bar */}
-      {!hide && (
-        <div
-          className={styles.floatingReactionsBar}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {REACTION_EMOJIS.map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              className={`${styles.reactionBtn} ${activeBtn === emoji ? styles.activeReactionBtn : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                triggerReaction(emoji);
-              }}
-              onTouchStart={(e) => {
-                e.stopPropagation();
-              }}
-              aria-label={`React with ${emoji}`}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      )}
+        {/* Quick Reaction Bar */}
+        {!hide && (
+          <div
+            className={styles.floatingReactionsBar}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className={`${styles.reactionBtn} ${activeBtn === emoji ? styles.activeReactionBtn : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  triggerReaction(emoji);
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  triggerReaction(emoji);
+                }}
+                aria-label={`React with ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 };

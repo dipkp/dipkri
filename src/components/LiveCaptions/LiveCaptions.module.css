@@ -1,6 +1,6 @@
 .captionsContainer {
   position: absolute;
-  bottom: 68px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 45;
@@ -11,7 +11,15 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: bottom 0.2s ease, top 0.2s ease, opacity 0.15s ease;
+  transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1), top 0.2s ease, opacity 0.15s ease;
+}
+
+.controlsVisible {
+  bottom: 68px !important;
+}
+
+.controlsHidden {
+  bottom: 14px !important;
 }
 
 .positionTop {
@@ -21,8 +29,14 @@
 
 @media only screen and (max-width: 600px) {
   .captionsContainer {
-    bottom: 54px;
+    bottom: 8px;
     max-width: 94%;
+  }
+  .controlsVisible {
+    bottom: 46px !important;
+  }
+  .controlsHidden {
+    bottom: 8px !important;
   }
   .positionTop {
     top: 36px !important;
@@ -32,14 +46,15 @@
 .minimalSubtitle {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
   font-weight: 600;
-  line-height: 1.38;
-  letter-spacing: 0.25px;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
   text-align: center;
   padding: 4px 12px;
   border-radius: 6px;
   word-break: break-word;
-  white-space: pre-wrap;
-  max-width: 760px;
+  white-space: pre-line;
+  text-wrap: balance;
+  max-width: 840px;
   display: inline-block;
   animation: subtitleFadeIn 0.12s ease-out;
   transition: font-size 0.15s ease, color 0.15s ease;

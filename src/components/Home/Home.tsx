@@ -30,12 +30,63 @@ export const Home = () => {
       return null;
     }
   });
+  const [activeParty, setActiveParty] = useState<{
+    roomId: string;
+    roomTitle?: string;
+    mediaTitle?: string;
+    savedTime?: number;
+    paused?: boolean;
+    updatedAt?: number;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem("wp_active_party");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    return null;
+  });
+
+  const formatPlaybackTime = (sec?: number) => {
+    if (!sec || sec <= 0) return "";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (h > 0) {
+      return `${h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
+    }
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  const handleTerminateParty = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const targetRoom = lastRoom || activeParty?.roomId;
+    if (!targetRoom) return;
+
+    try {
+      fetch("/terminateRoom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: targetRoom }),
+      }).catch(() => {});
+    } catch {}
+
+    try {
+      localStorage.removeItem("wp_last_room");
+      localStorage.removeItem("wp_active_party");
+      localStorage.removeItem(`wp_playback_${targetRoom}`);
+    } catch {}
+    setLastRoom(null);
+    setActiveParty(null);
+  };
 
   // Listen to auth state to resolve initial session without screen flicker
   useEffect(() => {
     let isMounted = true;
     try {
       setLastRoom(localStorage.getItem("wp_last_room"));
+      const raw = localStorage.getItem("wp_active_party");
+      if (raw) setActiveParty(JSON.parse(raw));
     } catch {}
     const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
       if (!isMounted) return;
@@ -102,7 +153,6 @@ export const Home = () => {
   };
 
   const handleStartInstantRoom = async () => {
-    if (!context.user) return;
     setIsCreating(true);
     try {
       await createRoom(context.user, false);
@@ -114,7 +164,6 @@ export const Home = () => {
 
   const handleInlineJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!context.user) return;
     let code = roomInput.trim();
     if (!code && lastRoom) {
       code = lastRoom;
@@ -134,94 +183,15 @@ export const Home = () => {
       code = code.replace(/[\s-]+/g, "");
     }
     if (code) {
+      try {
+        localStorage.setItem("wp_last_room", code);
+      } catch {}
       window.location.assign(`/watch/${code}`);
     }
   };
 
   const isLoggedIn = Boolean(context.user);
 
-  // 1. Initial Auth Resolution Loader
-  if (!authResolved) {
-    return (
-      <div className={styles.homeWrapper}>
-        <div className={styles.ambientBackground}>
-          <div className={styles.glowOrbCenter} />
-          <div className={styles.gridOverlay} />
-        </div>
-        <div className={styles.container}>
-          <div className={styles.brandArtContainer}>
-            <div className={styles.artGlowEffect} />
-            <img
-              src="/dypkri-art.png"
-              alt="Dypkri"
-              className={styles.brandArtImage}
-            />
-          </div>
-          <div className={styles.authLoaderWrapper}>
-            <div className={styles.authSpinner} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. PAGE 1: First-Time Google Authentication Page
-  if (!isLoggedIn) {
-    return (
-      <div className={styles.homeWrapper}>
-        <div className={styles.ambientBackground}>
-          <div className={styles.glowOrbCenter} />
-          <div className={styles.gridOverlay} />
-        </div>
-
-        <div className={styles.container}>
-          {/* Brand Art Centerpiece */}
-          <div className={styles.brandArtContainer}>
-            <div className={styles.artGlowEffect} />
-            <img
-              src="/dypkri-art.png"
-              alt="Dypkri"
-              className={styles.brandArtImage}
-            />
-          </div>
-
-          {/* Global Error Banner */}
-          {error && (
-            <div className={styles.errorAlert}>
-              <span>{error}</span>
-              <button
-                type="button"
-                className={styles.errorCloseBtn}
-                onClick={() => setError("")}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* One-Time Google Sign-In Card */}
-          <div className={styles.loginCard}>
-            <h2 className={styles.loginTitle}>Sign in to Continue</h2>
-            <p className={styles.loginSubtitle}>
-              Authenticate with your Google account once to create or join private watch party rooms with your friends.
-            </p>
-
-            <button
-              type="button"
-              className={styles.googleLoginBtn}
-              onClick={handleGoogleSignIn}
-              disabled={isLoggingIn}
-            >
-              <WPIconGoogle size={22} />
-              <span>{isLoggingIn ? "Connecting to Google..." : "Continue with Google"}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 3. PAGE 2: The New Page for Authenticated Users (New Room & Join Room)
   return (
     <div className={styles.homeWrapper}>
       <div className={styles.ambientBackground}>
@@ -254,71 +224,107 @@ export const Home = () => {
           </div>
         )}
 
-        {/* Authenticated User Status Bar */}
-        <div className={styles.userBar}>
-          <div className={styles.userProfileRow}>
-            <Avatar
-              src={userImage}
-              size={42}
-              radius="xl"
-              className={styles.userAvatar}
-            />
-            <div className={styles.userInfo}>
-              <div className={styles.userName}>
-                {context.user?.displayName || "Google User"}
+        {/* 1. User Status or Google Sign-In Bar (ID / Account FIRST) */}
+        {isLoggedIn ? (
+          <div className={styles.userBar}>
+            <div className={styles.userProfileRow}>
+              <Avatar
+                src={userImage}
+                size={38}
+                radius="xl"
+                className={styles.userAvatar}
+              />
+              <div className={styles.userInfo}>
+                <div className={styles.userName}>
+                  {context.user?.displayName || "Google User"}
+                </div>
+                <div className={styles.userEmail}>{context.user?.email}</div>
               </div>
-              <div className={styles.userEmail}>{context.user?.email}</div>
+              <button
+                type="button"
+                className={styles.signOutBtn}
+                onClick={handleSignOut}
+                title="Sign out of Google"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.googleBanner}>
+            <div className={styles.googleBannerContent}>
+              <div className={styles.googleBannerTitle}>
+                Sign in with Google
+              </div>
+              <div className={styles.googleBannerDesc}>
+                Sync party rooms, preferences & custom avatar.
+              </div>
             </div>
             <button
               type="button"
-              className={styles.signOutBtn}
-              onClick={handleSignOut}
-              title="Sign out of Google"
+              className={`${styles.googleLoginBtn} ${styles.googleBannerBtn}`}
+              onClick={handleGoogleSignIn}
+              disabled={isLoggingIn}
             >
-              Sign Out
+              <WPIconGoogle size={18} />
+              <span>{isLoggingIn ? "Connecting..." : "Continue with Google"}</span>
             </button>
           </div>
-        </div>
+        )}
 
-        {/* Resume Room Banner if available */}
-        {lastRoom && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "rgba(99, 102, 241, 0.08)",
-              border: "1px solid rgba(99, 102, 241, 0.25)",
-              borderRadius: "14px",
-              padding: "12px 18px",
-              marginBottom: "20px",
-              backdropFilter: "blur(12px)",
-              gap: "12px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <div
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  background: "#10b981",
-                  boxShadow: "0 0 8px #10b981",
-                }}
-              />
-              <span style={{ fontSize: "14px", color: "#F0F0F5" }}>
-                Active watch party: <strong style={{ color: "#6366f1" }}>#{lastRoom}</strong>
-              </span>
+        {/* 2. Active Watch Party Card - Persists permanently until user explicitly terminates it */}
+        {(lastRoom || activeParty?.roomId) && (
+          <div className={styles.activePartyCard}>
+            <div className={styles.activePartyHeader}>
+              <div className={styles.activePartyTitleRow}>
+                <div className={styles.activePartyLiveDot} />
+                <span className={styles.activePartyTitle}>
+                  Active watch party:{" "}
+                  <strong className={styles.activePartyRoomNumber}>
+                    #{lastRoom || activeParty?.roomId}
+                  </strong>
+                </span>
+                <span className={styles.activePartyLiveBadge}>
+                  Live Session
+                </span>
+              </div>
+
+              {activeParty?.mediaTitle && (
+                <div
+                  className={styles.activePartyMediaTitle}
+                  title={activeParty.mediaTitle}
+                >
+                  🎬 {activeParty.mediaTitle}
+                  {activeParty.savedTime && activeParty.savedTime > 0 ? (
+                    <span className={styles.activePartySavedTime}>
+                      (at {formatPlaybackTime(activeParty.savedTime)})
+                    </span>
+                  ) : null}
+                </div>
+              )}
             </div>
-            <Button
-              size="xs"
-              variant="gradient"
-              gradient={{ from: "indigo", to: "cyan" }}
-              onClick={() => window.location.assign("/watch/" + lastRoom)}
-              style={{ fontWeight: 600, borderRadius: "10px", flexShrink: 0 }}
-            >
-              Resume Room
-            </Button>
+
+            <div className={styles.activePartyActions}>
+              <Button
+                size="xs"
+                variant="gradient"
+                gradient={{ from: "indigo", to: "cyan" }}
+                onClick={() => window.location.assign("/watch/" + (lastRoom || activeParty?.roomId))}
+                className={styles.activePartyResumeBtn}
+              >
+                Resume Room
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                onClick={handleTerminateParty}
+                className={styles.activePartyTerminateBtn}
+                title="Permanently terminate this watch party and clear from home"
+              >
+                Terminate Room
+              </Button>
+            </div>
           </div>
         )}
 
@@ -353,35 +359,39 @@ export const Home = () => {
           <div className={styles.actionCard}>
             <div className={styles.actionHeader}>
               <div className={`${styles.actionIconWrapper} ${styles.actionIconJoin}`}>
-                <WPIconLogin size={22} />
+                <WPIconLink size={22} />
               </div>
               <div>
                 <h3 className={styles.actionTitle}>Join Room</h3>
                 <p className={styles.actionDesc}>
-                  Enter a room code or paste an invite link to jump right into the party.
+                  Enter a room code or paste a watch link to join your friends.
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleInlineJoin} className={styles.joinForm}>
               <div className={styles.joinInputWrapper}>
-                <WPIconLink size={18} className={styles.joinInputIcon} />
+                <div className={styles.joinInputIcon}>
+                  <WPIconLink size={18} />
+                </div>
                 <input
                   type="text"
-                  placeholder="Enter code or paste link..."
+                  className={styles.joinInput}
+                  placeholder="Room code or URL (e.g. 163862)"
                   value={roomInput}
                   onChange={(e) => setRoomInput(e.target.value)}
-                  className={styles.joinInput}
                   autoComplete="off"
+                  spellCheck="false"
                 />
               </div>
+
               <Button
                 type="submit"
                 size="lg"
-                variant="light"
+                variant="outline"
                 color="cyan"
                 className={styles.joinSubmitBtn}
-                leftSection={<WPIconLogin size={18} />}
+                disabled={!roomInput.trim()}
               >
                 Join Room
               </Button>

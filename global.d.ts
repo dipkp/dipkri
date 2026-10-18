@@ -44,6 +44,7 @@ interface ChatMessage extends ChatMessageBase {
   timestamp: string;
   videoTS?: number;
   reactions?: { [value: string]: string[] };
+  seenBy?: string[];
 }
 
 type BubbleSize = "min" | "small" | "medium" | "max";

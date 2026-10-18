@@ -253,12 +253,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     mouseY: number;
     startX: number;
     startY: number;
-  }>({
-    mouseX: 0,
-    mouseY: 0,
-    startX: 0,
-    startY: 0,
-  });
+  } | null>(null);
 
   // Sync track state if props change
   useEffect(() => {

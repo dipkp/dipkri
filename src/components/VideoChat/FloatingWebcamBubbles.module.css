@@ -2,7 +2,8 @@
 
 .floatingContainer {
   position: fixed;
-  z-index: 9999999 !important;
+  /* Below Mantine modals (~z 200) so dialogs stay usable, above app chrome (~100) */
+  z-index: 120;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;

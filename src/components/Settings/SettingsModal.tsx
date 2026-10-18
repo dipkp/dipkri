@@ -220,22 +220,6 @@ export const SettingsModal = ({
             }}
           />
 
-          {/* Live Audio Transcription */}
-          <SettingRow
-            toggle
-            updateTS={updateTS}
-            name="Live Audio Transcription"
-            description="Real-time live dialogue transcript from video source audio. Zero microphone access, ultra-responsive 0.03s synchronized stream."
-            label="Live Transcribe"
-            checked={Boolean(getPlayerSettings().liveCaptions)}
-            disabled={false}
-            onChange={(e) => {
-              const checked = e.currentTarget.checked;
-              setPlayerSettings({ liveCaptions: checked });
-              setUpdateTS(Date.now());
-            }}
-          />
-
           {/* Subtitle Appearance & Visual Customization */}
           <SettingRow
             disabled={false}

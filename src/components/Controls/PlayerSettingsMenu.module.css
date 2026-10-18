@@ -1,0 +1,602 @@
+/* ==========================================================================
+   PlayerSettingsMenu.module.css
+   Pixel-Perfect Matching of User Reference Interfaces (Images 2, 3, 4, 5)
+   Customized with Dipkri Signature Blue/Cyan Theme
+   ========================================================================== */
+
+.menuContainer {
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: min(480px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 16, 23, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), 0 0 24px rgba(56, 189, 248, 0.12);
+  color: #f1f5f9;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  animation: menuIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header for Submenus (< Title) */
+.menuHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.menuHeader:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.backIcon {
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.menuTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+  flex: 1;
+}
+
+/* Rows Container */
+.menuList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-height: 380px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.35) transparent;
+}
+
+.menuList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.menuList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.menuList::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+}
+
+/* Individual Row Item */
+.menuRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  min-height: 42px;
+  box-sizing: border-box;
+}
+
+.menuRow:last-child {
+  border-bottom: none;
+}
+
+.menuRow:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.menuRow:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Left Section: Icon + Label */
+.rowLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.rowIcon {
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rowLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+
+/* Right Section: Current Value + Chevron */
+.rowRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.rowValue {
+  font-size: 13.5px;
+  color: #94a3b8;
+  font-weight: 400;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 125px;
+  display: inline-block;
+  text-align: right;
+  line-height: 1.2;
+}
+
+.chevronIcon {
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Slider Inline Controls (Subtitle Offset & Audio Boost) */
+.sliderControlWrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.sliderValueText {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  min-width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.customSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.customSlider:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.customSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.8), 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.customSlider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.customSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: none;
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.8), 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Submenu Options List (Checkmark ✓ + Blue/Cyan Accent)
+   ========================================================================== */
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  min-height: 42px;
+  box-sizing: border-box;
+}
+
+.optionRow:last-child {
+  border-bottom: none;
+}
+
+.optionRow:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.optionCheckWrapper {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #38bdf8;
+}
+
+.optionText {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f1f5f9;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selected option state in Dipkri blue/cyan theme */
+.optionActive .optionText {
+  color: #38bdf8 !important;
+  font-weight: 700 !important;
+}
+
+.optionActive .optionCheckWrapper {
+  color: #38bdf8 !important;
+}
+
+/* iOS-Style Toggle Switch for Subtitle Display */
+.switchWrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switchStatusText {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.iosSwitch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.iosSwitchActive {
+  background: #38bdf8 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.iosSwitchThumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(0);
+}
+
+.iosSwitchActive .iosSwitchThumb {
+  transform: translateX(20px);
+}
+
+/* Divider inside Subtitle submenu */
+.menuDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* OpenSubtitles Search In-Menu */
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.searchInput {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #f8fafc;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.searchInput:focus {
+  border-color: #38bdf8;
+}
+
+.searchBtn {
+  background: #38bdf8;
+  border: none;
+  border-radius: 8px;
+  color: #090a0f;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.emptyHint {
+  padding: 18px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.menuSectionTitle {
+  padding: 10px 16px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #94a3b8;
+}
+
+.statsCard {
+  margin: 12px 16px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+}
+
+.statsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statsLabel {
+  color: #94a3b8;
+}
+
+.statsValue {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.subLangBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.subFormatBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Mobile Vertical / Portrait Bottom Sheet Drawer Styles
+   ========================================================================== */
+
+.bottomSheetGrabHandle {
+  display: none;
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  margin: 10px auto 4px auto;
+  flex-shrink: 0;
+}
+
+.bottomSheetTitleRow {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.bottomSheetTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.bottomSheetCloseBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.bottomSheetCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.bottomSheetCloseBtn:active {
+  transform: scale(0.92);
+}
+
+/* Explicit bottom sheet class */
+.menuContainerBottomSheet {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  max-height: 72vh !important;
+  border-radius: 20px 20px 0 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-bottom: none !important;
+  background: rgba(14, 16, 23, 0.98) !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.15) !important;
+  animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+}
+
+.menuContainerBottomSheet .bottomSheetGrabHandle {
+  display: block !important;
+}
+
+.menuContainerBottomSheet .bottomSheetTitleRow {
+  display: flex !important;
+}
+
+.menuContainerBottomSheet .bottomSheetCloseBtn {
+  display: flex !important;
+}
+
+.menuContainerBottomSheet .menuList {
+  max-height: calc(72vh - 65px) !important;
+}
+
+.menuContainerBottomSheet .menuRow,
+.menuContainerBottomSheet .optionRow {
+  min-height: 46px !important;
+  padding: 12px 18px !important;
+}
+
+.menuContainerBottomSheet .rowLabel,
+.menuContainerBottomSheet .optionText {
+  font-size: 15px !important;
+}
+
+.menuContainerBottomSheet .rowValue {
+  font-size: 14px !important;
+  max-width: 140px !important;
+}
+
+@keyframes sheetSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Responsive query for portrait mobile viewport */
+@media only screen and (max-width: 768px) and (orientation: portrait) {
+  .menuContainer {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    max-height: 72vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    border-bottom: none !important;
+    background: rgba(14, 16, 23, 0.98) !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.15) !important;
+    animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+  }
+
+  .bottomSheetGrabHandle {
+    display: block !important;
+  }
+
+  .bottomSheetTitleRow {
+    display: flex !important;
+  }
+
+  .bottomSheetCloseBtn {
+    display: flex !important;
+  }
+
+  .menuList {
+    max-height: calc(72vh - 65px) !important;
+  }
+
+  .menuRow,
+  .optionRow {
+    min-height: 46px !important;
+    padding: 12px 18px !important;
+  }
+
+  .rowLabel,
+  .optionText {
+    font-size: 15px !important;
+  }
+
+  .rowValue {
+    font-size: 14px !important;
+    max-width: 140px !important;
+  }
+}
+

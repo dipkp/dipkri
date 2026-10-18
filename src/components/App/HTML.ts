@@ -7,8 +7,8 @@ export class HTML implements Player {
     this.elId = elId;
   }
 
-  getVideoEl = (): HTMLMediaElement => {
-    return document.getElementById(this.elId) as HTMLMediaElement;
+  getVideoEl = (): HTMLVideoElement => {
+    return document.getElementById(this.elId) as HTMLVideoElement;
   };
 
   getCurrentTime = () => {
@@ -18,8 +18,11 @@ export class HTML implements Player {
   getDuration = () => {
     return this.getVideoEl()?.duration ?? 0;
   };
-
   isMuted = () => {
+    const auxAudio = typeof document !== "undefined" ? (document.getElementById("watchpartyAuxAudio") as HTMLAudioElement) : null;
+    if (auxAudio && auxAudio.src && auxAudio.src !== "") {
+      return auxAudio.muted;
+    }
     return this.getVideoEl()?.muted ?? false;
   };
 
@@ -68,8 +71,22 @@ export class HTML implements Player {
   };
 
   playVideo = async () => {
-    if (this.getVideoEl()) {
-      await this.getVideoEl().play();
+    const video = this.getVideoEl();
+    if (video) {
+      try {
+        await video.play();
+      } catch (err: any) {
+        if (err?.name === "NotAllowedError") {
+          try {
+            video.muted = true;
+            await video.play();
+          } catch (e) {
+            console.warn("Mobile muted fallback play error:", e);
+          }
+        } else {
+          console.warn("HTML playVideo error:", err);
+        }
+      }
     }
   };
 
@@ -108,13 +125,24 @@ export class HTML implements Player {
   };
 
   setMute = (muted: boolean) => {
+    const auxAudio = typeof document !== "undefined" ? (document.getElementById("watchpartyAuxAudio") as HTMLAudioElement) : null;
+    const hasAuxAudio = Boolean(auxAudio && auxAudio.src && auxAudio.src !== "");
+
     const leftVideo = this.getVideoEl();
     if (leftVideo) {
-      leftVideo.muted = muted;
+      if (hasAuxAudio) {
+        // Keep main video track silenced while alternate audio track is selected
+        leftVideo.muted = true;
+      } else {
+        leftVideo.muted = muted;
+      }
     }
     const audio = document.getElementById("iPhoneAudio") as HTMLAudioElement;
     if (audio) {
       audio.muted = muted;
+    }
+    if (auxAudio) {
+      auxAudio.muted = muted;
     }
   };
 
@@ -122,9 +150,21 @@ export class HTML implements Player {
     if (this.getVideoEl()) {
       this.getVideoEl().volume = volume;
     }
+    const audio = document.getElementById("iPhoneAudio") as HTMLAudioElement;
+    if (audio) {
+      audio.volume = volume;
+    }
+    const auxAudio = typeof document !== "undefined" ? (document.getElementById("watchpartyAuxAudio") as HTMLAudioElement) : null;
+    if (auxAudio) {
+      auxAudio.volume = volume;
+    }
   };
 
   getVolume = (): number => {
+    const auxAudio = typeof document !== "undefined" ? (document.getElementById("watchpartyAuxAudio") as HTMLAudioElement) : null;
+    if (auxAudio && auxAudio.src && auxAudio.src !== "") {
+      return auxAudio.volume;
+    }
     return this.getVideoEl()?.volume ?? 1;
   };
 
@@ -141,19 +181,16 @@ export class HTML implements Player {
     const targetIdx = typeof trackIndexOrLang === "number" ? trackIndexOrLang : 0;
     for (let i = 0; i < tracks.length; i++) {
       if (mode === "showing") {
-        tracks[i].mode = i === targetIdx ? "showing" : "hidden";
+        // Set to "hidden" so cues are loaded into memory for LiveCaptions to render,
+        // without the browser rendering an ugly duplicate native cue overlay.
+        tracks[i].mode = i === targetIdx ? "hidden" : "disabled";
       } else {
-        tracks[i].mode = "hidden";
+        tracks[i].mode = "disabled";
       }
     }
   };
 
   getSubtitleMode = (): TextTrackMode => {
-    const video = this.getVideoEl();
-    if (video && video.textTracks && video.textTracks.length > 0) {
-      const active = Array.from(video.textTracks).some((t) => t.mode === "showing");
-      if (active) return "showing";
-    }
     return this.subtitleMode;
   };
 
@@ -243,7 +280,9 @@ export class HTML implements Player {
           continue;
         }
         // console.log(cue.text, offset, cue.origStart, cue.origEnd);
-        if (!cue.origStart) {
+        // Use an undefined check: cue 0 legitimately starts at 0, and a falsy
+        // check would re-base it on every sync, drifting subtitles forever.
+        if (typeof cue.origStart !== "number") {
           cue.origStart = cue.startTime;
           cue.origEnd = cue.endTime;
         }
@@ -267,6 +306,70 @@ export class HTML implements Player {
 
   setLoop = (loop: boolean): void => {
     const leftVideo = this.getVideoEl();
-    leftVideo.loop = loop;
+    if (leftVideo) {
+      leftVideo.loop = loop;
+    }
+  };
+
+  private currentSubtitleOffset = 0;
+
+  setSubtitleOffset = (offsetSeconds: number): void => {
+    const leftVideo = this.getVideoEl();
+    if (!leftVideo || !leftVideo.textTracks) return;
+    this.currentSubtitleOffset = offsetSeconds;
+    for (let t = 0; t < leftVideo.textTracks.length; t++) {
+      const track = leftVideo.textTracks[t];
+      if (track && track.cues) {
+        for (let i = 0; i < track.cues.length; i++) {
+          const cue = track.cues[i] as any;
+          if (cue) {
+            if (typeof cue.origStart !== "number") {
+              cue.origStart = cue.startTime;
+              cue.origEnd = cue.endTime;
+            }
+            cue.startTime = cue.origStart + offsetSeconds;
+            cue.endTime = cue.origEnd + offsetSeconds;
+          }
+        }
+      }
+    }
+  };
+
+  setVideoFlip = (flip: string): void => {
+    const leftVideo = this.getVideoEl();
+    if (leftVideo) {
+      if (flip === "horizontal") {
+        leftVideo.style.transform = "scaleX(-1)";
+      } else if (flip === "vertical") {
+        leftVideo.style.transform = "scaleY(-1)";
+      } else {
+        leftVideo.style.transform = "none";
+      }
+    }
+  };
+
+  setAspectRatio = (ratio: string): void => {
+    const leftVideo = this.getVideoEl();
+    if (leftVideo) {
+      if (ratio === "fill") {
+        leftVideo.style.objectFit = "fill";
+        leftVideo.style.aspectRatio = "initial";
+      } else if (ratio === "fit") {
+        leftVideo.style.objectFit = "contain";
+        leftVideo.style.aspectRatio = "initial";
+      } else if (ratio === "16:9") {
+        leftVideo.style.objectFit = "contain";
+        leftVideo.style.aspectRatio = "16 / 9";
+      } else if (ratio === "4:3") {
+        leftVideo.style.objectFit = "contain";
+        leftVideo.style.aspectRatio = "4 / 3";
+      } else if (ratio === "21:9") {
+        leftVideo.style.objectFit = "contain";
+        leftVideo.style.aspectRatio = "21 / 9";
+      } else {
+        leftVideo.style.objectFit = "contain";
+        leftVideo.style.aspectRatio = "initial";
+      }
+    }
   };
 }

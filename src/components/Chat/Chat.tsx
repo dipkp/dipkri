@@ -179,6 +179,9 @@ export class Chat extends React.Component<ChatProps> {
     this.scrollToBottom();
     this.messagesRef.current?.addEventListener("scroll", this.onScroll);
     init({ data });
+    if (!this.props.hide) {
+      this.props.socket?.emit("CMD:chatSeen");
+    }
   }
 
   componentWillUnmount() {
@@ -196,6 +199,12 @@ export class Chat extends React.Component<ChatProps> {
     }
     if (this.props.hide !== prevProps.hide) {
       this.scrollToBottom();
+      if (!this.props.hide) {
+        this.props.socket?.emit("CMD:chatSeen");
+      }
+    }
+    if (this.props.chat.length !== prevProps.chat.length && !this.props.hide) {
+      this.props.socket?.emit("CMD:chatSeen");
     }
     if (!prevProps.isKeyboardOpen && this.props.isKeyboardOpen) {
       setTimeout(() => {
@@ -710,11 +719,14 @@ const ChatMessageItem = ({
   openEmojiPicker?: (id: string, timestamp: string) => void;
 }) => {
   const { user } = useContext(MetadataContext);
-  const { id, timestamp, cmd, msg, system, isSub, reactions, videoTS } = message;
+  const { id, timestamp, cmd, msg, system, isSub, reactions, videoTS, seenBy } = message;
 
   const [isExpanded, setIsExpanded] = useState(false);
   const CHAT_MSG_MAX_LENGTH = 180;
   const imageMsg = renderImageString(msg);
+  const isSeen = Boolean(
+    seenBy && Array.isArray(seenBy) && seenBy.some((uid: string) => uid !== clientId && uid !== id),
+  );
 
   // System Message (WhatsApp Centered Pill with Actor/Author & Clean Media)
   if (cmd || system) {
@@ -1075,7 +1087,10 @@ const ChatMessageItem = ({
         <div className={styles.messageMeta}>
           <span>{formatWhatsAppTime(timestamp)}</span>
           {isMe && (
-            <span className={styles.doubleTick} title="Delivered & Read">
+            <span
+              className={isSeen ? styles.doubleTickBlue : styles.doubleTickGray}
+              title={isSeen ? "Seen by others" : "Delivered"}
+            >
               <WPIconDoubleCheck size={15} />
             </span>
           )}

@@ -64,7 +64,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const selfId = getOrCreateClientId();
     if (from === selfId) return;
 
-    let pc = window.watchparty.videoPCs[from];
+    let pc: RTCPeerConnection | undefined = window.watchparty.videoPCs[from];
     // If we haven't created a peer connection for this sender yet, create it on-demand
     if (!pc) {
       pc = this.createPeerConnection(from);

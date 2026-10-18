@@ -11,18 +11,15 @@
   max-height: calc(85vh - 60px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  padding-right: 0px;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 .modalWrapper::-webkit-scrollbar {
-  width: 6px;
-}
-
-.modalWrapper::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 9999px;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .modalHeader {

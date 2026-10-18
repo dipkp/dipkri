@@ -4,6 +4,7 @@ const mdStyle: React.CSSProperties = {
   maxWidth: "100vw",
   width: "800px",
   padding: "20px",
+  boxSizing: "border-box",
   color: "var(--text-primary, #f0f0f5)",
   fontFamily: "'Inter', sans-serif",
   lineHeight: 1.6,

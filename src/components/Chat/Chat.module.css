@@ -454,8 +454,16 @@
   color: rgba(233, 237, 239, 0.7);
 }
 
-.doubleTick {
+.doubleTick,
+.doubleTickBlue {
   color: #53bdeb;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 1px;
+}
+
+.doubleTickGray {
+  color: #8696a0;
   display: inline-flex;
   align-items: center;
   margin-left: 1px;
