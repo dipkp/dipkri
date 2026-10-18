@@ -733,7 +733,7 @@ export class App extends React.Component<AppProps, AppState> {
           detectedMediaName: mediaChanged ? "" : this.state.detectedMediaName,
           roomVideoTS: data.videoTS ?? 0,
           roomPaused: data.paused,
-          roomSubtitle: data.subtitle,
+          roomSubtitle: data.subtitle || "",
           roomLoop: data.loop,
           roomPlaybackRate: data.playbackRate,
           loading: Boolean(data.video),
@@ -769,119 +769,142 @@ export class App extends React.Component<AppProps, AppState> {
 
           if (!this.isLocalStreamAFile) {
             this.Player().clearState();
+            if (mediaChanged) {
+              this.HTMLInterface.clearState();
+            }
           }
           if (data.subtitle) {
             this.setState({ roomSubtitle: data.subtitle });
             this.Player().loadSubtitles(data.subtitle);
-          } else if (currentMedia && !data.subtitle) {
+            if (this.Player() !== this.HTMLInterface) {
+              this.HTMLInterface.loadSubtitles(data.subtitle);
+            }
+          } else {
+            this.setState({ roomSubtitle: "" });
+            this.HTMLInterface.loadSubtitles("");
+          }
+
+          if (
+            currentMedia &&
+            !data.subtitle &&
+            (currentMedia.includes("/stream?torrent=") || currentMedia.startsWith("magnet:"))
+          ) {
             // Auto-detect and attach embedded subtitle files for torrent streams if present
             const detectTorrentSubtitles = async () => {
-              if (this.state.roomSubtitle) return;
-              if (currentMedia.includes("/stream?torrent=") || currentMedia.startsWith("magnet:")) {
-                const dataUrl = currentMedia.includes("/stream?")
-                  ? currentMedia.replace("/stream?", "/data?")
-                  : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
+              if (this.state.roomSubtitle || this.state.roomMedia !== currentMedia) return;
+              const dataUrl = currentMedia.includes("/stream?")
+                ? currentMedia.replace("/stream?", "/data?")
+                : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
 
-                for (let attempt = 0; attempt < 5; attempt++) {
-                  if (this.state.roomSubtitle) return;
-                  try {
-                    const resp = await fetch(dataUrl);
-                    if (resp.ok) {
-                      const meta = await resp.json();
-                      if (meta?.name) {
-                        this.setState({ detectedMediaName: meta.name });
-                        audioEnhancer.setMediaName(meta.name, currentMedia);
+              for (let attempt = 0; attempt < 5; attempt++) {
+                if (this.state.roomSubtitle || this.state.roomMedia !== currentMedia) return;
+                try {
+                  const resp = await fetch(dataUrl);
+                  if (this.state.roomMedia !== currentMedia) return;
+                  if (resp.ok) {
+                    const meta = await resp.json();
+                    if (this.state.roomMedia !== currentMedia) return;
+                    if (meta?.name) {
+                      this.setState({ detectedMediaName: meta.name });
+                      audioEnhancer.setMediaName(meta.name, currentMedia);
+                    }
+                    if (meta?.files && Array.isArray(meta.files)) {
+                      const subFile = meta.files.find((f: any) =>
+                        f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
+                      );
+                      if (subFile) {
+                        const base = currentMedia.includes("&fileIndex=")
+                          ? currentMedia.split("&fileIndex=")[0]
+                          : currentMedia;
+                        const subUrl = `${base}&fileIndex=${subFile.index}`;
+                        if (this.state.roomMedia !== currentMedia) return;
+                        this.setState({ roomSubtitle: subUrl });
+                        this.Player().loadSubtitles(subUrl);
+                        return;
                       }
-                      if (meta?.files && Array.isArray(meta.files)) {
-                        const subFile = meta.files.find((f: any) =>
-                          f.name?.toLowerCase().endsWith(".srt") || f.name?.toLowerCase().endsWith(".vtt")
-                        );
-                        if (subFile) {
-                          const base = currentMedia.includes("&fileIndex=")
-                            ? currentMedia.split("&fileIndex=")[0]
-                            : currentMedia;
-                          const subUrl = `${base}&fileIndex=${subFile.index}`;
-                          this.setState({ roomSubtitle: subUrl });
-                          this.Player().loadSubtitles(subUrl);
-                          return;
+                    }
+                    // Check for embedded subtitle tracks inside MKV / video file via /streamInfo
+                    if (!this.state.roomSubtitle && this.state.roomMedia === currentMedia) {
+                      try {
+                        let fileIndexParam = "";
+                        const fIdxMatch = currentMedia.match(/[?&]fileIndex=(\d+)/i) || currentMedia.match(/%26fileIndex%3D(\d+)/i);
+                        if (fIdxMatch) {
+                          fileIndexParam = `&fileIndex=${fIdxMatch[1]}`;
                         }
-                      }
-                      // Check for embedded subtitle tracks inside MKV / video file via /streamInfo
-                      if (!this.state.roomSubtitle) {
+                        let cleanTorrent = currentMedia.replace(/^.*\/stream\?torrent=/, "");
+                        const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+                        if (cutIdx !== -1) {
+                          cleanTorrent = cleanTorrent.slice(0, cutIdx);
+                        }
                         try {
-                          let fileIndexParam = "";
-                          const fIdxMatch = currentMedia.match(/[?&]fileIndex=(\d+)/i) || currentMedia.match(/%26fileIndex%3D(\d+)/i);
-                          if (fIdxMatch) {
-                            fileIndexParam = `&fileIndex=${fIdxMatch[1]}`;
-                          }
-                          let cleanTorrent = currentMedia.replace(/^.*\/stream\?torrent=/, "");
-                          const cutIdx = cleanTorrent.indexOf("&fileIndex=");
-                          if (cutIdx !== -1) {
-                            cleanTorrent = cleanTorrent.slice(0, cutIdx);
-                          }
-                          try {
-                            cleanTorrent = decodeURIComponent(cleanTorrent);
-                          } catch {}
+                          cleanTorrent = decodeURIComponent(cleanTorrent);
+                        } catch {}
 
-                          const infoRes = await fetch(`${serverPath}/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
-                          if (infoRes.ok) {
-                            const infoData = await infoRes.json();
-                            if (infoData?.subtitleTracks && Array.isArray(infoData.subtitleTracks) && infoData.subtitleTracks.length > 0) {
-                              const chosenSub =
-                                infoData.subtitleTracks.find((t: any) => /english|eng|\ben\b/i.test(t.label || t.language || "")) ||
-                                infoData.subtitleTracks[0];
-                              if (chosenSub) {
-                                const subUrl = `${serverPath}/streamSubtitle?torrent=${encodeURIComponent(cleanTorrent)}&streamIndex=${chosenSub.streamIndex}${fileIndexParam}`;
-                                this.setState({ roomSubtitle: subUrl });
-                                this.Player().loadSubtitles(subUrl);
-                                return;
-                              }
+                        const infoRes = await fetch(`${serverPath}/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
+                        if (this.state.roomMedia !== currentMedia) return;
+                        if (infoRes.ok) {
+                          const infoData = await infoRes.json();
+                          if (this.state.roomMedia !== currentMedia) return;
+                          if (infoData?.subtitleTracks && Array.isArray(infoData.subtitleTracks) && infoData.subtitleTracks.length > 0) {
+                            const chosenSub =
+                              infoData.subtitleTracks.find((t: any) => /english|eng|\ben\b/i.test(t.label || t.language || "")) ||
+                              infoData.subtitleTracks[0];
+                            if (chosenSub) {
+                              const subUrl = `${serverPath}/streamSubtitle?torrent=${encodeURIComponent(cleanTorrent)}&streamIndex=${chosenSub.streamIndex}${fileIndexParam}`;
+                              if (this.state.roomMedia !== currentMedia) return;
+                              this.setState({ roomSubtitle: subUrl });
+                              this.Player().loadSubtitles(subUrl);
+                              return;
                             }
                           }
-                        } catch (subErr) {
-                          console.warn("[Embedded Subtitle notice]:", subErr);
                         }
+                      } catch (subErr) {
+                        console.warn("[Embedded Subtitle notice]:", subErr);
                       }
+                    }
 
-                      // If no embedded subtitle file found, automatically search OpenSubtitles!
-                      if (!this.state.roomSubtitle) {
-                        try {
-                          const movieTitle = meta?.name || this.getMediaDisplayName(currentMedia);
-                          if (movieTitle && movieTitle !== "Torrent" && movieTitle !== "Torrent Stream") {
-                            const osRes = await fetch(`${serverPath}/searchSubtitles?query=${encodeURIComponent(movieTitle)}&lang=en`);
-                            if (osRes.ok) {
-                              const osList = await osRes.json();
-                              if (Array.isArray(osList) && osList.length > 0) {
-                                const firstSub = osList[0];
-                                const fileId = firstSub.attributes?.files?.[0]?.file_id;
-                                const downloadUrl = firstSub.attributes?.downloadUrl || "";
-                                if (fileId || downloadUrl) {
-                                  const dlParams = new URLSearchParams();
-                                  if (downloadUrl) dlParams.set("downloadUrl", downloadUrl);
-                                  if (fileId) dlParams.set("file_id", fileId);
-                                  const dlResp = await fetch(`${serverPath}/downloadSubtitles?${dlParams.toString()}`);
-                                  if (dlResp.ok) {
-                                    const dlData = await dlResp.json();
-                                    if (dlData?.link) {
-                                      const fullSubLink = serverPath + dlData.link;
-                                      this.setState({ roomSubtitle: fullSubLink });
-                                      this.Player().loadSubtitles(fullSubLink);
-                                      return;
-                                    }
+                    // If no embedded subtitle file found, automatically search OpenSubtitles!
+                    if (!this.state.roomSubtitle && this.state.roomMedia === currentMedia) {
+                      try {
+                        const movieTitle = meta?.name || this.getMediaDisplayName(currentMedia);
+                        if (movieTitle && movieTitle !== "Torrent" && movieTitle !== "Torrent Stream") {
+                          const osRes = await fetch(`${serverPath}/searchSubtitles?query=${encodeURIComponent(movieTitle)}&lang=en`);
+                          if (this.state.roomMedia !== currentMedia) return;
+                          if (osRes.ok) {
+                            const osList = await osRes.json();
+                            if (this.state.roomMedia !== currentMedia) return;
+                            if (Array.isArray(osList) && osList.length > 0) {
+                              const firstSub = osList[0];
+                              const fileId = firstSub.attributes?.files?.[0]?.file_id;
+                              const downloadUrl = firstSub.attributes?.downloadUrl || "";
+                              if (fileId || downloadUrl) {
+                                const dlParams = new URLSearchParams();
+                                if (downloadUrl) dlParams.set("downloadUrl", downloadUrl);
+                                if (fileId) dlParams.set("file_id", fileId);
+                                const dlResp = await fetch(`${serverPath}/downloadSubtitles?${dlParams.toString()}`);
+                                if (this.state.roomMedia !== currentMedia) return;
+                                if (dlResp.ok) {
+                                  const dlData = await dlResp.json();
+                                  if (this.state.roomMedia !== currentMedia) return;
+                                  if (dlData?.link) {
+                                    const fullSubLink = serverPath + dlData.link;
+                                    this.setState({ roomSubtitle: fullSubLink });
+                                    this.Player().loadSubtitles(fullSubLink);
+                                    return;
                                   }
                                 }
                               }
                             }
                           }
-                        } catch (osErr) {
-                          console.warn("[OpenSubtitles Automation notice]:", osErr);
                         }
+                      } catch (osErr) {
+                        console.warn("[OpenSubtitles Automation notice]:", osErr);
                       }
-                      if (meta?.name) break;
                     }
-                  } catch {}
-                  await new Promise((r) => setTimeout(r, 1200));
-                }
+                    if (meta?.name) break;
+                  }
+                } catch {}
+                await new Promise((r) => setTimeout(r, 1200));
               }
             };
             detectTorrentSubtitles();

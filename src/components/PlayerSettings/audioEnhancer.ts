@@ -511,6 +511,15 @@ class AudioEnhancerManager {
       if (el) {
         this.playAuxAudio(this.selectedTrackIndex, el);
       }
+    } else {
+      this.requiresTranscoding = false;
+      if (this.auxAudio) {
+        try {
+          this.auxAudio.pause();
+          this.auxAudio.src = "";
+          this.auxAudio.load();
+        } catch {}
+      }
     }
 
     // Fetch ffprobe stream details from server if playing a torrent stream or direct multi-track media

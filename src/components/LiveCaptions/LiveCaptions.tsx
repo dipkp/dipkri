@@ -324,6 +324,43 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   }, [roomSubtitle, isSubtitled, showNotice]);
 
   // --------------------------------------------------------------------------
+  // Media Change Cleanup: Whenever roomMedia changes, immediately wipe out all
+  // cached cues, active rendered text, and auto-detect fresh subtitles for the new video!
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    // Clear all previous video's cues and rendered captions
+    parsedCuesRef.current = [];
+    lastCueIndexRef.current = -1;
+    currentRenderedTextRef.current = "";
+    autoSearchAttemptedRef.current = "";
+    setActiveText("");
+    setHasLoadedCues(false);
+    setSyncStatus("");
+
+    // Clean up textTracks and track elements on video element
+    const video = getActiveVideo();
+    if (video) {
+      const oldTracks = video.querySelectorAll("track");
+      oldTracks.forEach((t) => t.remove());
+      if (video.textTracks) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          try {
+            video.textTracks[i].mode = "disabled";
+          } catch {}
+        }
+      }
+    }
+
+    // Clean up HLS subtitle tracks if switching away from or into new media
+    const hls = (window as any).watchparty?.hls;
+    if (hls && typeof hls.subtitleTrack === "number") {
+      try {
+        hls.subtitleTrack = -1;
+      } catch {}
+    }
+  }, [roomMedia, getActiveVideo]);
+
+  // --------------------------------------------------------------------------
   // Ingest Subtitles (.srt / .vtt) from roomSubtitle (e.g. Uploaded / Modal Subtitle)
   // --------------------------------------------------------------------------
   useEffect(() => {
@@ -492,7 +529,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   // Auto-Detect & Auto-Load Subtitles (HLS Manifest .m3u8, Torrents, OpenSubtitles)
   // --------------------------------------------------------------------------
   useEffect(() => {
-    if (!roomMedia || roomSubtitle) return;
+    if (!roomMedia || roomSubtitle || isYouTube) return;
     const searchKey = `${roomMedia}__${captionLanguage}`;
     if (autoSearchAttemptedRef.current === searchKey) return;
     autoSearchAttemptedRef.current = searchKey;
@@ -501,6 +538,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     const cleanTitle = cleanMovieTitle(roomMedia);
 
     const autoLoadSubtitles = async () => {
+      if (isDisposed || isYouTube) return;
       // 1. Direct HLS (.m3u8) embedded subtitle extraction
       if (roomMedia.includes(".m3u8")) {
         try {
@@ -811,7 +849,7 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         let matchedText = "";
         const cues = parsedCuesRef.current;
 
-        if (cues.length > 0) {
+        if (cues.length > 0 && !isYouTube) {
           const lastIdx = lastCueIndexRef.current;
           let activeIdx = -1;
 
@@ -840,6 +878,10 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             const cue = cues[activeIdx];
             matchedText = cue.text;
           }
+        }
+
+        if (isYouTube) {
+          matchedText = "";
         }
 
         // Secondary check on active textTracks from native video
