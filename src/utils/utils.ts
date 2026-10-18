@@ -156,6 +156,14 @@ export const isMovie = (input: string) => {
   return Boolean(input && typeof input === "string" && input.startsWith("movie://"));
 };
 
+export const isMovieStream = (input: string) => {
+  return Boolean(
+    input &&
+      typeof input === "string" &&
+      (input.includes("isMovie=1") || input.includes("movie=1"))
+  );
+};
+
 export type MovieServer =
   | "vidlink"
   | "vidsrc_pm"

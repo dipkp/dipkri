@@ -330,7 +330,7 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
       const dn = encodeURIComponent(`${displayTitle}${seasonEpSuffix} ${quality}`);
 
       const fileIndexParam = s.fileIdx != null ? `&fileIndex=${s.fileIdx}` : "";
-      const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}${fileIndexParam}${trackerQuery}`;
+      const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}&isMovie=1${fileIndexParam}${trackerQuery}`;
 
       const label = `${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
 

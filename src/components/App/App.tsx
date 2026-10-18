@@ -24,6 +24,7 @@ import {
   isVBrowser,
   isDash,
   isMovie,
+  isMovieStream,
   parseMovieUrl,
   buildMovieEmbedUrl,
   createMovieProtocolUrl,
@@ -2364,6 +2365,10 @@ export class App extends React.Component<AppProps, AppState> {
     return isMovie(this.state.roomMedia);
   };
 
+  isAnyMovie = () => {
+    return this.usingMovie() || isMovieStream(this.state.roomMedia);
+  };
+
   usingNative = () => {
     // Anything that uses HTML Video (e.g. not YouTube, Movie iframe, or other embedded JS player)
     return !this.usingYoutube() && !this.usingMovie();
@@ -3033,7 +3038,7 @@ export class App extends React.Component<AppProps, AppState> {
         speed={this.state.speed}
         connections={this.state.connections}
         convertProgress={this.state.convertProgress}
-        isMovie={this.usingMovie()}
+        isMovie={this.isAnyMovie()}
         movieServer={parseMovieUrl(this.state.roomMedia)?.server || "vidlink"}
         onSelectMovieServer={this.switchMovieServer}
         onOpenMovieModal={this.openMovieModal}
@@ -3104,14 +3109,28 @@ export class App extends React.Component<AppProps, AppState> {
                   className={styles.flexCenter}
                   style={{
                     flexDirection: "column",
+                    gap: 12,
+                    background: "rgba(9, 10, 15, 0.75)",
+                    padding: "24px 32px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(99, 102, 241, 0.25)",
+                    backdropFilter: "blur(12px)",
+                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
                   }}
                 >
-                  <Loader />
-                  <div>
-                    {this.playingVBrowser()
+                  <Loader size="lg" color="indigo" />
+                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, textAlign: "center" }}>
+                    {isMovieStream(this.state.roomMedia)
+                      ? "🎬 Connecting to High-Speed Stream..."
+                      : this.playingVBrowser()
                       ? "Launching virtual browser. This can take up to a minute."
-                      : ""}
+                      : "Loading stream..."}
                   </div>
+                  {isMovieStream(this.state.roomMedia) && (
+                    <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>
+                      Buffering HD video chunks & synchronizing room audio...
+                    </div>
+                  )}
                 </div>
               )}
               {!this.state.loading && !this.state.roomMedia && (
