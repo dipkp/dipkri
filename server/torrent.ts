@@ -661,37 +661,46 @@ export async function handleTorrentAudio(req: any, res: any) {
 
   const cached = audioTranscodeMap.get(cacheKey);
 
-  // 1. If already fully transcoded to disk, serve with full HTTP Range seek support!
-  if (cached?.complete && fs.existsSync(cached.filePath)) {
+  // 1. If transcoded to disk (either fully complete, or has cached enough bytes for requested ss),
+  // serve directly from disk with instant response and fast byte offset seek support!
+  if (cached && fs.existsSync(cached.filePath)) {
     const stat = fs.statSync(cached.filePath);
     const fileSize = stat.size;
-    const range = req.headers?.range;
+    const ssByteOffset = ss > 0 ? Math.floor(ss * 24000) : 0; // CBR 192kbps = 24,000 bytes/sec
 
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunkSize = end - start + 1;
-      res.writeHead(206, {
-        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-        "Accept-Ranges": "bytes",
-        "Content-Length": chunkSize,
-        "Content-Type": "audio/mpeg",
-      });
-      const stream = fs.createReadStream(cached.filePath, { start, end });
-      stream.pipe(res);
-      req.on("close", () => stream.destroy());
-    } else {
-      res.writeHead(200, {
-        "Content-Length": fileSize,
-        "Content-Type": "audio/mpeg",
-        "Accept-Ranges": "bytes",
-      });
-      const stream = fs.createReadStream(cached.filePath);
-      stream.pipe(res);
-      req.on("close", () => stream.destroy());
+    // Serve from disk if complete, or if background transcode is already at least 5s past ss
+    if (cached.complete || fileSize > ssByteOffset + 120000) {
+      const range = req.headers?.range;
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const rawStart = parseInt(parts[0], 10);
+        const start = Math.min(fileSize - 1, ssByteOffset + (isNaN(rawStart) ? 0 : rawStart));
+        const end = parts[1] ? Math.min(fileSize - 1, ssByteOffset + parseInt(parts[1], 10)) : fileSize - 1;
+        const chunkSize = Math.max(0, end - start + 1);
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start - ssByteOffset}-${end - ssByteOffset}/${fileSize - ssByteOffset}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": chunkSize,
+          "Content-Type": "audio/mpeg",
+        });
+        const stream = fs.createReadStream(cached.filePath, { start, end });
+        stream.pipe(res);
+        req.on("close", () => stream.destroy());
+      } else {
+        const start = Math.min(fileSize - 1, ssByteOffset);
+        const end = fileSize - 1;
+        const chunkSize = Math.max(0, end - start + 1);
+        res.writeHead(200, {
+          "Content-Length": chunkSize,
+          "Content-Type": "audio/mpeg",
+          "Accept-Ranges": "bytes",
+        });
+        const stream = fs.createReadStream(cached.filePath, { start, end });
+        stream.pipe(res);
+        req.on("close", () => stream.destroy());
+      }
+      return;
     }
-    return;
   }
 
   // 2. Otherwise, stream live while caching in background
@@ -712,6 +721,8 @@ export async function handleTorrentAudio(req: any, res: any) {
       "-nostdin",
       "-v",
       "error",
+      "-threads",
+      "0",
       "-probesize",
       "1000000",
       "-analyzeduration",
@@ -735,6 +746,8 @@ export async function handleTorrentAudio(req: any, res: any) {
       "2",
       "-b:a",
       "192k",
+      "-threads",
+      "0",
       "-f",
       "mp3",
       "pipe:1"

@@ -477,6 +477,11 @@ class AudioEnhancerManager {
   private isProbingStreams: boolean = false;
   private requiresTranscoding: boolean = false;
   private detectedSubtitleTracks: any[] = [];
+  private isSeeking: boolean = false;
+  private seekDebounceTimer: any = null;
+  private isUserPaused: boolean = true;
+  private isBufferingHold: boolean = false;
+  private resyncDebounceTimer: any = null;
 
   /**
    * Set the current media name so embedded language tags can be extracted immediately,
@@ -675,7 +680,7 @@ class AudioEnhancerManager {
       }
       bufferPercent = Math.min(100, Math.round((bufferedSec / 10) * 100));
 
-      const maxBufferedEnd = b.length > 0 ? b.end(b.length - 1) : 0;
+      const maxBufferedEnd = (b.length > 0 ? b.end(b.length - 1) : 0) + this.auxAudioStartOffset;
       if (totalDuration > 0 && maxBufferedEnd > 0) {
         decodePercent = Math.min(100, Math.max(1, Math.round((maxBufferedEnd / totalDuration) * 100)));
       } else {
@@ -916,21 +921,57 @@ class AudioEnhancerManager {
       this.auxAudio.id = "watchpartyAuxAudio";
       this.auxAudio.style.display = "none";
       this.auxAudio.preload = "auto";
+
       this.auxAudio.onerror = (e) => {
         console.warn("[WatchParty AudioTrack] Aux audio error", e);
+        if (this.isBufferingHold && el) {
+          this.isBufferingHold = false;
+          if (!this.isUserPaused) el.play().catch(() => {});
+        }
         if (el && this.selectedTrackIndex === 0 && !this.requiresTranscoding) el.muted = false;
       };
+
       this.auxAudio.onplaying = () => {
         if (el && (this.selectedTrackIndex > 0 || this.requiresTranscoding)) {
           el.muted = true;
         }
-      };
-      this.auxAudio.oncanplay = () => {
-        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
-        if (v && !v.paused && this.auxAudio && this.auxAudio.paused) {
-          this.auxAudio.play().catch(() => {});
+        if (!this.isUserPaused && this.isBufferingHold && el) {
+          this.isBufferingHold = false;
+          if (el.paused && el.readyState >= 2) {
+            el.play().catch(() => {});
+          }
         }
       };
+
+      this.auxAudio.onwaiting = () => {
+        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
+        if (v && !v.paused) {
+          this.isBufferingHold = true;
+          v.pause();
+        }
+      };
+
+      this.auxAudio.onstalled = () => {
+        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
+        if (v && !v.paused) {
+          this.isBufferingHold = true;
+          v.pause();
+        }
+      };
+
+      this.auxAudio.oncanplay = () => {
+        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
+        if (v && !this.isUserPaused && this.isBufferingHold) {
+          this.isBufferingHold = false;
+          if (this.auxAudio && this.auxAudio.paused) {
+            this.auxAudio.play().catch(() => {});
+          }
+          if (v.paused && v.readyState >= 2) {
+            v.play().catch(() => {});
+          }
+        }
+      };
+
       document.body.appendChild(this.auxAudio);
 
       // Auto-unlock audio playback on user gesture if browser blocks unmuted autoplay
@@ -948,42 +989,116 @@ class AudioEnhancerManager {
 
     if (this.auxAttachedVideo !== el) {
       this.auxAttachedVideo = el;
+      this.isUserPaused = el.paused;
+
       el.addEventListener("play", () => {
+        this.isUserPaused = false;
         if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && this.auxAudio) {
-          this.auxAudio.play().catch(() => {});
+          if (this.auxAudio.readyState >= 2) {
+            this.auxAudio.play().catch(() => {});
+          } else {
+            // Audio still buffering -> hold video until auxAudio canplay
+            this.isBufferingHold = true;
+            el.pause();
+          }
         }
       });
+
       el.addEventListener("pause", () => {
-        if (this.auxAudio) {
+        if (!this.isBufferingHold) {
+          this.isUserPaused = true;
+        }
+        if (this.auxAudio && !this.auxAudio.paused) {
           this.auxAudio.pause();
         }
       });
+
+      el.addEventListener("waiting", () => {
+        if (this.auxAudio && !this.auxAudio.paused) {
+          this.isBufferingHold = true;
+          this.auxAudio.pause();
+        }
+      });
+
+      el.addEventListener("playing", () => {
+        if (!this.isBufferingHold) {
+          this.isUserPaused = false;
+        }
+        if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && this.auxAudio) {
+          if (this.auxAudio.readyState >= 2) {
+            if (this.auxAudio.paused && !this.isUserPaused) {
+              this.auxAudio.play().catch(() => {});
+            }
+          } else {
+            this.isBufferingHold = true;
+            el.pause();
+          }
+        }
+      });
+
       el.addEventListener("ratechange", () => {
         if (this.auxAudio && el) {
           this.auxAudio.playbackRate = el.playbackRate;
         }
       });
+
       el.addEventListener("volumechange", () => {
         if (this.auxAudio && el) {
           this.auxAudio.volume = el.volume;
         }
       });
-      el.addEventListener("seeked", () => {
+
+      el.addEventListener("seeking", () => {
         if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && el) {
-          this.resyncAuxAudio(this.selectedTrackIndex, el);
+          this.isSeeking = true;
+          if (this.auxAudio && !this.auxAudio.paused) {
+            this.auxAudio.pause();
+          }
         }
       });
+
+      el.addEventListener("seeked", () => {
+        if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && el) {
+          if (this.seekDebounceTimer) {
+            clearTimeout(this.seekDebounceTimer);
+          }
+          this.seekDebounceTimer = setTimeout(() => {
+            this.isSeeking = false;
+            this.resyncAuxAudio(this.selectedTrackIndex, el);
+          }, 350);
+        }
+      });
+
       el.addEventListener("timeupdate", () => {
         if (
           (this.selectedTrackIndex > 0 || this.requiresTranscoding) &&
           this.auxAudio &&
           !el.paused &&
           !this.auxAudio.paused &&
-          this.auxAudio.readyState >= 2
+          this.auxAudio.readyState >= 2 &&
+          !this.isSeeking &&
+          !this.isBufferingHold
         ) {
           const currentAudioPos = this.auxAudio.currentTime + this.auxAudioStartOffset;
-          if (Math.abs(el.currentTime - currentAudioPos) > 1.0) {
-            this.resyncAuxAudio(this.selectedTrackIndex, el);
+          const diff = el.currentTime - currentAudioPos; // >0 if video is ahead, <0 if audio is ahead
+          const absDiff = Math.abs(diff);
+
+          if (absDiff > 2.5) {
+            // Significant desync: schedule a debounced resync
+            this.debouncedResync(this.selectedTrackIndex, el);
+          } else if (absDiff > 0.06) {
+            // Dynamic micro-drift correction (±6%) to maintain lip-sync without reloading stream
+            const baseRate = el.playbackRate || 1;
+            if (diff > 0) {
+              this.auxAudio.playbackRate = Math.min(2.0, baseRate * 1.06);
+            } else {
+              this.auxAudio.playbackRate = Math.max(0.5, baseRate * 0.94);
+            }
+          } else {
+            // In sync within 60ms
+            if (this.auxAudio.playbackRate !== (el.playbackRate || 1)) {
+              this.auxAudio.playbackRate = el.playbackRate || 1;
+            }
           }
         }
       });
@@ -996,6 +1111,15 @@ class AudioEnhancerManager {
     if (this.auxAudio && this.auxAudio.paused) {
       this.auxAudio.play().catch(() => {});
     }
+  }
+
+  private debouncedResync(trackIndex: number, videoEl: HTMLMediaElement) {
+    if (this.resyncDebounceTimer) {
+      clearTimeout(this.resyncDebounceTimer);
+    }
+    this.resyncDebounceTimer = setTimeout(() => {
+      this.resyncAuxAudio(trackIndex, videoEl);
+    }, 300);
   }
 
   private resyncAuxAudio(trackIndex: number, videoEl: HTMLMediaElement) {
@@ -1028,20 +1152,36 @@ class AudioEnhancerManager {
 
     if (!cleanTorrent) return;
 
+    const wasPlaying = !videoEl.paused;
+    if (wasPlaying) {
+      // Hold video while audio stream is connecting & buffering to avoid video running ahead in silence
+      videoEl.pause();
+      this.isBufferingHold = true;
+    }
+
     const url = `${serverPath}/streamAudio?torrent=${encodeURIComponent(cleanTorrent)}&track=${trackIndex}&ss=${ss.toFixed(1)}${fileParam}`;
+    this.auxAudio.pause();
     this.auxAudio.src = url;
     this.auxAudio.playbackRate = videoEl.playbackRate || 1;
     this.auxAudio.volume = videoEl.volume;
-    // CRITICAL FIX: auxAudio must NOT be muted! It should play audible sound.
     this.auxAudio.muted = false;
-    // Primary video stream must remain muted so there is no echo or clash
     videoEl.muted = true;
+    this.auxAudio.load();
 
-    if (!videoEl.paused) {
-      this.auxAudio.play().catch((err) => {
-        console.warn("[WatchParty AudioTrack] Play rejected:", err);
-      });
-    }
+    const onAudioReady = () => {
+      this.auxAudio?.removeEventListener("canplay", onAudioReady);
+      if (wasPlaying && !this.isUserPaused) {
+        this.isBufferingHold = false;
+        if (Math.abs(videoEl.currentTime - ss) > 0.1) {
+          videoEl.currentTime = ss;
+        }
+        Promise.all([
+          videoEl.play().catch(() => {}),
+          this.auxAudio?.play().catch(() => {}),
+        ]);
+      }
+    };
+    this.auxAudio.addEventListener("canplay", onAudioReady, { once: true });
   }
 }
 
