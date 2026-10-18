@@ -35,6 +35,7 @@ import {
   handleTorrentInfo,
   handleTorrentSubtitle,
 } from "./torrent.ts";
+import { movieRouter } from "./movieService.ts";
 
 if (process.env.NODE_ENV === "development") {
   axios.interceptors.request.use(
@@ -134,6 +135,7 @@ if (process.env.NODE_ENV === "development") {
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.raw({ type: "text/plain", limit: 1000000 }));
+app.use("/api/movies", movieRouter);
 
 app.get("/ping", (_req, res) => {
   res.json("pong");

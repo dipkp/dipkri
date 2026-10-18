@@ -23,6 +23,11 @@ import {
   pickSingleLargeFile,
   isVBrowser,
   isDash,
+  isMovie,
+  parseMovieUrl,
+  buildMovieEmbedUrl,
+  createMovieProtocolUrl,
+  type MovieServer,
   resolveMediaUrl,
   VIDEO_MAX_HEIGHT_CSS,
   softWhite,
@@ -39,6 +44,7 @@ import { MultiStreamModal } from "../Modal/MultiStreamModal";
 import { ComboBox } from "../ComboBox/ComboBox";
 import { SearchComponent } from "../SearchComponent/SearchComponent";
 import { Controls } from "../Controls/Controls";
+import { MovieModal } from "../MovieModal/MovieModal";
 import { SettingsModal } from "../Settings/SettingsModal";
 import { ErrorModal } from "../Modal/ErrorModal";
 import { PasswordModal } from "../Modal/PasswordModal";
@@ -208,6 +214,7 @@ interface AppState {
   audioBoost: number;
   copiedLink: boolean;
   quickQueueUrl: string;
+  isMovieModalOpen: boolean;
 }
 
 const checkIsMobileDevice = () => {
@@ -290,6 +297,7 @@ export class App extends React.Component<AppProps, AppState> {
     isFileShareModalOpen: false,
     isSubtitleModalOpen: false,
     isMultiSelectModalOpen: false,
+    isMovieModalOpen: false,
     roomLock: "",
     controller: "",
     roomId: "",
@@ -2326,9 +2334,34 @@ export class App extends React.Component<AppProps, AppState> {
     return isYouTube(this.state.roomMedia);
   };
 
+  usingMovie = () => {
+    return isMovie(this.state.roomMedia);
+  };
+
   usingNative = () => {
-    // Anything that uses HTML Video (e.g. not YouTube, Vimeo, or other embedded JS player)
-    return !this.usingYoutube();
+    // Anything that uses HTML Video (e.g. not YouTube, Movie iframe, or other embedded JS player)
+    return !this.usingYoutube() && !this.usingMovie();
+  };
+
+  getMovieUrl = () => {
+    const info = parseMovieUrl(this.state.roomMedia);
+    return buildMovieEmbedUrl(info);
+  };
+
+  openMovieModal = () => {
+    this.setState({ isMovieModalOpen: true });
+  };
+
+  closeMovieModal = () => {
+    this.setState({ isMovieModalOpen: false });
+  };
+
+  switchMovieServer = (newServer: MovieServer) => {
+    const info = parseMovieUrl(this.state.roomMedia);
+    if (!info) return;
+    info.server = newServer;
+    const newUrl = createMovieProtocolUrl(info);
+    this.roomSetMedia(newUrl);
   };
 
   hasDuration = () => {
@@ -2623,6 +2656,16 @@ export class App extends React.Component<AppProps, AppState> {
   getMediaDisplayName = (input?: string) => {
     if (!input) {
       return "";
+    }
+    if (isMovie(input)) {
+      const info = parseMovieUrl(input);
+      if (info) {
+        if (info.type === "tv" && info.season && info.episode) {
+          return `📺 ${info.title} (S${info.season} E${info.episode})`;
+        }
+        return `🎬 ${info.title}`;
+      }
+      return "🎬 Movie Stream";
     }
     // If input is YouTube, return YouTube video title if detected or input
     if (this.usingYoutube() || input.includes("youtube.com") || input.includes("youtu.be")) {
@@ -2979,6 +3022,126 @@ export class App extends React.Component<AppProps, AppState> {
           allow="autoplay; encrypted-media"
           src="https://www.youtube.com/embed/?enablejsapi=1&controls=0&rel=0"
         />
+        {this.usingMovie() && (
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              minHeight: isMobileLayout ? "260px" : "480px",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <iframe
+              id="leftMovie"
+              title="Movie Player"
+              style={{
+                width: "100%",
+                height: "100%",
+                flex: 1,
+                minHeight: isMobileLayout ? "260px" : "480px",
+                border: "none",
+                borderRadius: isMobileLayout ? "0" : "12px",
+                backgroundColor: "#000",
+              }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              allowFullScreen
+              src={this.getMovieUrl()}
+              onLoad={() => {
+                this.setLoadingFalse();
+                this.setState({ nonPlayableMedia: false });
+              }}
+            />
+            {/* Quick Switch Server Bar */}
+            {(() => {
+              const currentInfo = parseMovieUrl(this.state.roomMedia);
+              if (!currentInfo) return null;
+              const activeServer = currentInfo.server || "apiplayer";
+              const servers: Array<{ id: MovieServer; label: string }> = [
+                { id: "apiplayer", label: "APIPlayer" },
+                { id: "nexstream", label: "NexStream" },
+                { id: "vidsrc", label: "VidSrc" },
+                { id: "multiembed", label: "MultiEmbed" },
+              ];
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: isMobileLayout ? 8 : 12,
+                    right: isMobileLayout ? 8 : 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 8px",
+                    borderRadius: 10,
+                    background: "rgba(10, 12, 20, 0.85)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    zIndex: 20,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      display: isMobileLayout ? "none" : "inline",
+                    }}
+                  >
+                    Server:
+                  </span>
+                  {servers.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={!this.haveLock()}
+                      onClick={() => this.switchMovieServer(s.id)}
+                      style={{
+                        background:
+                          activeServer === s.id
+                            ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                            : "rgba(255, 255, 255, 0.08)",
+                        border:
+                          activeServer === s.id
+                            ? "1px solid #818cf8"
+                            : "1px solid rgba(255, 255, 255, 0.06)",
+                        borderRadius: 6,
+                        color: activeServer === s.id ? "#fff" : "#cbd5e1",
+                        fontSize: isMobileLayout ? 10 : 11,
+                        fontWeight: 600,
+                        padding: "2px 7px",
+                        cursor: this.haveLock() ? "pointer" : "not-allowed",
+                        transition: "all 0.2s",
+                      }}
+                      title={`Switch server to ${s.label}`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={this.openMovieModal}
+                    style={{
+                      background: "rgba(16, 185, 129, 0.2)",
+                      border: "1px solid rgba(16, 185, 129, 0.4)",
+                      borderRadius: 6,
+                      color: "#34d399",
+                      fontSize: isMobileLayout ? 10 : 11,
+                      fontWeight: 600,
+                      padding: "2px 7px",
+                      cursor: "pointer",
+                    }}
+                    title="Change movie or episode"
+                  >
+                    🎬 Change
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {this.playingVBrowser() &&
         this.getVBrowserPass() &&
         this.getVBrowserHost() ? (
@@ -3106,7 +3269,7 @@ export class App extends React.Component<AppProps, AppState> {
             })()}
           </div>
         )}
-        {this.state.roomMedia && controls}
+        {this.state.roomMedia && !this.usingMovie() && controls}
         <LiveCaptions
           paused={this.state.roomPaused}
           videoEl={this.HTMLInterface.getVideoEl()}
@@ -3163,6 +3326,12 @@ export class App extends React.Component<AppProps, AppState> {
             getSubtitleMode={this.Player().getSubtitleMode}
           />
         )}
+        <MovieModal
+          isOpen={this.state.isMovieModalOpen}
+          onClose={this.closeMovieModal}
+          onPlay={this.roomSetMedia}
+          onQueue={this.roomPlaylistAdd}
+        />
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>
             <Title order={2}>Loading...</Title>
@@ -3387,9 +3556,34 @@ export class App extends React.Component<AppProps, AppState> {
                       getMediaDisplayName={this.getMediaDisplayName}
                       mediaPath={this.state.mediaPath}
                       disabled={!this.haveLock()}
+                      onOpenMovieModal={this.openMovieModal}
                     />
                     {/* Quick Action Source Cards */}
                     <div className={styles.quickSourceGrid}>
+                      <button
+                        type="button"
+                        className={`${styles.sourceCardBtn} ${styles.sourceCardScreen}`}
+                        style={{
+                          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2))",
+                          borderColor: "rgba(99, 102, 241, 0.45)",
+                        }}
+                        disabled={!this.haveLock()}
+                        onClick={this.openMovieModal}
+                        title="Browse & stream Movies & Series"
+                      >
+                        <div
+                          className={styles.sourceCardIcon}
+                          style={{
+                            background: "rgba(99, 102, 241, 0.25)",
+                            color: "#a5b4fc",
+                            fontSize: "14px",
+                          }}
+                        >
+                          🎬
+                        </div>
+                        <span className={styles.sourceCardTitle} style={{ color: "#c7d2fe" }}>Movies</span>
+                        <span className={styles.sourceCardSub}>& Series HD</span>
+                      </button>
                       {!this.localStreamToPublish && !sharer ? (
                         <button
                           type="button"
@@ -3697,11 +3891,27 @@ export class App extends React.Component<AppProps, AppState> {
                         getMediaDisplayName={this.getMediaDisplayName}
                         mediaPath={this.state.mediaPath}
                         disabled={!this.haveLock()}
+                        onOpenMovieModal={this.openMovieModal}
                       />
                     </div>
 
                     {/* Media Actions */}
                     <div className={styles.desktopMediaActions}>
+                      <button
+                        type="button"
+                        className={`${styles.desktopPillBtn} ${styles.desktopPillScreen}`}
+                        style={{
+                          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))",
+                          borderColor: "rgba(99, 102, 241, 0.5)",
+                          color: "#c7d2fe",
+                        }}
+                        disabled={!this.haveLock()}
+                        onClick={this.openMovieModal}
+                        title="Search and stream Movies & Series"
+                      >
+                        <span style={{ fontSize: 13 }}>🎬</span>
+                        <span>Movies</span>
+                      </button>
                       {this.localStreamToPublish ? (
                         <button
                           type="button"

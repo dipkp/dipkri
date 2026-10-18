@@ -152,6 +152,139 @@ export const isVBrowser = (input: string) => {
   return input.startsWith("vbrowser://");
 };
 
+export const isMovie = (input: string) => {
+  return Boolean(input && typeof input === "string" && input.startsWith("movie://"));
+};
+
+export type MovieServer = "apiplayer" | "nexstream" | "vidsrc" | "multiembed";
+
+export interface MovieMediaInfo {
+  tmdbId: string;
+  type: "movie" | "tv";
+  title: string;
+  season?: number;
+  episode?: number;
+  server?: MovieServer;
+}
+
+export interface MovieSearchResult {
+  id: number;
+  title: string;
+  originalTitle?: string;
+  overview: string;
+  poster: string | null;
+  backdrop: string | null;
+  type: "movie" | "tv";
+  year: string;
+  releaseDate?: string;
+  rating: number;
+  voteCount: number;
+  popularity?: number;
+}
+
+export interface MovieSeasonEpisode {
+  id: number;
+  episodeNumber: number;
+  seasonNumber: number;
+  name: string;
+  overview: string;
+  still: string | null;
+  airDate: string;
+  rating: number;
+}
+
+export interface MovieDetails extends MovieSearchResult {
+  genres: string[];
+  tagline?: string;
+  runtime?: number;
+  status?: string;
+  imdbId?: string | null;
+  numberOfSeasons?: number;
+  numberOfEpisodes?: number;
+  seasons?: Array<{
+    id: number;
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    poster: string | null;
+    airDate: string;
+  }>;
+}
+
+export function parseMovieUrl(url: string): MovieMediaInfo | null {
+  if (!url || !url.startsWith("movie://")) return null;
+  try {
+    const raw = url.replace("movie://", "");
+    const [idPart, queryPart] = raw.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    return {
+      tmdbId: idPart,
+      type: (params.get("type") as "movie" | "tv") || "movie",
+      title: decodeURIComponent(params.get("title") || "Movie"),
+      season: params.get("season") ? Number(params.get("season")) : 1,
+      episode: params.get("episode") ? Number(params.get("episode")) : 1,
+      server: (params.get("server") as MovieServer) || "apiplayer",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createMovieProtocolUrl(info: MovieMediaInfo): string {
+  const server = info.server || "apiplayer";
+  const season = info.season || 1;
+  const episode = info.episode || 1;
+  const params = new URLSearchParams();
+  params.set("type", info.type);
+  params.set("title", info.title);
+  if (info.type === "tv") {
+    params.set("season", String(season));
+    params.set("episode", String(episode));
+  }
+  params.set("server", server);
+  return `movie://${info.tmdbId}?${params.toString()}`;
+}
+
+export function buildMovieEmbedUrl(info: MovieMediaInfo | null): string {
+  if (!info || !info.tmdbId) return "";
+  const server = info.server || "apiplayer";
+  const { tmdbId, type, season = 1, episode = 1 } = info;
+
+  if (server === "apiplayer") {
+    // APIPlayer.ru
+    if (type === "tv") {
+      return `https://apiplayer.ru/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1&muted=0`;
+    }
+    return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0`;
+  }
+
+  if (server === "nexstream") {
+    // NexStream / CodeSpecter
+    if (type === "tv") {
+      return `https://api.codespecters.com/embed/tv/${tmdbId}/${season}/${episode}`;
+    }
+    return `https://api.codespecters.com/embed/movie/${tmdbId}`;
+  }
+
+  if (server === "vidsrc") {
+    // VidSrc
+    if (type === "tv") {
+      return `https://vidsrc.xyz/embed/tv/${tmdbId}/${season}/${episode}`;
+    }
+    return `https://vidsrc.xyz/embed/movie/${tmdbId}`;
+  }
+
+  if (server === "multiembed") {
+    // MultiEmbed
+    if (type === "tv") {
+      return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`;
+    }
+    return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
+  }
+
+  return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0`;
+}
+
 /**
  * Unwraps nested proxy stream URLs (such as proxy.valhallastream.com/m3u8?url=... or cors proxies)
  * into their underlying direct playable media stream URLs.
@@ -165,8 +298,9 @@ export function resolveMediaUrl(rawUrl: string): string {
     trimmed = trimmed.replace(/&amp;/g, "&");
   }
 
-  // If already magnet, youtube, or local relative stream, return as is
+  // If already movie protocol, magnet, youtube, or local relative stream, return as is
   if (
+    trimmed.startsWith("movie://") ||
     trimmed.startsWith("magnet:") ||
     trimmed.startsWith("/stream?") ||
     trimmed.startsWith("/stream-proxy?") ||
