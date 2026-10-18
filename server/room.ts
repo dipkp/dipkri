@@ -699,76 +699,47 @@ export class Room {
 
       if (fileIndex != null) {
         data = `/stream?torrent=${encodeURIComponent(cleanMagnet)}&fileIndex=${fileIndex}`;
+        this.cmdHost(socket, data);
+        return;
       } else {
-        // Multi-episode season pack auto-queue (e.g. Peaky Blinders 6 episodes):
+        // Multi-episode season pack auto-queue:
+        // Host immediately so the player starts buffering the primary stream with 0ms latency!
         data = `/stream?torrent=${encodeURIComponent(cleanMagnet)}`;
-        try {
-          const torrentPromise = getOrAddTorrent(cleanMagnet);
-          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 8000));
-          const torrent = await Promise.race([torrentPromise, timeoutPromise]);
-          if (torrent && torrent.files && torrent.files.length > 0) {
-            const episodes = getPlayableEpisodeFiles(torrent.files);
-            if (episodes.length > 1) {
-              // Episode 1 plays immediately
-              const ep1 = episodes[0];
-              data = `/stream?torrent=${encodeURIComponent(cleanMagnet)}&fileIndex=${ep1.index}`;
+        this.cmdHost(socket, data);
 
-              // Queue episodes 2..N into room playlist
-              const queueEpisodes = episodes.slice(1).map((ep, idx) => {
-                let epName = ep.name
-                  .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                  .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
-                  .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
-                  .replace(/[\._\-]/g, " ")
-                  .replace(/\s+/g, " ")
-                  .trim();
-                return {
-                  name: epName || `Episode ${idx + 2}`,
-                  channel: "🧲 Next Episode",
-                  duration: 0,
-                  url: `/stream?torrent=${encodeURIComponent(cleanMagnet)}&fileIndex=${ep.index}`,
-                  type: "magnet" as const,
-                };
-              });
-              this.playlist = queueEpisodes;
-              this.io.of(this.roomId).emit("playlist", this.playlist);
-            }
-          } else {
-            // Background metadata resolution for slower DHT/trackers
-            (async () => {
-              try {
-                const lateTorrent = await torrentPromise;
-                if (lateTorrent && lateTorrent.files) {
-                  const lateEpisodes = getPlayableEpisodeFiles(lateTorrent.files);
-                  if (lateEpisodes.length > 1) {
-                    const queueEpisodes = lateEpisodes.slice(1).map((ep, idx) => {
-                      let epName = ep.name
-                        .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                        .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
-                        .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
-                        .replace(/[\._\-]/g, " ")
-                        .replace(/\s+/g, " ")
-                        .trim();
-                      return {
-                        name: epName || `Episode ${idx + 2}`,
-                        channel: "🧲 Next Episode",
-                        duration: 0,
-                        url: `/stream?torrent=${encodeURIComponent(cleanMagnet)}&fileIndex=${ep.index}`,
-                        type: "magnet" as const,
-                      };
-                    });
-                    this.playlist = queueEpisodes;
-                    this.io.of(this.roomId).emit("playlist", this.playlist);
-                  }
-                }
-              } catch (e) {
-                console.warn("[Multi-Episode Late Warning]:", e);
+        // Resolve multi-episode season packs in the background asynchronously
+        (async () => {
+          try {
+            const torrent = await getOrAddTorrent(cleanMagnet);
+            if (torrent && torrent.files && torrent.files.length > 0) {
+              const episodes = getPlayableEpisodeFiles(torrent.files);
+              if (episodes.length > 1) {
+                // Queue episodes 2..N into room playlist
+                const queueEpisodes = episodes.slice(1).map((ep, idx) => {
+                  let epName = ep.name
+                    .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
+                    .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
+                    .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
+                    .replace(/[\._\-]/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+                  return {
+                    name: epName || `Episode ${idx + 2}`,
+                    channel: "🧲 Next Episode",
+                    duration: 0,
+                    url: `/stream?torrent=${encodeURIComponent(cleanMagnet)}&fileIndex=${ep.index}`,
+                    type: "magnet" as const,
+                  };
+                });
+                this.playlist = queueEpisodes;
+                this.io.of(this.roomId).emit("playlist", this.playlist);
               }
-            })();
+            }
+          } catch (e) {
+            console.warn("[Multi-Episode AutoQueue]:", e);
           }
-        } catch (e) {
-          console.warn("[Multi-Episode AutoQueue]:", e);
-        }
+        })();
+        return;
       }
     }
     this.cmdHost(socket, data);

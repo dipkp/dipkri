@@ -218,6 +218,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
           }}
           disabled={this.props.disabled}
           onChange={this.onChange}
+          onOptionSubmit={(val: string) => this.setMediaAndClose(val)}
           rightSectionWidth={hasInput ? 170 : undefined}
           rightSection={
             hasInput ? (
@@ -336,7 +337,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
           if (e.key === "Enter") {
             if (!this.state.inputMedia?.trim()) return;
             const resolved = resolveMediaUrl(this.state.inputMedia.trim());
-            if (this.props.roomMedia && !e.shiftKey) {
+            if (e.shiftKey) {
               this.props.playlistAdd(resolved);
               this.setState({ inputMedia: undefined, items: [] });
               e.target.blur();

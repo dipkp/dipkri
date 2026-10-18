@@ -499,8 +499,8 @@ class AudioEnhancerManager {
     this.mediaName = effectiveName;
     this.mediaTracks = this.extractLanguagesFromMediaName(effectiveName);
 
-    // Fast-path: detect non-native surround / cinema codecs directly from media name (e.g. DDP 2.0 / 5.1, EAC3, AC3, TrueHD, DTS)
-    const hasNonNativeCodec = /\b(ddp\b|ddp\s*\d\.\d|eac3|e-ac-3|ac3|ac-3|truehd|dts(-hd)?|atmos)\b/i.test(effectiveName);
+    // Fast-path: detect non-native surround / cinema codecs directly from media name (e.g. DD+, DDP 2.0 / 5.1, EAC3, AC3, TrueHD, DTS, Atmos)
+    const hasNonNativeCodec = /(dd\+|dd\s*\+|ddp|eac-?3|ac-?3|truehd|dts(-hd|-x)?|atmos|dolby)/i.test(effectiveName);
     if (hasNonNativeCodec) {
       this.requiresTranscoding = true;
       if (this.mediaTracks.length > 0) {
@@ -573,7 +573,7 @@ class AudioEnhancerManager {
         }
         if (data.audioTracks && Array.isArray(data.audioTracks) && data.audioTracks.length > 0) {
           const nonNative = data.audioTracks.some((t: any) =>
-            t.codec && ["eac3", "ac3", "dts", "truehd", "flac"].includes(t.codec.toLowerCase())
+            t.codec && ["eac3", "ac3", "dts", "truehd", "flac", "mlp", "dd"].some((c) => t.codec.toLowerCase().includes(c))
           );
           this.requiresTranscoding = nonNative;
           this.mediaTracks = data.audioTracks.map((t: any, idx: number) => ({
