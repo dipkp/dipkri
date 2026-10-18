@@ -362,8 +362,7 @@ export function getPlayableEpisodeFiles(
 export function getMimeType(fileName: string): string {
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "video/mp4";
-  if (lower.endsWith(".webm")) return "video/webm";
-  if (lower.endsWith(".mkv")) return "video/x-matroska";
+  if (lower.endsWith(".webm") || lower.endsWith(".mkv")) return "video/webm";
   if (lower.endsWith(".avi")) return "video/x-msvideo";
   if (lower.endsWith(".mov")) return "video/quicktime";
   if (lower.endsWith(".vtt")) return "text/vtt";
