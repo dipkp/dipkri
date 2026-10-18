@@ -5,6 +5,7 @@ import {
   type MovieDetails,
   type MovieSeasonEpisode,
   type MovieServer,
+  type MovieDirectStream,
   createMovieProtocolUrl,
   buildMovieEmbedUrl,
 } from "../../utils/utils";
@@ -18,14 +19,10 @@ interface MovieModalProps {
 }
 
 const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
-  { id: "vidlink", name: "VidLink HD", tag: "Primary • Fast & Subs" },
-  { id: "embedsu", name: "Embed.su", tag: "Ultra-Fast • High Uptime" },
-  { id: "multiembed", name: "SuperEmbed", tag: "6-in-1 Backup Streams" },
-  { id: "smashystream", name: "SmashyStream", tag: "8 Multi-Mirrors" },
-  { id: "autoembed", name: "AutoEmbed", tag: "Clean Backup Player" },
-  { id: "vidsrc_pm", name: "VidSrc PM", tag: "Reliable Mirror" },
-  { id: "twoembed", name: "2Embed Multi", tag: "Direct Stream" },
-  { id: "apiplayer", name: "APIPlayer.ru", tag: "Global Mirror" },
+  { id: "vidlink", name: "VidLink HD", tag: "Primary • Fast CDN • Auto Subs • Sync" },
+  { id: "vidsrc_pm", name: "VidSrc PM", tag: "Reliable Mirror • Multiple Streams" },
+  { id: "twoembed", name: "2Embed Multi", tag: "Direct Stream Mirror" },
+  { id: "apiplayer", name: "APIPlayer", tag: "Global Mirror" },
 ];
 
 export const MovieModal: React.FC<MovieModalProps> = ({
@@ -42,6 +39,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   // Detail View State
   const [selectedMedia, setSelectedMedia] = useState<MovieDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [playbackMode, setPlaybackMode] = useState<"direct" | "web_mirror">("direct");
+  const [directStreams, setDirectStreams] = useState<MovieDirectStream[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [selectedStreamIndex, setSelectedStreamIndex] = useState(0);
+
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [episodes, setEpisodes] = useState<MovieSeasonEpisode[]>([]);
@@ -132,10 +134,46 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     }
   };
 
+  const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
+    setLoadingStreams(true);
+    try {
+      const imdbParam = media.imdbId ? `&imdbId=${media.imdbId}` : "";
+      const tmdbParam = `&tmdbId=${media.id}`;
+      const typeParam = `&type=${media.type}`;
+      const seasonParam = media.type === "tv" ? `&season=${season}&episode=${episode}` : "";
+      const titleParam = `&title=${encodeURIComponent(media.title)}`;
+
+      const res = await fetch(
+        `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const streams: MovieDirectStream[] = data.streams || [];
+        setDirectStreams(streams);
+        if (streams.length > 0) {
+          // Pre-select 1080p stream with highest seeders, or first stream
+          const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
+          setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
+          setPlaybackMode("direct");
+        } else {
+          // Fallback to web mirror if no direct streams found
+          setPlaybackMode("web_mirror");
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch direct streams:", e);
+      setDirectStreams([]);
+      setPlaybackMode("web_mirror");
+    } finally {
+      setLoadingStreams(false);
+    }
+  };
+
   const selectMediaItem = async (item: MovieSearchResult) => {
     setLoadingDetails(true);
     setSelectedMedia(null);
     setIsPreviewing(false);
+    setDirectStreams([]);
     try {
       const res = await fetch(`/api/movies/details?id=${item.id}&type=${item.type}`);
       if (res.ok) {
@@ -145,6 +183,9 @@ export const MovieModal: React.FC<MovieModalProps> = ({
           const firstSeasonNum = details.seasons[0].seasonNumber || 1;
           setSelectedSeason(firstSeasonNum);
           fetchSeasonEpisodes(details.id, firstSeasonNum);
+          fetchDirectStreams(details, firstSeasonNum, 1);
+        } else {
+          fetchDirectStreams(details);
         }
       }
     } catch (e) {
@@ -173,11 +214,23 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     setSelectedSeason(seasonNum);
     if (selectedMedia) {
       fetchSeasonEpisodes(selectedMedia.id, seasonNum);
+      fetchDirectStreams(selectedMedia, seasonNum, 1);
     }
   };
 
   const handlePlayMedia = (season = 1, episode = 1) => {
     if (!selectedMedia) return;
+
+    if (playbackMode === "direct" && directStreams.length > 0) {
+      const stream = directStreams[selectedStreamIndex] || directStreams[0];
+      if (stream && stream.magnet) {
+        onPlay(stream.magnet);
+        onClose();
+        return;
+      }
+    }
+
+    // Web embed mirror fallback
     const protocolUrl = createMovieProtocolUrl({
       tmdbId: String(selectedMedia.id),
       type: selectedMedia.type,
@@ -192,6 +245,15 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const handleQueueMedia = (season = 1, episode = 1) => {
     if (!selectedMedia) return;
+
+    if (playbackMode === "direct" && directStreams.length > 0) {
+      const stream = directStreams[selectedStreamIndex] || directStreams[0];
+      if (stream && stream.magnet) {
+        onQueue(stream.magnet);
+        return;
+      }
+    }
+
     const protocolUrl = createMovieProtocolUrl({
       tmdbId: String(selectedMedia.id),
       type: selectedMedia.type,
@@ -201,6 +263,41 @@ export const MovieModal: React.FC<MovieModalProps> = ({
       server: selectedServer,
     });
     onQueue(protocolUrl);
+  };
+
+  const handlePlayEpisode = async (seasonNum: number, episodeNum: number) => {
+    if (!selectedMedia) return;
+
+    if (playbackMode === "direct") {
+      setLoadingStreams(true);
+      try {
+        const imdbParam = selectedMedia.imdbId ? `&imdbId=${selectedMedia.imdbId}` : "";
+        const tmdbParam = `&tmdbId=${selectedMedia.id}`;
+        const typeParam = `&type=tv`;
+        const seasonParam = `&season=${seasonNum}&episode=${episodeNum}`;
+        const titleParam = `&title=${encodeURIComponent(selectedMedia.title)}`;
+
+        const res = await fetch(
+          `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const streams: MovieDirectStream[] = data.streams || [];
+          if (streams.length > 0) {
+            onPlay(streams[0].magnet);
+            onClose();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Direct episode stream error:", e);
+      } finally {
+        setLoadingStreams(false);
+      }
+    }
+
+    // Web mirror fallback
+    handlePlayMedia(seasonNum, episodeNum);
   };
 
   if (!isOpen) return null;
@@ -295,6 +392,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 onClick={() => {
                   setSelectedMedia(null);
                   setIsPreviewing(false);
+                  setDirectStreams([]);
                 }}
               >
                 ← Back to catalog
@@ -355,29 +453,123 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               </div>
 
-              {/* Streaming Server Selector */}
-              <div className={styles.serverSection}>
-                <h4 className={styles.sectionHeading}>
-                  <span>⚡ Select Streaming Server</span>
-                </h4>
-                <div className={styles.serverList}>
-                  {SERVER_OPTIONS.map((srv) => (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      className={`${styles.serverButton} ${selectedServer === srv.id ? styles.serverButtonActive : ""}`}
-                      onClick={() => setSelectedServer(srv.id)}
-                    >
-                      <span className={styles.serverName}>{srv.name}</span>
-                      <span className={styles.serverBadge}>{srv.tag}</span>
-                    </button>
-                  ))}
-                </div>
+              {/* Player Mode Switcher Tabs */}
+              <div className={styles.playerModeTabs}>
+                <button
+                  type="button"
+                  className={`${styles.playerModeTab} ${playbackMode === "direct" ? styles.playerModeTabActive : ""}`}
+                  onClick={() => setPlaybackMode("direct")}
+                >
+                  <span>⚡ Native Direct Player (Full Audio & 100% Sync)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.playerModeTab} ${playbackMode === "web_mirror" ? styles.playerModeTabActive : ""}`}
+                  onClick={() => setPlaybackMode("web_mirror")}
+                >
+                  <span>🌐 Web Embed Mirrors</span>
+                </button>
               </div>
+
+              {/* DIRECT NATIVE PLAYER MODE */}
+              {playbackMode === "direct" && (
+                <div className={styles.serverSection}>
+                  <div className={styles.audioGuaranteeBanner}>
+                    <span className={styles.audioGuaranteeIcon}>🔊</span>
+                    <span>
+                      <strong>100% Working Audio & Sync:</strong> Plays via WatchParty native HTML5 engine.
+                      Full volume controls, up to 200% AudioBoost, skip buttons, and instant timeline seeking!
+                    </span>
+                  </div>
+
+                  <h4 className={styles.sectionHeading}>
+                    <span>⚡ Available HD Streams ({directStreams.length})</span>
+                  </h4>
+
+                  {loadingStreams ? (
+                    <div className={styles.loadingSpinner} style={{ padding: "30px 0" }}>
+                      <Loader size="sm" color="indigo" />
+                      <span>Finding high-speed HD streams...</span>
+                    </div>
+                  ) : directStreams.length > 0 ? (
+                    <div className={styles.streamListGrid}>
+                      {directStreams.map((s, idx) => {
+                        const isSelected = selectedStreamIndex === idx;
+                        return (
+                          <div
+                            key={s.id}
+                            className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
+                            onClick={() => setSelectedStreamIndex(idx)}
+                          >
+                            <div className={styles.streamQualityRow}>
+                              <span className={styles.streamQualityBadge}>
+                                {isSelected ? "✓ " : ""}
+                                {s.quality}
+                              </span>
+                              {s.codec && <span className={styles.streamCodecBadge}>{s.codec}</span>}
+                            </div>
+                            <div className={styles.streamMetaRow}>
+                              <span>💾 {s.size || "Direct Stream"}</span>
+                              <span className={s.seeders > 50 ? styles.streamSeedersGood : styles.streamSeedersOk}>
+                                👤 {s.seeders} seeders
+                              </span>
+                            </div>
+                            <span className={styles.streamReleaseTitle} title={s.cleanTitle}>
+                              {s.cleanTitle}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                      No direct peer streams currently active for this specific release.
+                      <br />
+                      <button
+                        type="button"
+                        style={{
+                          marginTop: 8,
+                          background: "rgba(99, 102, 241, 0.2)",
+                          border: "1px solid #6366f1",
+                          color: "#fff",
+                          padding: "6px 14px",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                        }}
+                        onClick={() => setPlaybackMode("web_mirror")}
+                      >
+                        Switch to Web Embed Mirror
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* WEB EMBED MIRROR MODE */}
+              {playbackMode === "web_mirror" && (
+                <div className={styles.serverSection}>
+                  <h4 className={styles.sectionHeading}>
+                    <span>🌐 Select Web Embed Server</span>
+                  </h4>
+                  <div className={styles.serverList}>
+                    {SERVER_OPTIONS.map((srv) => (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        className={`${styles.serverButton} ${selectedServer === srv.id ? styles.serverButtonActive : ""}`}
+                        onClick={() => setSelectedServer(srv.id)}
+                      >
+                        <span className={styles.serverName}>{srv.name}</span>
+                        <span className={styles.serverBadge}>{srv.tag}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Movie Primary Actions */}
               {selectedMedia.type === "movie" ? (
-                <div className={styles.actionRow}>
+                <div className={styles.actionRow} style={{ marginTop: 12 }}>
                   <button
                     type="button"
                     className={styles.playRoomBtn}
@@ -392,17 +584,19 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   >
                     + Add to Queue
                   </button>
-                  <button
-                    type="button"
-                    className={styles.previewBtn}
-                    onClick={() => setIsPreviewing(!isPreviewing)}
-                  >
-                    {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
-                  </button>
+                  {playbackMode === "web_mirror" && (
+                    <button
+                      type="button"
+                      className={styles.previewBtn}
+                      onClick={() => setIsPreviewing(!isPreviewing)}
+                    >
+                      {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
+                    </button>
+                  )}
                 </div>
               ) : (
                 /* TV Series: Season selector & Episode list */
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
                   <div className={styles.serverSection}>
                     <h4 className={styles.sectionHeading}>
                       <span>📺 Select Season</span>
@@ -458,7 +652,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <button
                               type="button"
                               className={styles.episodePlayBtn}
-                              onClick={() => handlePlayMedia(selectedSeason, ep.episodeNumber)}
+                              onClick={() => handlePlayEpisode(selectedSeason, ep.episodeNumber)}
                               title="Play in room"
                             >
                               ▶ Play
@@ -480,7 +674,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
               )}
 
               {/* In-Modal Stream Preview if enabled */}
-              {isPreviewing && (
+              {isPreviewing && playbackMode === "web_mirror" && (
                 <div className={styles.previewFrameWrapper}>
                   <iframe
                     title="Movie Preview"
@@ -519,13 +713,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       <img
                         src={item.poster}
                         alt={item.title}
-                        className={styles.posterImage}
+                        className={styles.mediaPoster}
                         loading="lazy"
                       />
                     ) : (
-                      <div className={styles.posterPlaceholder}>
-                        <span>🎬</span>
-                      </div>
+                      <div className={styles.mediaPoster} style={{ background: "#1e293b" }} />
                     )}
                     <span
                       className={`${styles.typeBadge} ${item.type === "movie" ? styles.typeMovie : styles.typeTv}`}
@@ -537,13 +729,8 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                     )}
                   </div>
                   <div className={styles.cardInfo}>
-                    <h4 className={styles.cardTitle} title={item.title}>
-                      {item.title}
-                    </h4>
-                    <div className={styles.cardMeta}>
-                      <span>{item.year || "Release"}</span>
-                      <span>{item.type === "tv" ? "Series" : "Movie"}</span>
-                    </div>
+                    <h4 className={styles.cardTitle}>{item.title}</h4>
+                    <span className={styles.cardYear}>{item.year || "Release"}</span>
                   </div>
                 </div>
               ))}

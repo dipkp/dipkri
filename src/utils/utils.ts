@@ -158,13 +158,22 @@ export const isMovie = (input: string) => {
 
 export type MovieServer =
   | "vidlink"
-  | "embedsu"
-  | "multiembed"
-  | "smashystream"
-  | "autoembed"
   | "vidsrc_pm"
   | "twoembed"
   | "apiplayer";
+
+export interface MovieDirectStream {
+  id: number;
+  label: string;
+  quality: string;
+  codec?: string;
+  seeders: number;
+  size: string;
+  cleanTitle: string;
+  infoHash: string;
+  fileIdx?: number;
+  magnet: string;
+}
 
 export interface MovieMediaInfo {
   tmdbId: string;
@@ -271,42 +280,6 @@ export function buildMovieEmbedUrl(
     return `https://vidlink.pro/movie/${tmdbId}?autoplay=true${startParam}`;
   }
 
-  if (server === "embedsu") {
-    // Embed.su (Ultra-fast CDN, 99.9% uptime, minimal buffering)
-    const tHash = startSec ? `#t=${startSec}` : "";
-    if (type === "tv") {
-      return `https://embed.su/embed/tv/${tmdbId}/${season}/${episode}${tHash}`;
-    }
-    return `https://embed.su/embed/movie/${tmdbId}${tHash}`;
-  }
-
-  if (server === "multiembed") {
-    // SuperEmbed / MultiEmbed (Contains 6 fallback sources inside)
-    const tHash = startSec ? `#t=${startSec}` : "";
-    if (type === "tv") {
-      return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}${tHash}`;
-    }
-    return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1${tHash}`;
-  }
-
-  if (server === "smashystream") {
-    // SmashyStream (8 multi-mirrors)
-    const tParam = startSec ? `?t=${startSec}` : "";
-    if (type === "tv") {
-      return `https://player.smashy.stream/tv/${tmdbId}?s=${season}&e=${episode}${tParam ? `&t=${startSec}` : ""}`;
-    }
-    return `https://player.smashy.stream/movie/${tmdbId}${tParam}`;
-  }
-
-  if (server === "autoembed") {
-    // AutoEmbed
-    const tParam = startSec ? `&startAt=${startSec}` : "";
-    if (type === "tv") {
-      return `https://player.autoembed.cc/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1${tParam}`;
-    }
-    return `https://player.autoembed.cc/embed/movie/${tmdbId}?autoplay=1${tParam}`;
-  }
-
   if (server === "vidsrc_pm") {
     // VidSrc PM
     const tParam = startSec ? `?t=${startSec}` : "";
@@ -317,7 +290,7 @@ export function buildMovieEmbedUrl(
   }
 
   if (server === "twoembed") {
-    // 2Embed
+    // 2Embed Multi
     const tHash = startSec ? `#t=${startSec}` : "";
     if (type === "tv") {
       return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}${tHash}`;

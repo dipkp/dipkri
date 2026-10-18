@@ -2462,10 +2462,6 @@ export class App extends React.Component<AppProps, AppState> {
   cycleNextMovieServer = () => {
     const servers: MovieServer[] = [
       "vidlink",
-      "embedsu",
-      "multiembed",
-      "smashystream",
-      "autoembed",
       "vidsrc_pm",
       "twoembed",
       "apiplayer",
@@ -2827,7 +2823,10 @@ export class App extends React.Component<AppProps, AppState> {
         if (name.includes("%")) {
           try { name = decodeURIComponent(name); } catch {}
         }
-        return name;
+        if (/s\d+e\d+/i.test(name)) {
+          return `📺 ${name}`;
+        }
+        return `🎬 ${name}`;
       } catch {}
     }
     if (isMagnet(input)) {
@@ -3184,6 +3183,30 @@ export class App extends React.Component<AppProps, AppState> {
                 this.setState({ nonPlayableMedia: false });
               }}
             />
+            {/* Audio Autoplay Unmute Helper for Web Iframes */}
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                left: 10,
+                zIndex: 20,
+                background: "rgba(15, 23, 42, 0.85)",
+                backdropFilter: "blur(10px)",
+                border: "1px solid rgba(99, 102, 241, 0.35)",
+                borderRadius: 20,
+                padding: "4px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 11,
+                color: "#cbd5e1",
+                pointerEvents: "none",
+                userSelect: "none",
+              }}
+            >
+              <span>🔊</span>
+              <span>Click player to unmute if silent</span>
+            </div>
             {/* Playback Paused Overlay */}
             {this.state.roomPaused && (
               <div

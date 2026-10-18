@@ -248,3 +248,120 @@ movieRouter.get("/season", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch season episodes" });
   }
 });
+
+/**
+ * GET /api/movies/streams?imdbId={imdbId}&tmdbId={tmdbId}&type={movie|tv}&season={season}&episode={episode}&title={title}
+ * Returns decentralized high-speed BitTorrent/WebTorrent streams for native HTML5 playback.
+ */
+movieRouter.get("/streams", async (req: Request, res: Response) => {
+  let imdbId = typeof req.query.imdbId === "string" ? req.query.imdbId.trim() : "";
+  const tmdbId = typeof req.query.tmdbId === "string" ? req.query.tmdbId.trim() : "";
+  const type = (req.query.type === "tv" ? "tv" : "movie") as "movie" | "tv";
+  const season = Number(req.query.season) || 1;
+  const episode = Number(req.query.episode) || 1;
+  const rawTitle = typeof req.query.title === "string" ? req.query.title.trim() : "";
+
+  // If no imdbId, attempt auto-resolution from TMDB
+  if (!imdbId && tmdbId) {
+    try {
+      const apiKey = config.TMDB_API_KEY;
+      const url = `${TMDB_BASE_URL}/${type}/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids`;
+      const response = await axios.get(url, { timeout: 6000 });
+      imdbId = response.data?.external_ids?.imdb_id || response.data?.imdb_id || "";
+    } catch (e: any) {
+      console.warn("[MovieService] Failed to resolve IMDb ID from TMDB:", e?.message || e);
+    }
+  }
+
+  if (!imdbId) {
+    res.json({ streams: [], error: "No IMDb ID found for this title" });
+    return;
+  }
+
+  const cacheKey = `streams:${type}:${imdbId}:${season}:${episode}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+
+  try {
+    const stremioEndpoint =
+      type === "tv"
+        ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
+        : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
+
+    const response = await axios.get(stremioEndpoint, { timeout: 9000 });
+    const rawStreams = response.data?.streams || [];
+
+    const formatted = rawStreams.map((s: any, idx: number) => {
+      const titleStr = s.title || "";
+      const nameStr = s.name || "";
+      const combined = `${nameStr} ${titleStr}`;
+
+      const seederMatch = titleStr.match(/👤\s*(\d+)/);
+      const sizeMatch = titleStr.match(/💾\s*([\d.]+\s*[GM]B)/i);
+      const seeders = seederMatch ? parseInt(seederMatch[1], 10) : 0;
+      const size = sizeMatch ? sizeMatch[1] : "";
+
+      const qualityMatch = combined.match(/(2160p|4k|1080p|720p|480p)/i);
+      const quality = qualityMatch ? qualityMatch[1].toUpperCase() : "HD";
+
+      // Detect video codec / rip type
+      let codec = "";
+      if (/x265|hevc/i.test(combined)) codec = "HEVC";
+      else if (/x264|h264|avc/i.test(combined)) codec = "x264";
+
+      // Clean release title for display
+      const cleanTitle = titleStr.split("\n")[0].trim();
+
+      // Collect announce trackers
+      const trackers = (s.sources || [])
+        .filter((src: string) => src.startsWith("tracker:"))
+        .map((src: string) => src.replace("tracker:", ""));
+      const trackerQuery =
+        trackers.length > 0
+          ? "&tr=" + trackers.map((t: string) => encodeURIComponent(t)).join("&tr=")
+          : "";
+
+      // Media title for display in player
+      const displayTitle = rawTitle || "Movie";
+      const seasonEpSuffix = type === "tv" ? ` S${season}E${episode}` : "";
+      const dn = encodeURIComponent(`${displayTitle}${seasonEpSuffix} ${quality}`);
+
+      const fileIndexParam = s.fileIdx != null ? `&fileIndex=${s.fileIdx}` : "";
+      const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}${fileIndexParam}${trackerQuery}`;
+
+      const label = `${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
+
+      return {
+        id: idx,
+        label,
+        quality,
+        codec,
+        seeders,
+        size,
+        cleanTitle,
+        infoHash: s.infoHash,
+        fileIdx: s.fileIdx,
+        magnet,
+      };
+    });
+
+    // Sort by seeders descending (highest seeders first for instant buffering)
+    formatted.sort((a: any, b: any) => b.seeders - a.seeders);
+
+    // Keep top 20 best streams
+    const result = {
+      imdbId,
+      streams: formatted.slice(0, 20),
+    };
+
+    setCached(cacheKey, result);
+    res.json(result);
+  } catch (error: any) {
+    console.error("[MovieService] Streams fetch error:", error?.message || error);
+    res.json({ streams: [], error: "No direct streams available for this title" });
+  }
+});
+

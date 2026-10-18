@@ -214,18 +214,10 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
     switch (srv) {
       case "vidlink":
         return "VidLink HD";
-      case "embedsu":
-        return "Embed.su";
-      case "multiembed":
-        return "SuperEmbed";
-      case "smashystream":
-        return "SmashyStream";
-      case "autoembed":
-        return "AutoEmbed";
       case "vidsrc_pm":
         return "VidSrc PM";
       case "twoembed":
-        return "2Embed";
+        return "2Embed Multi";
       case "apiplayer":
         return "APIPlayer";
       default:
@@ -323,13 +315,9 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
   if (currentMenu === "movieServer") {
     const servers: Array<{ id: MovieServer; label: string; tag: string }> = [
       { id: "vidlink", label: "VidLink HD", tag: "Primary • Fast CDN • Auto Subs • Sync" },
-      { id: "embedsu", label: "Embed.su", tag: "Ultra-Fast • 99.9% Uptime • Zero Buffer" },
-      { id: "multiembed", label: "SuperEmbed", tag: "6-in-1 Built-in Fallback Streams" },
-      { id: "smashystream", label: "SmashyStream", tag: "8 Multi-Mirrors" },
-      { id: "autoembed", label: "AutoEmbed", tag: "Clean Backup Player" },
       { id: "vidsrc_pm", label: "VidSrc PM", tag: "Reliable Mirror • Multiple Streams" },
-      { id: "twoembed", label: "2Embed", tag: "Direct Stream Mirror" },
-      { id: "apiplayer", label: "APIPlayer", tag: "Russian & Global Mirror" },
+      { id: "twoembed", label: "2Embed Multi", tag: "Direct Stream Mirror" },
+      { id: "apiplayer", label: "APIPlayer", tag: "Global Mirror" },
     ];
 
     const currentServerIdx = servers.findIndex((s) => s.id === movieServer);
