@@ -43,6 +43,9 @@ export class HTML implements Player {
   setSrcAndTime = async (src: string, time: number) => {
     const leftVideo = this.getVideoEl();
     if (leftVideo) {
+      if (leftVideo.srcObject) {
+        leftVideo.srcObject = null;
+      }
       let absoluteSrc = src;
       if (typeof window !== "undefined" && src) {
         try {

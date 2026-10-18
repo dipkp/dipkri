@@ -979,8 +979,8 @@ export class App extends React.Component<AppProps, AppState> {
           if (isMagnet(src) || src.includes("/stream?torrent=")) {
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
             const streamUrl = isMagnet(src)
-              ? `/stream?torrent=${encodeURIComponent(src)}`
-              : src;
+              ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
+              : (src.startsWith("/stream") ? `${serverPath}${src}` : src);
             await this.Player().setSrcAndTime(streamUrl, time);
           } else if (isDash(src)) {
             const Dash = await import("dashjs");
@@ -1080,45 +1080,55 @@ export class App extends React.Component<AppProps, AppState> {
             await this.Player().setSrcAndTime(src, time);
           }
 
-          // Listen for canplay to safely finalize time and playback state
-          leftVideo?.addEventListener(
-            "canplay",
-            () => {
-              this.setLoadingFalse();
-              this.setState({ nonPlayableMedia: false });
+          // Listen for canplay or loadeddata to safely finalize time and playback state
+          const finalizePlayback = () => {
+            this.setLoadingFalse();
+            this.setState({ nonPlayableMedia: false });
 
-              // Restore playback position on refresh or load
-              let ts = typeof time === "number" && time > 0 ? time : undefined;
-              if (ts === undefined) {
-                const savedTime = this.getSavedPlaybackTime(this.state.roomId, src);
-                if (savedTime > 0) {
-                  ts = savedTime;
-                }
+            // Restore playback position on refresh or load
+            let ts = typeof time === "number" && time > 0 ? time : undefined;
+            if (ts === undefined) {
+              const savedTime = this.getSavedPlaybackTime(this.state.roomId, src);
+              if (savedTime > 0) {
+                ts = savedTime;
               }
-              const leader = this.getLeaderTime();
-              if (leader > 0) {
-                ts = leader;
-              }
-              if (ts !== undefined && ts > 0) {
-                this.localSeek(ts);
-              }
-              if (data.playbackRate) {
-                this.Player().setPlaybackRate(data.playbackRate);
-              }
-              if (!data.paused && leftVideo.paused) {
-                this.localPlay();
-              }
-            },
-            { once: true },
-          );
+            }
+            const leader = this.getLeaderTime();
+            if (leader > 0) {
+              ts = leader;
+            }
+            if (ts !== undefined && ts > 0) {
+              this.localSeek(ts);
+            }
+            if (data.playbackRate) {
+              this.Player().setPlaybackRate(data.playbackRate);
+            }
+            if (!data.paused && leftVideo && leftVideo.paused) {
+              this.localPlay();
+            }
+          };
+
+          if (leftVideo && leftVideo.readyState >= 2) {
+            finalizePlayback();
+          } else {
+            leftVideo?.addEventListener("canplay", finalizePlayback, { once: true });
+            leftVideo?.addEventListener("loadeddata", finalizePlayback, { once: true });
+          }
+
+          // Safety timeout: ensure loading overlay never gets permanently stuck
+          window.setTimeout(() => {
+            if (this.state.loading && this.state.roomMedia === currentMedia) {
+              this.setLoadingFalse();
+            }
+          }, 3500);
 
           // Progress updater
           window.clearInterval(this.progressUpdater);
           this.setState({ downloaded: 0, total: 0, speed: 0, connections: 0 });
           if (currentMedia.includes("/stream?torrent=") || isMagnet(currentMedia)) {
             const progressUrl = currentMedia.includes("/stream")
-              ? currentMedia.replace("/stream", "/progress")
-              : `/progress?torrent=${encodeURIComponent(currentMedia)}`;
+              ? (currentMedia.startsWith("http") ? currentMedia.replace("/stream", "/progress") : `${serverPath}${currentMedia.replace("/stream", "/progress")}`)
+              : `${serverPath}/progress?torrent=${encodeURIComponent(currentMedia)}`;
             this.progressUpdater = window.setInterval(async () => {
               try {
                 const response = await fetch(progressUrl);
@@ -1321,14 +1331,17 @@ export class App extends React.Component<AppProps, AppState> {
           pc.ontrack = (event: RTCTrackEvent) => {
             const leftVideo = this.HTMLInterface.getVideoEl();
             if (leftVideo) {
+              leftVideo.removeAttribute("src");
               leftVideo.src = "";
-              leftVideo.srcObject = event.streams[0];
+              const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+              leftVideo.srcObject = stream;
               leftVideo.playsInline = true;
               leftVideo.muted = true;
               leftVideo.play().then(() => {
                 leftVideo.muted = false;
               }).catch(() => {});
               this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
             }
           };
         }
@@ -1375,16 +1388,6 @@ export class App extends React.Component<AppProps, AppState> {
               "useinbandfec=1",
               "useinbandfec=1; stereo=1; maxaveragebitrate=510000",
             );
-            //@ts-expect-error
-            const isChromium = Boolean(window.chrome);
-            if (isChromium) {
-              answer.sdp = answer.sdp
-                ?.replace("opus/48000/2", "multiopus/48000/6")
-                .replace(
-                  "useinbandfec=1",
-                  "channel_mapping=0,4,1,2,3,5; num_streams=4; coupled_streams=2;maxaveragebitrate=510000;minptime=10;useinbandfec=1",
-                );
-            }
             await pc.setLocalDescription(answer);
             this.sendSignalSS(from, { sdp: pc.localDescription }, !data.sharer);
           } catch (err) {
@@ -2288,8 +2291,10 @@ export class App extends React.Component<AppProps, AppState> {
         // Mount the stream from sharer
         const leftVideo = this.HTMLInterface.getVideoEl();
         if (leftVideo) {
+          leftVideo.removeAttribute("src");
           leftVideo.src = "";
-          leftVideo.srcObject = event.streams[0];
+          const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+          leftVideo.srcObject = stream;
           leftVideo.playsInline = true;
           // Auto-mute initially to satisfy browser autoplay requirements, then unmute
           leftVideo.muted = true;
@@ -2299,6 +2304,7 @@ export class App extends React.Component<AppProps, AppState> {
             console.warn("Autoplay with sound failed, staying muted:", err);
           });
           this.setLoadingFalse();
+          this.setState({ nonPlayableMedia: false });
         }
       };
     }
@@ -3022,6 +3028,14 @@ export class App extends React.Component<AppProps, AppState> {
               this.setState({ nonPlayableMedia: false });
             }}
             onPlaying={() => {
+              this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
+            }}
+            onLoadedData={() => {
+              this.setLoadingFalse();
+              this.setState({ nonPlayableMedia: false });
+            }}
+            onLoadedMetadata={() => {
               this.setLoadingFalse();
               this.setState({ nonPlayableMedia: false });
             }}
