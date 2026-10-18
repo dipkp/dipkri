@@ -39,11 +39,8 @@ const BubbleVideoElement = ({
   const [hasLiveVideo, setHasLiveVideo] = useState(false);
 
   useEffect(() => {
-    if (!videoRef.current || !stream || isVideoOff) {
+    if (!videoRef.current || !stream) {
       setHasLiveVideo(false);
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
       return;
     }
 
@@ -54,17 +51,17 @@ const BubbleVideoElement = ({
 
     const checkTrack = () => {
       const videoTrack = stream.getVideoTracks()[0];
-      const isLive = Boolean(videoTrack && videoTrack.enabled && !isVideoOff);
+      const isLive = Boolean(
+        videoTrack &&
+        videoTrack.enabled &&
+        videoTrack.readyState === "live" &&
+        !isVideoOff,
+      );
       setHasLiveVideo(isLive);
-      if (!isLive && videoRef.current) {
-        videoRef.current.srcObject = null;
-      } else if (isLive && videoRef.current && videoRef.current.srcObject !== stream) {
-        videoRef.current.srcObject = stream;
-      }
     };
 
     checkTrack();
-    const interval = setInterval(checkTrack, 400);
+    const interval = setInterval(checkTrack, 500);
 
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
@@ -73,11 +70,7 @@ const BubbleVideoElement = ({
       videoTrack.addEventListener("ended", checkTrack);
     }
 
-    video.play().catch(() => {
-      // If unmuted autoplay fails due to browser policy, auto-mute so video plays smoothly
-      video.muted = true;
-      video.play().catch(() => {});
-    });
+    video.play().catch(() => {});
 
     return () => {
       clearInterval(interval);
@@ -298,6 +291,23 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
         "dipkri-webcam-settings-changed",
         handleSettingsChange,
       );
+    };
+  }, []);
+
+  const [, setStreamVersion] = useState(0);
+
+  useEffect(() => {
+    const handleStreamUpdate = () => {
+      setStreamVersion((v) => v + 1);
+    };
+    window.addEventListener("watchparty-stream-update", handleStreamUpdate);
+    const interval = setInterval(() => {
+      setStreamVersion((v) => v + 1);
+    }, 1500);
+
+    return () => {
+      window.removeEventListener("watchparty-stream-update", handleStreamUpdate);
+      clearInterval(interval);
     };
   }, []);
 
@@ -623,7 +633,12 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                         !Boolean(
                           window.watchparty?.ourStream?.getVideoTracks()[0]?.enabled,
                         )
-                      : !user.isVideoChat
+                      : !user.isVideoChat ||
+                        !Boolean(
+                          stream?.getVideoTracks()?.length &&
+                          stream?.getVideoTracks()[0]?.enabled &&
+                          stream?.getVideoTracks()[0]?.readyState === "live",
+                        )
                   }
                 />
               </div>

@@ -282,31 +282,22 @@ export function shuffle(array: any[]) {
   }
 }
 
-export const iceServers = () => [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun3.l.google.com:19302" },
-  { urls: "stun:stun4.l.google.com:19302" },
-  { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:global.stun.twilio.com:3478" },
-  // Free TURN relay for NAT/firewall traversal (OpenRelay project)
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-];
+export const iceServers = (): RTCIceServer[] => {
+  if (typeof window !== "undefined" && (window as any).watchparty_iceServers) {
+    return (window as any).watchparty_iceServers;
+  }
+  return [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:stun.nextcloud.com:443" },
+    { urls: "stun:stun.nextcloud.com:3478" },
+  ];
+};
 
 export const serverPath =
   config.VITE_SERVER_HOST ||

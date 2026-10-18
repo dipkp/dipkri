@@ -41,11 +41,24 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
   componentDidMount() {
     this.socket.on("signal", this.handleSignal);
+    if (typeof window !== "undefined") {
+      window.addEventListener("watchparty-stream-update", this.handleStreamUpdate);
+    }
+    if (window.watchparty.ourStream) {
+      this.updateWebRTC();
+    }
   }
 
   componentWillUnmount() {
     this.socket.off("signal", this.handleSignal);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("watchparty-stream-update", this.handleStreamUpdate);
+    }
   }
+
+  handleStreamUpdate = () => {
+    this.forceUpdate();
+  };
 
   componentDidUpdate(prevProps: VideoChatProps) {
     if (this.props.rosterUpdateTS !== prevProps.rosterUpdateTS) {
@@ -58,23 +71,28 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   handleSignal = async (data: any) => {
-    // Handle messages received from signaling server
-    const msg = data.msg;
-    const from = data.from;
+    const msg = data?.msg;
+    const from = data?.from;
     const selfId = getOrCreateClientId();
-    if (from === selfId) return;
+    if (!msg || !from || from === selfId) return;
 
     let pc: RTCPeerConnection | undefined = window.watchparty.videoPCs[from];
-    // If we haven't created a peer connection for this sender yet, create it on-demand
-    if (!pc) {
+    if (!pc || pc.connectionState === "closed" || pc.connectionState === "failed") {
+      if (pc) {
+        try {
+          pc.close();
+        } catch {}
+        delete window.watchparty.videoPCs[from];
+      }
       pc = this.createPeerConnection(from);
     }
-    if (!pc) {
-      return;
-    }
-    console.log("recv signal", from, data);
+    if (!pc) return;
+
     if (msg.ice !== undefined) {
       try {
+        if (!msg.ice || (!msg.ice.candidate && msg.ice.candidate !== "")) {
+          return;
+        }
         if (pc.remoteDescription && pc.remoteDescription.type) {
           await pc.addIceCandidate(new RTCIceCandidate(msg.ice));
         } else {
@@ -86,20 +104,39 @@ export class VideoChat extends React.Component<VideoChatProps> {
       }
     } else if (msg.sdp && msg.sdp.type === "offer") {
       try {
-        // If our PC is stale or failed, replace it with a fresh one before handling the offer
-        if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-          pc.close();
-          delete window.watchparty.videoPCs[from];
-          pc = this.createPeerConnection(from);
-          if (!pc) return;
+        // Ensure our local tracks are attached so the answer includes our outgoing video/audio
+        if (window.watchparty.ourStream) {
+          const senders = pc.getSenders();
+          window.watchparty.ourStream.getTracks().forEach((track) => {
+            if (!senders.some((s) => s.track === track)) {
+              try {
+                pc!.addTrack(track, window.watchparty.ourStream!);
+              } catch (e) {}
+            }
+          });
         }
+
+        const isPolite = selfId > from;
+        const isCollision = pc.signalingState !== "stable";
+        if (isCollision && !isPolite) {
+          console.log("Glared offer ignored from", from);
+          return;
+        }
+
+        if (isCollision && isPolite) {
+          try {
+            await pc.setLocalDescription({ type: "rollback" } as any);
+          } catch (e) {}
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
 
-        // Flush any queued ICE candidates
-        if ((pc as any)._iceQueue) {
+        if ((pc as any)._iceQueue && (pc as any)._iceQueue.length > 0) {
           for (const cand of (pc as any)._iceQueue) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(cand));
+              if (cand && (cand.candidate || cand.candidate === "")) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+              }
             } catch (e) {}
           }
           delete (pc as any)._iceQueue;
@@ -109,96 +146,133 @@ export class VideoChat extends React.Component<VideoChatProps> {
         await pc.setLocalDescription(answer);
         this.sendSignal(from, { sdp: pc.localDescription });
       } catch (err) {
-        console.error("VideoChat error handling offer:", err);
+        console.error("VideoChat error handling offer from", from, err);
       }
     } else if (msg.sdp && msg.sdp.type === "answer") {
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        if ((pc as any)._iceQueue) {
-          for (const cand of (pc as any)._iceQueue) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(cand));
-            } catch (e) {}
+        if (pc.signalingState === "have-local-offer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          if ((pc as any)._iceQueue && (pc as any)._iceQueue.length > 0) {
+            for (const cand of (pc as any)._iceQueue) {
+              try {
+                if (cand && (cand.candidate || cand.candidate === "")) {
+                  await pc.addIceCandidate(new RTCIceCandidate(cand));
+                }
+              } catch (e) {}
+            }
+            delete (pc as any)._iceQueue;
           }
-          delete (pc as any)._iceQueue;
         }
       } catch (err) {
-        console.error("VideoChat error handling answer:", err);
+        console.error("VideoChat error handling answer from", from, err);
       }
     }
   };
 
   setupWebRTC = async () => {
-    // Set up our own video
-    // Create default stream
-    let black = ({ width = 640, height = 480 } = {}) => {
-      let canvas: any = Object.assign(document.createElement("canvas"), {
-        width,
-        height,
-      });
-      canvas.getContext("2d")?.fillRect(0, 0, width, height);
-      let stream = canvas.captureStream();
-      return Object.assign(stream.getVideoTracks()[0], { enabled: false });
-    };
-    let stream = new MediaStream([black()]);
-
+    let stream: MediaStream | undefined;
     try {
-      stream = await navigator?.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
+      stream = await navigator?.mediaDevices?.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 30, max: 30 },
+        },
       });
     } catch (e) {
-      console.warn(e);
+      console.warn("Camera+Mic request failed, falling back to audio only:", e);
       try {
-        console.log("attempt audio only stream");
         stream = await navigator?.mediaDevices?.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
           video: false,
         });
-      } catch (e) {
-        console.warn(e);
+      } catch (err) {
+        console.warn("Microphone request also failed:", err);
       }
     }
+
+    if (!stream) {
+      stream = new MediaStream();
+    }
+
     window.watchparty.ourStream = stream;
-    // alert server we've joined video chat
     this.socket.emit("CMD:joinVideo");
     this.emitUserMute();
+
+    const selfId = getOrCreateClientId();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("watchparty-stream-update", {
+          detail: { id: selfId, stream },
+        }),
+      );
+    }
+    this.updateWebRTC();
+    this.forceUpdate();
   };
 
   stopWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
     const videoPCs = window.watchparty.videoPCs;
-    ourStream &&
-      ourStream.getTracks().forEach((track) => {
-        track.stop();
-      });
+    if (ourStream) {
+      ourStream.getTracks().forEach((track) => track.stop());
+    }
     window.watchparty.ourStream = undefined;
     Object.keys(videoPCs).forEach((key) => {
-      videoPCs[key].close();
+      try {
+        videoPCs[key].close();
+      } catch {}
       delete videoPCs[key];
     });
     this.socket.emit("CMD:leaveVideo");
+
+    const selfId = getOrCreateClientId();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("watchparty-stream-update", {
+          detail: { id: selfId, stream: null },
+        }),
+      );
+    }
+    this.forceUpdate();
   };
 
   toggleVideoWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
     if (ourStream && ourStream.getVideoTracks()[0]) {
-      ourStream.getVideoTracks()[0].enabled =
-        !ourStream.getVideoTracks()[0]?.enabled;
+      const track = ourStream.getVideoTracks()[0];
+      track.enabled = !track.enabled;
+    }
+    const selfId = getOrCreateClientId();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("watchparty-stream-update", {
+          detail: { id: selfId, stream: ourStream },
+        }),
+      );
     }
     this.forceUpdate();
   };
 
   getVideoWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
-    return ourStream && ourStream.getVideoTracks()[0]?.enabled;
+    return Boolean(ourStream && ourStream.getVideoTracks()[0]?.enabled);
   };
 
   toggleAudioWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
     if (ourStream && ourStream.getAudioTracks()[0]) {
-      ourStream.getAudioTracks()[0].enabled =
-        !ourStream.getAudioTracks()[0]?.enabled;
+      const track = ourStream.getAudioTracks()[0];
+      track.enabled = !track.enabled;
     }
     this.emitUserMute();
     this.forceUpdate();
@@ -206,10 +280,10 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
   getAudioWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
-    return (
+    return Boolean(
       ourStream &&
       ourStream.getAudioTracks()[0] &&
-      ourStream.getAudioTracks()[0].enabled
+      ourStream.getAudioTracks()[0].enabled,
     );
   };
 
@@ -223,37 +297,59 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const pc = new RTCPeerConnection({ iceServers: iceServers() });
     videoPCs[id] = pc;
 
-    // Add our own video/audio tracks as outgoing stream
     if (ourStream) {
       ourStream.getTracks().forEach((track) => {
-        pc.addTrack(track, ourStream);
+        try {
+          pc.addTrack(track, ourStream);
+        } catch (e) {}
       });
     }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        this.sendSignal(id, { ice: event.candidate });
+        this.sendSignal(id, {
+          ice: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
+        });
       }
     };
 
     pc.ontrack = (event: RTCTrackEvent) => {
-      const stream = event.streams[0];
       if (!window.watchparty.remoteStreams) {
         window.watchparty.remoteStreams = {};
       }
-      window.watchparty.remoteStreams[id] = stream;
+      let stream = window.watchparty.remoteStreams[id];
+      if (!stream) {
+        stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream();
+        window.watchparty.remoteStreams[id] = stream;
+      }
+      if (!stream.getTracks().includes(event.track)) {
+        stream.addTrack(event.track);
+      }
+
       if (videoRefs[id]) {
-        videoRefs[id].srcObject = stream;
+        if (videoRefs[id].srcObject !== stream) {
+          videoRefs[id].srcObject = stream;
+        }
         videoRefs[id].play().catch(() => {});
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("watchparty-stream-update", {
+            detail: { id, stream },
+          }),
+        );
       }
       this.forceUpdate();
     };
 
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState === "failed") {
-        pc.close();
+        try {
+          pc.close();
+        } catch {}
         delete videoPCs[id];
-        this.updateWebRTC();
+        setTimeout(() => this.updateWebRTC(), 600);
       }
     };
 
@@ -265,19 +361,18 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const videoPCs = window.watchparty.videoPCs;
     const videoRefs = window.watchparty.videoRefs;
     if (!ourStream) {
-      // We haven't started video chat, exit
       return;
     }
     const selfId = getOrCreateClientId();
 
-    // Delete and close any connections that aren't in the current member list (maybe someone disconnected)
-    // This allows them to rejoin later
     const clientIds = new Set(
       this.props.participants.filter((p) => p.isVideoChat).map((p) => p.id),
     );
     Object.entries(videoPCs).forEach(([key, value]) => {
       if (!clientIds.has(key)) {
-        value.close();
+        try {
+          value.close();
+        } catch {}
         delete videoPCs[key];
         if (window.watchparty.remoteStreams) {
           delete window.watchparty.remoteStreams[key];
@@ -287,36 +382,38 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
     this.props.participants.forEach((user) => {
       const id = user.id;
-      if (!user.isVideoChat || videoPCs[id]) {
-        // User isn't in video chat, or we already have a connection to them
+      if (!user.isVideoChat || id === selfId) {
         return;
       }
-      if (id === selfId) {
-        videoPCs[id] = new RTCPeerConnection();
-        if (videoRefs[id]) {
-          videoRefs[id].srcObject = ourStream;
-        }
-      } else {
-        const pc = this.createPeerConnection(id);
-        if (!pc) return;
-
-        // For each pair, have the lexicographically smaller ID be the offerer
-        const isOfferer = selfId < id;
-        if (isOfferer) {
-          const createAndSendOffer = async () => {
+      let pc = videoPCs[id];
+      if (!pc || pc.connectionState === "closed" || pc.connectionState === "failed") {
+        pc = this.createPeerConnection(id);
+      } else if (ourStream) {
+        const senders = pc.getSenders();
+        ourStream.getTracks().forEach((track) => {
+          if (!senders.some((s) => s.track === track)) {
             try {
-              if (pc.signalingState === "closed") return;
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              this.sendSignal(id, { sdp: pc.localDescription });
-            } catch (e) {
-              console.warn("VideoChat createOffer failed for", id, e);
-            }
-          };
-          pc.onnegotiationneeded = createAndSendOffer;
-          // Trigger offer creation immediately to ensure fast WebRTC connection
-          createAndSendOffer();
-        }
+              pc!.addTrack(track, ourStream);
+            } catch (e) {}
+          }
+        });
+      }
+      if (!pc) return;
+
+      const isOfferer = selfId < id;
+      if (isOfferer && pc.signalingState === "stable" && !pc.currentRemoteDescription) {
+        const sendOffer = async () => {
+          try {
+            if (pc.signalingState !== "stable") return;
+            const offer = await pc.createOffer();
+            if (pc.signalingState !== "stable") return;
+            await pc.setLocalDescription(offer);
+            this.sendSignal(id, { sdp: pc.localDescription });
+          } catch (e) {
+            console.warn("VideoChat createOffer failed for", id, e);
+          }
+        };
+        sendOffer();
       }
     });
   };
@@ -508,7 +605,12 @@ export class VideoChat extends React.Component<VideoChatProps> {
               {/* Live Video Element or Avatar Picture (Freeze-free) */}
               {(isSelf
                 ? Boolean(ourStream && this.getVideoWebRTC())
-                : Boolean(isUserInVideo && (window.watchparty?.remoteStreams?.[p.id] || ourStream))) ? (
+                : Boolean(
+                    isUserInVideo &&
+                    window.watchparty?.remoteStreams?.[p.id]?.getVideoTracks()?.length &&
+                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].enabled &&
+                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].readyState === "live",
+                  )) ? (
                 <video
                   ref={(el) => {
                     if (el) {
@@ -552,7 +654,8 @@ export class VideoChat extends React.Component<VideoChatProps> {
                     }
                     alt={nameMap[p.id] || "User"}
                   />
-                  {isSelf && ourStream && !this.getVideoWebRTC() && (
+                  {((isSelf && ourStream && !this.getVideoWebRTC()) ||
+                    (!isSelf && isUserInVideo)) && (
                     <div
                       style={{
                         position: "absolute",

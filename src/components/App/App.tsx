@@ -34,6 +34,7 @@ import { TopBar } from "../TopBar/TopBar";
 import { VBrowser } from "../VBrowser/VBrowser";
 import { VideoChat } from "../VideoChat/VideoChat";
 import { FloatingWebcamBubbles } from "../VideoChat/FloatingWebcamBubbles";
+import { RemoteAudioRenderer } from "../VideoChat/RemoteAudioRenderer";
 import { getCurrentSettings } from "../Settings/LocalSettings";
 import { MultiStreamModal } from "../Modal/MultiStreamModal";
 import { ComboBox } from "../ComboBox/ComboBox";
@@ -1416,7 +1417,9 @@ export class App extends React.Component<AppProps, AppState> {
     }
     this.tsInterval = window.setInterval(() => {
       if (this.state.roomMedia) {
-        const curTime = this.Player().getCurrentTime();
+        const curTime = this.usingMovie()
+          ? (this.movieCurrentTime || 0)
+          : this.Player().getCurrentTime();
         const toSend = this.getRoomTSToSet(curTime);
         this.socket.emit("CMD:ts", toSend);
         if (curTime > 0 && this.state.roomId) {
@@ -3256,19 +3259,22 @@ export class App extends React.Component<AppProps, AppState> {
           </Alert>
         )}
         {this.state.state === "connected" && (
-          <FloatingWebcamBubbles
-            participants={this.state.participants}
-            nameMap={this.state.nameMap}
-            pictureMap={this.state.pictureMap}
-            socket={this.socket}
-            onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-            onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-            onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-            onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-            isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-            isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
-            isFullScreen={this.state.fullScreen}
-          />
+          <>
+            <RemoteAudioRenderer participants={this.state.participants} />
+            <FloatingWebcamBubbles
+              participants={this.state.participants}
+              nameMap={this.state.nameMap}
+              pictureMap={this.state.pictureMap}
+              socket={this.socket}
+              onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+              onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+              onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+              onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+              isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+              isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+              isFullScreen={this.state.fullScreen}
+            />
+          </>
         )}
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>
