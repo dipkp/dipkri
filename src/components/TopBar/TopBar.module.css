@@ -31,23 +31,40 @@
 .brandLink {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   text-decoration: none;
   flex-shrink: 0;
+  transition: opacity 0.2s ease;
 }
 
-.topbarArtLogo {
-  height: 25px;
-  width: auto;
-  max-width: 110px;
-  object-fit: contain;
+.brandLink:hover {
+  opacity: 0.92;
+}
+
+.topbarAppLogo {
+  height: 28px;
+  width: 28px;
+  border-radius: 7px;
+  object-fit: cover;
   display: block;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
 
-.brandLink:hover .topbarArtLogo {
-  transform: scale(1.04);
+.brandLink:hover .topbarAppLogo {
+  transform: scale(1.08) rotate(-2deg);
+}
+
+.brandName {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  user-select: none;
 }
 
 .roomPill {

@@ -175,13 +175,14 @@ export const TopBar = (props: {
         <a
           href="/"
           className={styles.brandLink}
-          title="Dypkri — Back to Home"
+          title="dipkri — Back to Home"
         >
           <img
-            src="/dypkri-art.png"
-            alt="Dypkri"
-            className={styles.topbarArtLogo}
+            src="/app-logo.png"
+            alt="dipkri"
+            className={styles.topbarAppLogo}
           />
+          <span className={styles.brandName}>dipkri</span>
         </a>
 
         {displayRoomCode && (
