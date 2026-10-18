@@ -2992,6 +2992,53 @@ export class App extends React.Component<AppProps, AppState> {
             ]
               .filter(Boolean)
               .join(" • ")}
+            {(() => {
+              const audioStatus = audioEnhancer.getAudioDecodingStatus(this.HTMLInterface.getVideoEl());
+              if (!audioStatus.hasAudio) return null;
+              const isEAC = audioStatus.isTranscoding || ['eac3', 'ac3', 'dts'].includes(audioStatus.codec || '');
+              return (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    marginLeft: 6,
+                    padding: '1px 7px',
+                    borderRadius: 5,
+                    background: audioStatus.isDecoded
+                      ? isEAC
+                        ? 'rgba(16, 185, 129, 0.16)'
+                        : 'rgba(56, 189, 248, 0.16)'
+                      : 'rgba(234, 179, 8, 0.18)',
+                    border: `1px solid ${audioStatus.isDecoded ? (isEAC ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)') : 'rgba(234, 179, 8, 0.4)'}`,
+                    color: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                  title={audioStatus.statusText}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
+                      boxShadow: audioStatus.isDecoded
+                        ? `0 0 6px ${isEAC ? '#34d399' : '#38bdf8'}`
+                        : '0 0 6px #facc15',
+                    }}
+                  />
+                  <span>
+                    {audioStatus.codec ? audioStatus.codec.toUpperCase() : 'AUDIO'}:{' '}
+                    {audioStatus.isDecoded
+                      ? audioStatus.isTranscoding
+                        ? `Decoded MP3 (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
+                        : 'Decoded'
+                      : 'Decoding...'}
+                  </span>
+                </span>
+              );
+            })()}
           </div>
         )}
         {this.state.roomMedia && controls}

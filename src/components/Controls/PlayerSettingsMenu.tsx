@@ -25,6 +25,7 @@ import {
   BubbleSize,
   WebcamSettingsState,
 } from "../VideoChat/webcamSettings";
+import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import styles from "./PlayerSettingsMenu.module.css";
 
 export type SubmenuType =
@@ -466,6 +467,56 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
                 <span className={styles.statsValue}>{(convertProgress * 100).toFixed(1)}%</span>
               </div>
             )}
+            {(() => {
+              const audioStatus = audioEnhancer.getAudioDecodingStatus();
+              if (!audioStatus.hasAudio) return null;
+              const isEAC = audioStatus.isTranscoding || ["eac3", "ac3", "dts"].includes(audioStatus.codec || "");
+              return (
+                <>
+                  <div className={styles.statsRow}>
+                    <span className={styles.statsLabel}>Audio Codec:</span>
+                    <span className={styles.statsValue}>{audioStatus.format}</span>
+                  </div>
+                  <div className={styles.statsRow}>
+                    <span className={styles.statsLabel}>Audio Decoded:</span>
+                    <span
+                      className={styles.statsValue}
+                      style={{
+                        color: audioStatus.isDecoded ? (isEAC ? "#34d399" : "#38bdf8") : "#facc15",
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: audioStatus.isDecoded ? (isEAC ? "#34d399" : "#38bdf8") : "#facc15",
+                          boxShadow: audioStatus.isDecoded
+                            ? `0 0 8px ${isEAC ? "rgba(52, 211, 153, 0.8)" : "rgba(56, 189, 248, 0.8)"}`
+                            : "0 0 8px rgba(250, 204, 21, 0.8)",
+                          display: "inline-block",
+                        }}
+                      />
+                      {audioStatus.statusText}
+                    </span>
+                  </div>
+                  {audioStatus.isTranscoding && (
+                    <div className={styles.statsRow}>
+                      <span className={styles.statsLabel}>Audio Buffer:</span>
+                      <span className={styles.statsValue}>
+                        {audioStatus.bufferedSeconds > 0
+                          ? `${audioStatus.bufferedSeconds.toFixed(1)}s ahead (${audioStatus.bufferPercent}% buffer)`
+                          : "Synchronizing stream..."}
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

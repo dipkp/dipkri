@@ -108,6 +108,18 @@ export interface AudioTrackInfo {
   isAttached?: boolean;
 }
 
+export interface AudioDecodingStatus {
+  hasAudio: boolean;
+  codec?: string;
+  label?: string;
+  isTranscoding: boolean;
+  isDecoded: boolean;
+  format: string;
+  statusText: string;
+  bufferedSeconds: number;
+  bufferPercent: number;
+}
+
 class AudioEnhancerManager {
   private ctx: AudioContext | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
@@ -564,6 +576,95 @@ class AudioEnhancerManager {
 
   public getAvailableSubtitleTracks(): any[] {
     return this.detectedSubtitleTracks;
+  }
+
+  /**
+   * Returns current audio decoding & transcoding status for indicators in the UI
+   */
+  public getAudioDecodingStatus(videoEl?: HTMLMediaElement | null): AudioDecodingStatus {
+    const el =
+      videoEl ||
+      this.currentVideoEl ||
+      (typeof document !== "undefined"
+        ? (document.getElementById("leftVideo") as HTMLMediaElement)
+        : null);
+
+    const currentTrack = this.mediaTracks[this.selectedTrackIndex] || this.mediaTracks[0];
+    const codec = (currentTrack?.codec || "").toLowerCase();
+
+    if (!currentTrack && (!el || !el.src)) {
+      return {
+        hasAudio: false,
+        isTranscoding: false,
+        isDecoded: false,
+        format: "No Audio",
+        statusText: "Idle",
+        bufferedSeconds: 0,
+        bufferPercent: 0,
+      };
+    }
+
+    const isEAC3orAC3 = ["eac3", "ac3", "dts", "truehd"].includes(codec);
+    const isTranscoding = this.requiresTranscoding || isEAC3orAC3;
+    const formatName = isEAC3orAC3
+      ? codec === "eac3"
+        ? "Dolby Digital Plus (EAC-3 / DDP 2.0)"
+        : codec.toUpperCase()
+      : codec ? codec.toUpperCase() : "Native Stereo";
+
+    let bufferedSec = 0;
+    let isDecoded = false;
+    let bufferPercent = 0;
+
+    if (this.auxAudio && isTranscoding) {
+      const b = this.auxAudio.buffered;
+      const cur = this.auxAudio.currentTime;
+      for (let i = 0; i < b.length; i++) {
+        if (cur >= b.start(i) && cur <= b.end(i)) {
+          bufferedSec = Math.max(0, b.end(i) - cur);
+          isDecoded = true;
+          break;
+        } else if (b.end(i) > cur) {
+          bufferedSec = Math.max(bufferedSec, b.end(i) - cur);
+          isDecoded = true;
+        }
+      }
+      if (this.auxAudio.readyState >= 2 || !this.auxAudio.paused) {
+        isDecoded = true;
+      }
+      bufferPercent = Math.min(100, Math.round((bufferedSec / 15) * 100));
+    } else if (el) {
+      isDecoded = el.readyState >= 2;
+      const b = el.buffered;
+      const cur = el.currentTime;
+      for (let i = 0; i < b.length; i++) {
+        if (cur >= b.start(i) && cur <= b.end(i)) {
+          bufferedSec = Math.max(0, b.end(i) - cur);
+          break;
+        }
+      }
+      bufferPercent = Math.min(100, Math.round((bufferedSec / 15) * 100));
+    }
+
+    const statusText = isTranscoding
+      ? isDecoded
+        ? `Decoded MP3 (+${bufferedSec.toFixed(1)}s buffer)`
+        : "Decoding Stream..."
+      : isDecoded
+        ? `Native Decoded (+${bufferedSec.toFixed(1)}s)`
+        : "Buffering Audio...";
+
+    return {
+      hasAudio: true,
+      codec: codec || undefined,
+      label: currentTrack?.label || "Default Audio",
+      isTranscoding,
+      isDecoded,
+      format: formatName,
+      statusText,
+      bufferedSeconds: bufferedSec,
+      bufferPercent,
+    };
   }
 
   /**
