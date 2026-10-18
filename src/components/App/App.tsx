@@ -2459,6 +2459,25 @@ export class App extends React.Component<AppProps, AppState> {
     this.roomSetMedia(newUrl);
   };
 
+  cycleNextMovieServer = () => {
+    const servers: MovieServer[] = [
+      "vidlink",
+      "embedsu",
+      "multiembed",
+      "smashystream",
+      "autoembed",
+      "vidsrc_pm",
+      "twoembed",
+      "apiplayer",
+    ];
+    const info = parseMovieUrl(this.state.roomMedia);
+    if (!info) return;
+    const currentServer = info.server || "vidlink";
+    const curIdx = servers.indexOf(currentServer);
+    const nextServer = servers[(curIdx + 1) % servers.length];
+    this.switchMovieServer(nextServer);
+  };
+
   hasDuration = () => {
     // Youtube, link, magnet, or movie stream. Has a defined runtime (not WebRTC)
     return (

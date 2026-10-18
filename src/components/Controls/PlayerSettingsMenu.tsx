@@ -214,12 +214,18 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
     switch (srv) {
       case "vidlink":
         return "VidLink HD";
+      case "embedsu":
+        return "Embed.su";
+      case "multiembed":
+        return "SuperEmbed";
+      case "smashystream":
+        return "SmashyStream";
+      case "autoembed":
+        return "AutoEmbed";
       case "vidsrc_pm":
         return "VidSrc PM";
       case "twoembed":
         return "2Embed";
-      case "autoembed":
-        return "AutoEmbed";
       case "apiplayer":
         return "APIPlayer";
       default:
@@ -316,12 +322,18 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
   // ---------------------------------------------------------------------------
   if (currentMenu === "movieServer") {
     const servers: Array<{ id: MovieServer; label: string; tag: string }> = [
-      { id: "vidlink", label: "VidLink HD", tag: "Fast CDN • Auto Subs • Sync" },
-      { id: "vidsrc_pm", label: "VidSrc PM", tag: "Fast Mirror • Multiple Streams" },
+      { id: "vidlink", label: "VidLink HD", tag: "Primary • Fast CDN • Auto Subs • Sync" },
+      { id: "embedsu", label: "Embed.su", tag: "Ultra-Fast • 99.9% Uptime • Zero Buffer" },
+      { id: "multiembed", label: "SuperEmbed", tag: "6-in-1 Built-in Fallback Streams" },
+      { id: "smashystream", label: "SmashyStream", tag: "8 Multi-Mirrors" },
+      { id: "autoembed", label: "AutoEmbed", tag: "Clean Backup Player" },
+      { id: "vidsrc_pm", label: "VidSrc PM", tag: "Reliable Mirror • Multiple Streams" },
       { id: "twoembed", label: "2Embed", tag: "Direct Stream Mirror" },
-      { id: "autoembed", label: "AutoEmbed", tag: "Multi-Source Player" },
       { id: "apiplayer", label: "APIPlayer", tag: "Russian & Global Mirror" },
     ];
+
+    const currentServerIdx = servers.findIndex((s) => s.id === movieServer);
+    const nextServer = servers[(currentServerIdx + 1) % servers.length];
 
     return (
       <div
@@ -348,6 +360,33 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         </div>
 
         <div className={styles.menuList}>
+          {/* Quick Auto-Switch Mirror Row if stuck */}
+          <div
+            className={styles.optionRow}
+            style={{
+              background: "rgba(99, 102, 241, 0.12)",
+              border: "1px solid rgba(99, 102, 241, 0.3)",
+              borderRadius: 8,
+              marginBottom: 8,
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              onSelectMovieServer?.(nextServer.id);
+              onClose();
+            }}
+          >
+            <div className={styles.optionCheckWrapper}>
+              <span style={{ fontSize: 16 }}>⚡</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+              <span className={styles.optionText} style={{ color: "#a5b4fc", fontWeight: 700 }}>
+                Server Stuck? Switch to {nextServer.label}
+              </span>
+              <span style={{ fontSize: 11, color: "rgba(165, 180, 252, 0.7)" }}>
+                Instant fallback mirror at same time
+              </span>
+            </div>
+          </div>
           {servers.map((s) => {
             const isSelected = movieServer === s.id;
             return (

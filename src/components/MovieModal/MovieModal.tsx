@@ -18,11 +18,14 @@ interface MovieModalProps {
 }
 
 const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
-  { id: "vidlink", name: "VidLink (Fast HD)", tag: "Recommended / No Ads" },
-  { id: "vidsrc_pm", name: "VidSrc PM", tag: "Reliable HD" },
-  { id: "twoembed", name: "2Embed Multi", tag: "Multi-Source" },
-  { id: "autoembed", name: "AutoEmbed", tag: "Backup Player" },
-  { id: "apiplayer", name: "APIPlayer.ru", tag: "Alternative" },
+  { id: "vidlink", name: "VidLink HD", tag: "Primary • Fast & Subs" },
+  { id: "embedsu", name: "Embed.su", tag: "Ultra-Fast • High Uptime" },
+  { id: "multiembed", name: "SuperEmbed", tag: "6-in-1 Backup Streams" },
+  { id: "smashystream", name: "SmashyStream", tag: "8 Multi-Mirrors" },
+  { id: "autoembed", name: "AutoEmbed", tag: "Clean Backup Player" },
+  { id: "vidsrc_pm", name: "VidSrc PM", tag: "Reliable Mirror" },
+  { id: "twoembed", name: "2Embed Multi", tag: "Direct Stream" },
+  { id: "apiplayer", name: "APIPlayer.ru", tag: "Global Mirror" },
 ];
 
 export const MovieModal: React.FC<MovieModalProps> = ({
