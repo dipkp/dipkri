@@ -334,12 +334,14 @@ export const Controls = (props: ControlsProps) => {
       setAudioTracksRevision((v) => v + 1);
     };
     window.addEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
+    window.addEventListener("watchparty-subtitles-updated", handleAudioTracksUpdate);
     const video = document.getElementById("leftVideo") as HTMLVideoElement | null;
     if (video) {
       video.addEventListener("loadedmetadata", handleAudioTracksUpdate);
     }
     return () => {
       window.removeEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
+      window.removeEventListener("watchparty-subtitles-updated", handleAudioTracksUpdate);
       if (video) {
         video.removeEventListener("loadedmetadata", handleAudioTracksUpdate);
       }
@@ -385,19 +387,51 @@ export const Controls = (props: ControlsProps) => {
   const attachedSubtitleTracks = useMemo(() => {
     if (typeof document === "undefined") return [];
     const video = document.getElementById("leftVideo") as HTMLVideoElement;
-    if (!video || !video.textTracks) return [];
-    const tracks: { index: number; label: string; language?: string; active: boolean }[] = [];
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const t = video.textTracks[i];
-      tracks.push({
-        index: i,
-        label: t.label || t.language || `Subtitle Track ${i + 1}`,
-        language: t.language || undefined,
-        active: t.mode === "showing",
+    const tracks: { index: number; label: string; language?: string; active: boolean; url?: string }[] = [];
+    if (video && video.textTracks) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const t = video.textTracks[i];
+        tracks.push({
+          index: i,
+          label: t.label || t.language || `Subtitle Track ${i + 1}`,
+          language: t.language || undefined,
+          active: t.mode === "showing",
+        });
+      }
+    }
+
+    // Include embedded MKV / MP4 subtitle streams detected by audioEnhancer
+    const embeddedSubs = audioEnhancer.getAvailableSubtitleTracks();
+    if (embeddedSubs && embeddedSubs.length > 0 && props.video) {
+      let fileParam = "";
+      const fIdx = props.video.match(/[?&]fileIndex=(\d+)/i) || props.video.match(/%26fileIndex%3D(\d+)/i);
+      if (fIdx) {
+        fileParam = `&fileIndex=${fIdx[1]}`;
+      }
+      let cleanTorrent = props.video.replace(/^.*\/stream\?torrent=/, "");
+      const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+      if (cutIdx !== -1) {
+        cleanTorrent = cleanTorrent.slice(0, cutIdx);
+      }
+      try {
+        cleanTorrent = decodeURIComponent(cleanTorrent);
+      } catch {}
+
+      embeddedSubs.forEach((sub: any, i: number) => {
+        const subUrl = `${serverPath}/streamSubtitle?torrent=${encodeURIComponent(cleanTorrent)}&streamIndex=${sub.streamIndex}${fileParam}`;
+        const isActive = props.roomSubtitle === subUrl;
+        tracks.push({
+          index: 100 + i,
+          label: `${sub.label || sub.language || `Subtitle ${i + 1}`} (Embedded)`,
+          language: sub.language,
+          active: isActive,
+          url: subUrl,
+        });
       });
     }
+
     return tracks;
-  }, [props.video, props.subtitled, isMenuOpen]);
+  }, [props.video, props.subtitled, props.roomSubtitle, isMenuOpen, audioTracksRevision]);
 
   const nativeResolution = useMemo(() => {
     if (typeof document === "undefined") return "";
@@ -1597,7 +1631,19 @@ export const Controls = (props: ControlsProps) => {
               }}
               subtitleTracks={attachedSubtitleTracks}
               onSelectSubtitleTrack={(idx) => {
-                props.localSetSubtitleMode("showing", undefined, idx);
+                if (idx >= 100) {
+                  const embeddedTrack = attachedSubtitleTracks.find((t) => t.index === idx);
+                  if (embeddedTrack && (embeddedTrack as any).url) {
+                    props.socket?.emit("CMD:subtitle", (embeddedTrack as any).url);
+                    window.dispatchEvent(
+                      new CustomEvent("watchparty-load-embedded-subtitle", {
+                        detail: { url: (embeddedTrack as any).url, label: embeddedTrack.label },
+                      })
+                    );
+                  }
+                } else {
+                  props.localSetSubtitleMode("showing", undefined, idx);
+                }
                 resetHideTimer();
               }}
               currentSubtitleLabel={

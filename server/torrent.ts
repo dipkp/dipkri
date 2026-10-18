@@ -63,6 +63,23 @@ export function extractInfoHash(magnetUri: string): string | null {
 }
 
 /**
+ * Extracts fileIndex parameter safely from query, raw URL, or encoded params.
+ */
+export function extractFileIndexFromRequest(req: any): number | undefined {
+  if (req.query?.fileIndex != null && req.query.fileIndex !== "") {
+    const parsed = parseInt(String(req.query.fileIndex), 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  const fullUrl = req.originalUrl || req.url || "";
+  const match = fullUrl.match(/[?&]fileIndex=(\d+)/i) || fullUrl.match(/%26fileIndex%3D(\d+)/i);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/**
  * Extracts the full magnet link from the request query or raw URL,
  * safely preserving all tracker parameters even if unencoded.
  */
@@ -71,7 +88,16 @@ export function extractMagnetFromRequest(req: any): string {
   const idx = fullUrl.indexOf("torrent=");
   if (idx !== -1) {
     let sub = fullUrl.slice(idx + 8);
-    const cutParams = ["&fileIndex=", "&track=", "&ss=", "&streamIndex="];
+    const cutParams = [
+      "&fileIndex=",
+      "&track=",
+      "&ss=",
+      "&streamIndex=",
+      "%26fileIndex%3D",
+      "%26track%3D",
+      "%26ss%3D",
+      "%26streamIndex%3D",
+    ];
     let minIdx = -1;
     for (const param of cutParams) {
       const pIdx = sub.indexOf(param);
@@ -91,6 +117,13 @@ export function extractMagnetFromRequest(req: any): string {
         }
       } else {
         break;
+      }
+    }
+    const decodedCutParams = ["&fileIndex=", "&track=", "&ss=", "&streamIndex="];
+    for (const param of decodedCutParams) {
+      const pIdx = sub.indexOf(param);
+      if (pIdx !== -1) {
+        sub = sub.slice(0, pIdx);
       }
     }
     if (sub.includes("torrent=")) {
@@ -113,6 +146,13 @@ export function extractMagnetFromRequest(req: any): string {
         }
       } else {
         break;
+      }
+    }
+    const decodedCutParams = ["&fileIndex=", "&track=", "&ss=", "&streamIndex="];
+    for (const param of decodedCutParams) {
+      const pIdx = sub.indexOf(param);
+      if (pIdx !== -1) {
+        sub = sub.slice(0, pIdx);
       }
     }
     return sub;
@@ -337,8 +377,7 @@ export async function handleTorrentStream(req: any, res: any) {
     const torrent = await getOrAddTorrent(magnetUri);
     let targetFile: WebTorrent.TorrentFile | undefined;
 
-    const fileIndexQuery = req.query?.fileIndex;
-    const fileIndex = fileIndexQuery != null ? Number(fileIndexQuery) : undefined;
+    const fileIndex = extractFileIndexFromRequest(req);
     if (fileIndex != null && !isNaN(fileIndex) && torrent.files[fileIndex]) {
       targetFile = torrent.files[fileIndex];
     } else {
@@ -462,9 +501,10 @@ export async function handleTorrentInfo(req: any, res: any) {
   }
 
   const infoHash = extractInfoHash(magnetUri) || magnetUri;
-  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
-  if (streamInfoCache.has(infoHash)) {
-    return res.json(streamInfoCache.get(infoHash));
+  const fileIndex = extractFileIndexFromRequest(req);
+  const cacheKey = `${infoHash}_file_${fileIndex != null ? fileIndex : "default"}`;
+  if (streamInfoCache.has(cacheKey)) {
+    return res.json(streamInfoCache.get(cacheKey));
   }
 
   try {
@@ -514,8 +554,8 @@ export async function handleTorrentInfo(req: any, res: any) {
           }));
 
           const result = { audioTracks, subtitleTracks };
-          if (audioTracks.length > 0) {
-            streamInfoCache.set(infoHash, result);
+          if (audioTracks.length > 0 || subtitleTracks.length > 0) {
+            streamInfoCache.set(cacheKey, result);
           }
           return res.json(result);
         } catch {
@@ -546,7 +586,7 @@ export async function handleTorrentAudio(req: any, res: any) {
 
   const track = parseInt(req.query?.track || "0", 10);
   const ss = parseFloat(req.query?.ss || "0");
-  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
+  const fileIndex = extractFileIndexFromRequest(req);
 
   try {
     let streamUrl = magnetUri;
@@ -599,34 +639,14 @@ export async function handleTorrentSubtitle(req: any, res: any) {
   }
 
   const streamIndex = parseInt(req.query?.streamIndex || "0", 10);
-  const fileIndex = req.query?.fileIndex != null ? parseInt(req.query.fileIndex, 10) : undefined;
+  const fileIndex = extractFileIndexFromRequest(req);
 
   try {
-    if (magnetUri.startsWith("http://") || magnetUri.startsWith("https://")) {
-      const args: string[] = [
-        "-nostdin",
-        "-v",
-        "error",
-        "-i",
-        magnetUri,
-        "-map",
-        `0:${streamIndex}`,
-        "-f",
-        "webvtt",
-        "pipe:1",
-      ];
-      const ff = spawn("ffmpeg", args);
-      const cleanup = () => { try { ff.kill("SIGKILL"); } catch {} };
-      req.on("close", cleanup);
-      res.on("close", cleanup);
-      ff.stdout.pipe(res);
-      return;
-    }
-
-    const torrent = await getOrAddTorrent(magnetUri);
-    const targetFile = fileIndex != null && torrent.files[fileIndex] ? torrent.files[fileIndex] : pickBestVideoFile(torrent.files);
-    if (!targetFile) {
-      return res.status(404).send("No video file found");
+    let streamUrl = magnetUri;
+    if (magnetUri.startsWith("/")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
+      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
     }
 
     const args: string[] = [
@@ -634,7 +654,7 @@ export async function handleTorrentSubtitle(req: any, res: any) {
       "-v",
       "error",
       "-i",
-      "pipe:0",
+      streamUrl,
       "-map",
       `0:${streamIndex}`,
       "-f",
@@ -643,27 +663,19 @@ export async function handleTorrentSubtitle(req: any, res: any) {
     ];
 
     const ff = spawn("ffmpeg", args);
-    const readStream = targetFile.createReadStream();
-
     const cleanup = () => {
-      try { (readStream as any).destroy?.(); } catch {}
-      try { ff.kill("SIGKILL"); } catch {}
+      try {
+        ff.kill("SIGKILL");
+      } catch {}
     };
-
     req.on("close", cleanup);
     res.on("close", cleanup);
-
-    readStream.on("error", (err) => {
-      console.warn("[TorrentSubtitle readStream error]:", err?.message);
-      cleanup();
-    });
 
     ff.on("error", (err) => {
       console.warn("[TorrentSubtitle ffmpeg error]:", err?.message);
       if (!res.headersSent) res.status(500).end();
     });
 
-    readStream.pipe(ff.stdin);
     ff.stdout.pipe(res);
   } catch (err: any) {
     console.error("[TorrentSubtitle handler error]:", err?.message);

@@ -289,12 +289,37 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         setCaptionPosition(detail.captionPosition);
       }
     };
+
+    const handleLoadDirectSub = async (e: Event) => {
+      const url = (e as CustomEvent).detail?.url;
+      const label = (e as CustomEvent).detail?.label;
+      if (url) {
+        try {
+          const resp = await fetch(url);
+          if (resp.ok) {
+            const text = await resp.text();
+            const cues = parseSubtitleText(text);
+            if (cues.length > 0) {
+              parsedCuesRef.current = cues;
+              lastCueIndexRef.current = -1;
+              setHasLoadedCues(true);
+              showNotice(`Subtitles: ${label || "Embedded"}`, 2500);
+            }
+          }
+        } catch (err) {
+          console.warn("[LiveCaptions] Direct sub error:", err);
+        }
+      }
+    };
+
     window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    window.addEventListener("watchparty-load-embedded-subtitle", handleLoadDirectSub);
     return () => {
       window.removeEventListener(
         PLAYER_SETTINGS_CHANGED_EVENT,
         handleSettingsChange
       );
+      window.removeEventListener("watchparty-load-embedded-subtitle", handleLoadDirectSub);
     };
   }, [roomSubtitle, isSubtitled, showNotice]);
 
@@ -623,6 +648,61 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             }
           } catch {}
           await new Promise((r) => setTimeout(r, 1200));
+        }
+
+        // Check for embedded MKV / MP4 subtitle tracks via /streamInfo
+        if (!isDisposed && parsedCuesRef.current.length === 0) {
+          try {
+            let fileIndexParam = "";
+            const fIdxMatch = roomMedia.match(/[?&]fileIndex=(\d+)/i) || roomMedia.match(/%26fileIndex%3D(\d+)/i);
+            if (fIdxMatch) {
+              fileIndexParam = `&fileIndex=${fIdxMatch[1]}`;
+            }
+            let cleanTorrent = roomMedia.replace(/^.*\/stream\?torrent=/, "");
+            const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+            if (cutIdx !== -1) {
+              cleanTorrent = cleanTorrent.slice(0, cutIdx);
+            }
+            try {
+              cleanTorrent = decodeURIComponent(cleanTorrent);
+            } catch {}
+
+            const infoResp = await fetch(`/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
+            if (infoResp.ok) {
+              const infoData = await infoResp.json();
+              if (infoData?.subtitleTracks && Array.isArray(infoData.subtitleTracks) && infoData.subtitleTracks.length > 0) {
+                let chosenTrack = null;
+                if (captionLanguage === "hi") {
+                  chosenTrack = infoData.subtitleTracks.find((t: any) => /hindi|hin|\bhi\b/i.test(t.label || t.language || ""));
+                } else if (captionLanguage === "es") {
+                  chosenTrack = infoData.subtitleTracks.find((t: any) => /spanish|spa|\bes\b/i.test(t.label || t.language || ""));
+                } else if (captionLanguage === "en" || captionLanguage === "all") {
+                  chosenTrack = infoData.subtitleTracks.find((t: any) => /english|eng|\ben\b/i.test(t.label || t.language || ""));
+                }
+                if (!chosenTrack) {
+                  chosenTrack = infoData.subtitleTracks[0];
+                }
+
+                if (chosenTrack) {
+                  const subUrl = `/streamSubtitle?torrent=${encodeURIComponent(cleanTorrent)}&streamIndex=${chosenTrack.streamIndex}${fileIndexParam}`;
+                  const sResp = await fetch(subUrl);
+                  if (sResp.ok) {
+                    const sText = await sResp.text();
+                    const cues = parseSubtitleText(sText);
+                    if (cues.length > 0 && !isDisposed) {
+                      parsedCuesRef.current = cues;
+                      lastCueIndexRef.current = -1;
+                      setHasLoadedCues(true);
+                      showNotice(`Subtitles: ${chosenTrack.label || "Embedded English"}`, 2500);
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[LiveCaptions] Embedded subtitle extraction note:", e);
+          }
         }
       }
 

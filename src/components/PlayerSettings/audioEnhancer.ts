@@ -459,6 +459,8 @@ class AudioEnhancerManager {
   private auxAttachedVideo: HTMLMediaElement | null = null;
   private auxAudioStartOffset: number = 0;
   private isProbingStreams: boolean = false;
+  private requiresTranscoding: boolean = false;
+  private detectedSubtitleTracks: any[] = [];
 
   /**
    * Set the current media name so embedded language tags can be extracted immediately,
@@ -495,18 +497,59 @@ class AudioEnhancerManager {
   private async probeStreamTracks(torrentUri: string) {
     this.isProbingStreams = true;
     try {
-      const clean = torrentUri.replace(/^.*\/stream\?torrent=/, "");
-      const res = await fetch(`/streamInfo?torrent=${encodeURIComponent(clean)}`);
+      let fileIndexParam = "";
+      const fIdxMatch = torrentUri.match(/[?&]fileIndex=(\d+)/i) || torrentUri.match(/%26fileIndex%3D(\d+)/i);
+      if (fIdxMatch) {
+        fileIndexParam = `&fileIndex=${fIdxMatch[1]}`;
+      }
+      let cleanTorrent = torrentUri.replace(/^.*\/stream\?torrent=/, "");
+      const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+      if (cutIdx !== -1) {
+        cleanTorrent = cleanTorrent.slice(0, cutIdx);
+      }
+      try {
+        cleanTorrent = decodeURIComponent(cleanTorrent);
+      } catch {}
+
+      const res = await fetch(`/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
       if (res.ok) {
         const data = await res.json();
+        if (data.subtitleTracks && Array.isArray(data.subtitleTracks)) {
+          this.detectedSubtitleTracks = data.subtitleTracks;
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("watchparty-subtitles-updated", { detail: data.subtitleTracks })
+            );
+          }
+        }
         if (data.audioTracks && Array.isArray(data.audioTracks) && data.audioTracks.length > 0) {
+          const nonNative = data.audioTracks.some((t: any) =>
+            t.codec && ["eac3", "ac3", "dts", "truehd", "flac"].includes(t.codec.toLowerCase())
+          );
+          this.requiresTranscoding = nonNative;
           this.mediaTracks = data.audioTracks.map((t: any, idx: number) => ({
             id: idx,
             label: formatAudioLanguageLabel(t.label, t.language, idx),
             language: t.language,
+            codec: t.codec,
+            streamIndex: t.streamIndex,
             enabled: idx === this.selectedTrackIndex,
             isAttached: true,
           }));
+
+          // If the audio track uses EAC-3 / AC-3 (which browsers cannot decode natively in HTML5 video),
+          // automatically engage the transcoded stream so audio plays without silence!
+          if (this.requiresTranscoding) {
+            const el =
+              this.currentVideoEl ||
+              (typeof document !== "undefined"
+                ? (document.getElementById("leftVideo") as HTMLMediaElement)
+                : null);
+            if (el) {
+              this.playAuxAudio(this.selectedTrackIndex, el);
+            }
+          }
+
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
           }
@@ -517,6 +560,10 @@ class AudioEnhancerManager {
     } finally {
       this.isProbingStreams = false;
     }
+  }
+
+  public getAvailableSubtitleTracks(): any[] {
+    return this.detectedSubtitleTracks;
   }
 
   /**
@@ -666,7 +713,7 @@ class AudioEnhancerManager {
         t.enabled = i === index;
       });
 
-      if (index === 0) {
+      if (index === 0 && !this.requiresTranscoding) {
         this.stopAuxAudio(el);
       } else {
         this.playAuxAudio(index, el);
@@ -705,7 +752,7 @@ class AudioEnhancerManager {
       null;
     if (!el) return;
 
-    // Silence video's native audio so only the user-selected language track plays
+    // Silence video's native audio so only the transcoded/selected language track plays
     el.muted = true;
 
     if (!this.auxAudio) {
@@ -715,10 +762,10 @@ class AudioEnhancerManager {
       this.auxAudio.preload = "auto";
       this.auxAudio.onerror = (e) => {
         console.warn("[WatchParty AudioTrack] Aux audio error", e);
-        if (el && this.selectedTrackIndex === 0) el.muted = false;
+        if (el && this.selectedTrackIndex === 0 && !this.requiresTranscoding) el.muted = false;
       };
       this.auxAudio.onplaying = () => {
-        if (el && this.selectedTrackIndex > 0) {
+        if (el && (this.selectedTrackIndex > 0 || this.requiresTranscoding)) {
           el.muted = true;
         }
       };
@@ -728,7 +775,7 @@ class AudioEnhancerManager {
     if (this.auxAttachedVideo !== el) {
       this.auxAttachedVideo = el;
       el.addEventListener("play", () => {
-        if (this.selectedTrackIndex > 0 && this.auxAudio) {
+        if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && this.auxAudio) {
           this.auxAudio.play().catch(() => {});
         }
       });
@@ -745,17 +792,16 @@ class AudioEnhancerManager {
       el.addEventListener("volumechange", () => {
         if (this.auxAudio && el) {
           this.auxAudio.volume = el.volume;
-          // Notice: el.muted is intentionally true to silence the main stream, so do not copy it
         }
       });
       el.addEventListener("seeked", () => {
-        if (this.selectedTrackIndex > 0 && el) {
+        if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && el) {
           this.resyncAuxAudio(this.selectedTrackIndex, el);
         }
       });
       el.addEventListener("timeupdate", () => {
         if (
-          this.selectedTrackIndex > 0 &&
+          (this.selectedTrackIndex > 0 || this.requiresTranscoding) &&
           this.auxAudio &&
           !el.paused &&
           !this.auxAudio.paused &&

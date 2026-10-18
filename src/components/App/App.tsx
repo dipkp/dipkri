@@ -781,6 +781,43 @@ export class App extends React.Component<AppProps, AppState> {
                           return;
                         }
                       }
+                      // Check for embedded subtitle tracks inside MKV / video file via /streamInfo
+                      if (!this.state.roomSubtitle) {
+                        try {
+                          let fileIndexParam = "";
+                          const fIdxMatch = currentMedia.match(/[?&]fileIndex=(\d+)/i) || currentMedia.match(/%26fileIndex%3D(\d+)/i);
+                          if (fIdxMatch) {
+                            fileIndexParam = `&fileIndex=${fIdxMatch[1]}`;
+                          }
+                          let cleanTorrent = currentMedia.replace(/^.*\/stream\?torrent=/, "");
+                          const cutIdx = cleanTorrent.indexOf("&fileIndex=");
+                          if (cutIdx !== -1) {
+                            cleanTorrent = cleanTorrent.slice(0, cutIdx);
+                          }
+                          try {
+                            cleanTorrent = decodeURIComponent(cleanTorrent);
+                          } catch {}
+
+                          const infoRes = await fetch(`${serverPath}/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
+                          if (infoRes.ok) {
+                            const infoData = await infoRes.json();
+                            if (infoData?.subtitleTracks && Array.isArray(infoData.subtitleTracks) && infoData.subtitleTracks.length > 0) {
+                              const chosenSub =
+                                infoData.subtitleTracks.find((t: any) => /english|eng|\ben\b/i.test(t.label || t.language || "")) ||
+                                infoData.subtitleTracks[0];
+                              if (chosenSub) {
+                                const subUrl = `${serverPath}/streamSubtitle?torrent=${encodeURIComponent(cleanTorrent)}&streamIndex=${chosenSub.streamIndex}${fileIndexParam}`;
+                                this.setState({ roomSubtitle: subUrl });
+                                this.Player().loadSubtitles(subUrl);
+                                return;
+                              }
+                            }
+                          }
+                        } catch (subErr) {
+                          console.warn("[Embedded Subtitle notice]:", subErr);
+                        }
+                      }
+
                       // If no embedded subtitle file found, automatically search OpenSubtitles!
                       if (!this.state.roomSubtitle) {
                         try {
