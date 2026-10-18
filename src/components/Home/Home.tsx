@@ -230,7 +230,7 @@ export const Home = () => {
             <div className={styles.userProfileRow}>
               <Avatar
                 src={userImage}
-                size={38}
+                size={36}
                 radius="xl"
                 className={styles.userAvatar}
               />
@@ -252,13 +252,8 @@ export const Home = () => {
           </div>
         ) : (
           <div className={styles.googleBanner}>
-            <div className={styles.googleBannerContent}>
-              <div className={styles.googleBannerTitle}>
-                Sign in with Google
-              </div>
-              <div className={styles.googleBannerDesc}>
-                Sync party rooms, preferences & custom avatar.
-              </div>
+            <div className={styles.googleBannerTitle}>
+              Sign in to sync your rooms
             </div>
             <button
               type="button"
@@ -279,13 +274,13 @@ export const Home = () => {
               <div className={styles.activePartyTitleRow}>
                 <div className={styles.activePartyLiveDot} />
                 <span className={styles.activePartyTitle}>
-                  Active watch party:{" "}
+                  Active party:{" "}
                   <strong className={styles.activePartyRoomNumber}>
                     #{lastRoom || activeParty?.roomId}
                   </strong>
                 </span>
                 <span className={styles.activePartyLiveBadge}>
-                  Live Session
+                  Live
                 </span>
               </div>
 
@@ -297,7 +292,7 @@ export const Home = () => {
                   🎬 {activeParty.mediaTitle}
                   {activeParty.savedTime && activeParty.savedTime > 0 ? (
                     <span className={styles.activePartySavedTime}>
-                      (at {formatPlaybackTime(activeParty.savedTime)})
+                      ({formatPlaybackTime(activeParty.savedTime)})
                     </span>
                   ) : null}
                 </div>
@@ -312,7 +307,7 @@ export const Home = () => {
                 onClick={() => window.location.assign("/watch/" + (lastRoom || activeParty?.roomId))}
                 className={styles.activePartyResumeBtn}
               >
-                Resume Room
+                Resume
               </Button>
               <Button
                 size="xs"
@@ -320,38 +315,33 @@ export const Home = () => {
                 color="red"
                 onClick={handleTerminateParty}
                 className={styles.activePartyTerminateBtn}
-                title="Permanently terminate this watch party and clear from home"
+                title="End this watch party"
               >
-                Terminate Room
+                End
               </Button>
             </div>
           </div>
         )}
 
-        {/* The Action Cards: New Room & Join Room */}
+        {/* The Action Cards: New Room & Join Room - Side by Side & Minimalist */}
         <div className={styles.actionsGrid}>
           {/* Card 1: New Room */}
           <div className={styles.actionCard}>
             <div className={styles.actionHeader}>
               <div className={styles.actionIconWrapper}>
-                <WPIconPlus size={22} />
+                <WPIconPlus size={18} />
               </div>
-              <div>
-                <h3 className={styles.actionTitle}>New Room</h3>
-                <p className={styles.actionDesc}>
-                  Start an instant synchronized room for YouTube, movies & screen shares.
-                </p>
-              </div>
+              <h3 className={styles.actionTitle}>New Room</h3>
             </div>
 
             <Button
-              size="lg"
+              size="md"
               className={styles.newRoomBtn}
               onClick={handleStartInstantRoom}
               loading={isCreating}
-              leftSection={<WPIconPlus size={18} />}
+              leftSection={<WPIconPlus size={16} />}
             >
-              Create New Room
+              Create Room
             </Button>
           </div>
 
@@ -359,42 +349,30 @@ export const Home = () => {
           <div className={styles.actionCard}>
             <div className={styles.actionHeader}>
               <div className={`${styles.actionIconWrapper} ${styles.actionIconJoin}`}>
-                <WPIconLink size={22} />
+                <WPIconLink size={18} />
               </div>
-              <div>
-                <h3 className={styles.actionTitle}>Join Room</h3>
-                <p className={styles.actionDesc}>
-                  Enter a room code or paste a watch link to join your friends.
-                </p>
-              </div>
+              <h3 className={styles.actionTitle}>Join Room</h3>
             </div>
 
             <form onSubmit={handleInlineJoin} className={styles.joinForm}>
               <div className={styles.joinInputWrapper}>
-                <div className={styles.joinInputIcon}>
-                  <WPIconLink size={18} />
-                </div>
                 <input
                   type="text"
                   className={styles.joinInput}
-                  placeholder="Room code or URL (e.g. 163862)"
+                  placeholder="Room code or link"
                   value={roomInput}
                   onChange={(e) => setRoomInput(e.target.value)}
                   autoComplete="off"
                   spellCheck="false"
                 />
+                <button
+                  type="submit"
+                  className={styles.joinSubmitBtn}
+                  disabled={!roomInput.trim()}
+                >
+                  Join
+                </button>
               </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                variant="outline"
-                color="cyan"
-                className={styles.joinSubmitBtn}
-                disabled={!roomInput.trim()}
-              >
-                Join Room
-              </Button>
             </form>
           </div>
         </div>
