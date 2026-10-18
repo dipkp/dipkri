@@ -37,7 +37,7 @@ let torrentClient: WebTorrent.Instance | null = null;
 function getClient(): WebTorrent.Instance {
   if (!torrentClient) {
     torrentClient = new WebTorrent({
-      maxConns: 55,
+      maxConns: 25,
     });
     torrentClient.on("error", (err: any) => {
       console.warn("[WebTorrent Server Error]:", err?.message || err);
@@ -712,6 +712,9 @@ export async function handleTorrentAudio(req: any, res: any) {
       cacheState = { filePath, complete: false, process: ff };
       audioTranscodeMap.set(cacheKey, cacheState);
       fileStream = fs.createWriteStream(filePath);
+      fileStream.on("error", (err) => {
+        console.warn("[AudioCache WriteStream error]:", err?.message || err);
+      });
       ff.stdout.pipe(fileStream);
 
       ff.on("close", (code) => {

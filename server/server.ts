@@ -58,6 +58,13 @@ if (config.SSL_KEY_FILE && config.SSL_CRT_FILE) {
 } else {
   server = new http.Server(app);
 }
+process.on("uncaughtException", (err) => {
+  console.error("[UncaughtException Prevented Server Crash]:", err?.message || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.warn("[UnhandledRejection Prevented Server Crash]:", reason);
+});
+
 server?.listen(config.PORT, config.HOST);
 
 const io = new Server(server, { cors: {}, transports: ["websocket"] });
@@ -84,20 +91,18 @@ io.engine.use(async (req: any, res: Response, next: () => void) => {
   } catch (e: any) {
     console.warn("[WARNING]: room preload query failed: %s", e?.message ?? e);
   }
-  // Don't await after this because we may have a race condition where 2 rquests both try to load the room
+  // Ensure the room namespace is always initialized so clients never get "Invalid namespace"
   if (isCorrectShard && !rooms.has(key)) {
     const data = persistedRoom?.data
       ? JSON.stringify(persistedRoom.data)
       : undefined;
-    if (data) {
-      const room = new Room(io, key, data);
-      rooms.set(key, room);
-      console.log(
-        "loading room %s into memory on shard %s",
-        roomId,
-        config.SHARD,
-      );
-    }
+    const room = new Room(io, key, data);
+    rooms.set(key, room);
+    console.log(
+      "loading/recovering room %s into memory on shard %s",
+      roomId,
+      config.SHARD,
+    );
   }
   next();
 });

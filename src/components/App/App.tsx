@@ -624,10 +624,23 @@ export class App extends React.Component<AppProps, AppState> {
         socket.emit("CMD:joinVideo");
       }
     });
-    socket.on("connect_error", (err: any) => {
+    socket.on("connect_error", async (err: any) => {
       console.warn("Socket connect_error (will retry):", err);
       if (err?.message === "Invalid namespace") {
-        this.setState({ overlayMsg: "Couldn't load this room." });
+        // If room is missing on reconnect (e.g. server restarted), ask server to initialize it and reconnect smoothly
+        try {
+          const targetRoom = this.state.roomId?.replace(/^\//, "");
+          if (targetRoom) {
+            await fetch(serverPath + "/createRoom", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ roomId: targetRoom }),
+            });
+            this.socket?.connect();
+            return;
+          }
+        } catch {}
+        this.setState({ warningMessage: "Reconnecting to room..." });
       } else if (err?.message === "password") {
         this.setState({ isErrorAuth: true });
       } else {
@@ -3060,10 +3073,10 @@ export class App extends React.Component<AppProps, AppState> {
                     {audioStatus.isDecoded
                       ? audioStatus.isTranscoding
                         ? isMobileLayout
-                          ? `Decoded (+${Math.round(audioStatus.bufferedSeconds)}s)`
-                          : `Decoded MP3 (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
-                        : 'Decoded'
-                      : 'Decoding...'}
+                          ? `Decoded ${audioStatus.decodePercent}% (+${Math.round(audioStatus.bufferedSeconds)}s)`
+                          : `Decoded MP3 ${audioStatus.decodePercent}% (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
+                        : 'Decoded 100%'
+                      : `Decoding ${audioStatus.decodePercent || 0}%...`}
                   </span>
                 </span>
               );

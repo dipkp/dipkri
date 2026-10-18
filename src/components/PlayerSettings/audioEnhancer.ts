@@ -121,6 +121,7 @@ export interface AudioDecodingStatus {
   statusText: string;
   bufferedSeconds: number;
   bufferPercent: number;
+  decodePercent: number;
 }
 
 class AudioEnhancerManager {
@@ -623,6 +624,7 @@ class AudioEnhancerManager {
         statusText: "Idle",
         bufferedSeconds: 0,
         bufferPercent: 0,
+        decodePercent: 0,
       };
     }
 
@@ -637,6 +639,14 @@ class AudioEnhancerManager {
     let bufferedSec = 0;
     let isDecoded = false;
     let bufferPercent = 0;
+    let decodePercent = 0;
+
+    const totalDuration =
+      el && el.duration && !isNaN(el.duration) && el.duration > 0
+        ? el.duration
+        : this.auxAudio && this.auxAudio.duration && !isNaN(this.auxAudio.duration) && this.auxAudio.duration > 0
+        ? this.auxAudio.duration
+        : 0;
 
     if (this.auxAudio && isTranscoding) {
       const b = this.auxAudio.buffered;
@@ -654,7 +664,14 @@ class AudioEnhancerManager {
       if (this.auxAudio.readyState >= 2 || !this.auxAudio.paused) {
         isDecoded = true;
       }
-      bufferPercent = Math.min(100, Math.round((bufferedSec / 15) * 100));
+      bufferPercent = Math.min(100, Math.round((bufferedSec / 10) * 100));
+
+      const maxBufferedEnd = b.length > 0 ? b.end(b.length - 1) : 0;
+      if (totalDuration > 0 && maxBufferedEnd > 0) {
+        decodePercent = Math.min(100, Math.max(1, Math.round((maxBufferedEnd / totalDuration) * 100)));
+      } else {
+        decodePercent = bufferPercent;
+      }
     } else if (el) {
       isDecoded = el.readyState >= 2;
       const b = el.buffered;
@@ -665,13 +682,19 @@ class AudioEnhancerManager {
           break;
         }
       }
-      bufferPercent = Math.min(100, Math.round((bufferedSec / 15) * 100));
+      bufferPercent = Math.min(100, Math.round((bufferedSec / 10) * 100));
+      const maxBufferedEnd = b.length > 0 ? b.end(b.length - 1) : 0;
+      if (totalDuration > 0 && maxBufferedEnd > 0) {
+        decodePercent = Math.min(100, Math.max(1, Math.round((maxBufferedEnd / totalDuration) * 100)));
+      } else {
+        decodePercent = bufferPercent;
+      }
     }
 
     const statusText = isTranscoding
       ? isDecoded
-        ? `Decoded MP3 (+${bufferedSec.toFixed(1)}s buffer)`
-        : "Decoding Stream..."
+        ? `Decoded MP3 ${decodePercent}% (+${bufferedSec.toFixed(1)}s buffer)`
+        : `Decoding ${decodePercent}%...`
       : isDecoded
         ? `Native Decoded (+${bufferedSec.toFixed(1)}s)`
         : "Buffering Audio...";
@@ -686,6 +709,7 @@ class AudioEnhancerManager {
       statusText,
       bufferedSeconds: bufferedSec,
       bufferPercent,
+      decodePercent,
     };
   }
 
