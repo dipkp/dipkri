@@ -18,10 +18,11 @@ interface MovieModalProps {
 }
 
 const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
-  { id: "apiplayer", name: "APIPlayer.ru", tag: "Primary / Multi-Lang" },
-  { id: "nexstream", name: "NexStream", tag: "CodeSpecters HD" },
-  { id: "vidsrc", name: "VidSrc", tag: "Fast HD Stream" },
-  { id: "multiembed", name: "MultiEmbed", tag: "Alternative Multi" },
+  { id: "vidlink", name: "VidLink (Fast HD)", tag: "Recommended / No Ads" },
+  { id: "vidsrc_pm", name: "VidSrc PM", tag: "Reliable HD" },
+  { id: "twoembed", name: "2Embed Multi", tag: "Multi-Source" },
+  { id: "autoembed", name: "AutoEmbed", tag: "Backup Player" },
+  { id: "apiplayer", name: "APIPlayer.ru", tag: "Alternative" },
 ];
 
 export const MovieModal: React.FC<MovieModalProps> = ({
@@ -38,7 +39,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   // Detail View State
   const [selectedMedia, setSelectedMedia] = useState<MovieDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [selectedServer, setSelectedServer] = useState<MovieServer>("apiplayer");
+  const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [episodes, setEpisodes] = useState<MovieSeasonEpisode[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);

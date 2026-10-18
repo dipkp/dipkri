@@ -921,6 +921,12 @@ export class App extends React.Component<AppProps, AppState> {
             this.Player().setPlaybackRate(data.playbackRate);
           }
 
+          if (this.usingMovie()) {
+            this.setLoadingFalse();
+            this.setState({ nonPlayableMedia: false });
+            return;
+          }
+
           if (
             this.playingScreenShare() ||
             this.playingFileShare() ||
@@ -2971,7 +2977,8 @@ export class App extends React.Component<AppProps, AppState> {
         {(this.state.loading ||
           !this.state.roomMedia ||
           this.state.nonPlayableMedia) &&
-          !this.state.isLiveStream && (
+          !this.state.isLiveStream &&
+          !this.usingMovie() && (
             <div
               id="loader"
               className={`${styles.videoContent} ${styles.flexCenter}`}
@@ -3063,12 +3070,13 @@ export class App extends React.Component<AppProps, AppState> {
             {(() => {
               const currentInfo = parseMovieUrl(this.state.roomMedia);
               if (!currentInfo) return null;
-              const activeServer = currentInfo.server || "apiplayer";
+              const activeServer = currentInfo.server || "vidlink";
               const servers: Array<{ id: MovieServer; label: string }> = [
+                { id: "vidlink", label: "VidLink HD" },
+                { id: "vidsrc_pm", label: "VidSrc PM" },
+                { id: "twoembed", label: "2Embed" },
+                { id: "autoembed", label: "AutoEmbed" },
                 { id: "apiplayer", label: "APIPlayer" },
-                { id: "nexstream", label: "NexStream" },
-                { id: "vidsrc", label: "VidSrc" },
-                { id: "multiembed", label: "MultiEmbed" },
               ];
               return (
                 <div

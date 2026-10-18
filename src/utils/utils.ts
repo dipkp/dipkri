@@ -156,7 +156,7 @@ export const isMovie = (input: string) => {
   return Boolean(input && typeof input === "string" && input.startsWith("movie://"));
 };
 
-export type MovieServer = "apiplayer" | "nexstream" | "vidsrc" | "multiembed";
+export type MovieServer = "vidlink" | "vidsrc_pm" | "twoembed" | "autoembed" | "apiplayer";
 
 export interface MovieMediaInfo {
   tmdbId: string;
@@ -223,7 +223,7 @@ export function parseMovieUrl(url: string): MovieMediaInfo | null {
       title: decodeURIComponent(params.get("title") || "Movie"),
       season: params.get("season") ? Number(params.get("season")) : 1,
       episode: params.get("episode") ? Number(params.get("episode")) : 1,
-      server: (params.get("server") as MovieServer) || "apiplayer",
+      server: (params.get("server") as MovieServer) || "vidlink",
     };
   } catch {
     return null;
@@ -231,7 +231,7 @@ export function parseMovieUrl(url: string): MovieMediaInfo | null {
 }
 
 export function createMovieProtocolUrl(info: MovieMediaInfo): string {
-  const server = info.server || "apiplayer";
+  const server = info.server || "vidlink";
   const season = info.season || 1;
   const episode = info.episode || 1;
   const params = new URLSearchParams();
@@ -247,8 +247,40 @@ export function createMovieProtocolUrl(info: MovieMediaInfo): string {
 
 export function buildMovieEmbedUrl(info: MovieMediaInfo | null): string {
   if (!info || !info.tmdbId) return "";
-  const server = info.server || "apiplayer";
+  const server = info.server || "vidlink";
   const { tmdbId, type, season = 1, episode = 1 } = info;
+
+  if (server === "vidlink") {
+    // VidLink Pro (Fast HD, responsive embed, multi-subtitles)
+    if (type === "tv") {
+      return `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?autoplay=true`;
+    }
+    return `https://vidlink.pro/movie/${tmdbId}?autoplay=true`;
+  }
+
+  if (server === "vidsrc_pm") {
+    // VidSrc PM
+    if (type === "tv") {
+      return `https://vidsrc.pm/embed/tv/${tmdbId}/${season}/${episode}`;
+    }
+    return `https://vidsrc.pm/embed/movie/${tmdbId}`;
+  }
+
+  if (server === "twoembed") {
+    // 2Embed
+    if (type === "tv") {
+      return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`;
+    }
+    return `https://www.2embed.cc/embed/${tmdbId}`;
+  }
+
+  if (server === "autoembed") {
+    // AutoEmbed
+    if (type === "tv") {
+      return `https://player.autoembed.cc/embed/tv/${tmdbId}/${season}/${episode}`;
+    }
+    return `https://player.autoembed.cc/embed/movie/${tmdbId}`;
+  }
 
   if (server === "apiplayer") {
     // APIPlayer.ru
@@ -258,31 +290,7 @@ export function buildMovieEmbedUrl(info: MovieMediaInfo | null): string {
     return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0`;
   }
 
-  if (server === "nexstream") {
-    // NexStream / CodeSpecter
-    if (type === "tv") {
-      return `https://api.codespecters.com/embed/tv/${tmdbId}/${season}/${episode}`;
-    }
-    return `https://api.codespecters.com/embed/movie/${tmdbId}`;
-  }
-
-  if (server === "vidsrc") {
-    // VidSrc
-    if (type === "tv") {
-      return `https://vidsrc.xyz/embed/tv/${tmdbId}/${season}/${episode}`;
-    }
-    return `https://vidsrc.xyz/embed/movie/${tmdbId}`;
-  }
-
-  if (server === "multiembed") {
-    // MultiEmbed
-    if (type === "tv") {
-      return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`;
-    }
-    return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
-  }
-
-  return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0`;
+  return `https://vidlink.pro/movie/${tmdbId}?autoplay=true`;
 }
 
 /**
