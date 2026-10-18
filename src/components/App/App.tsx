@@ -2365,7 +2365,56 @@ export class App extends React.Component<AppProps, AppState> {
 
   getMovieUrl = () => {
     const info = parseMovieUrl(this.state.roomMedia);
-    return buildMovieEmbedUrl(info);
+    const startAt =
+      this.movieStartAt > 0
+        ? this.movieStartAt
+        : this.state.roomVideoTS > 5
+        ? this.state.roomVideoTS
+        : undefined;
+    return buildMovieEmbedUrl(info, startAt);
+  };
+
+  syncMovieToTime = (targetTime: number) => {
+    if (!Number.isFinite(targetTime) || targetTime < 0) return;
+    this.movieStartAt = Math.floor(targetTime);
+    this.movieCurrentTime = targetTime;
+    this.movieSyncKey = (this.movieSyncKey || 0) + 1;
+    this.setState({ roomVideoTS: targetTime });
+  };
+
+  handleMovieMessage = (event: MessageEvent) => {
+    if (!this.usingMovie()) return;
+    try {
+      let data = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      }
+      if (!data || typeof data !== "object") return;
+
+      const evType = data.event || data.type;
+      const curTime =
+        typeof data.currentTime === "number"
+          ? data.currentTime
+          : typeof data.data?.currentTime === "number"
+          ? data.data.currentTime
+          : undefined;
+
+      if (typeof curTime === "number" && !isNaN(curTime) && curTime >= 0) {
+        this.movieCurrentTime = curTime;
+      }
+
+      if (this.haveLock()) {
+        if (evType === "pause" && !this.state.roomPaused) {
+          this.socket.emit("CMD:pause");
+        } else if (evType === "play" && this.state.roomPaused) {
+          this.socket.emit("CMD:play");
+        } else if (evType === "seeked" && typeof curTime === "number") {
+          this.socket.emit("CMD:seek", curTime);
+        }
+      }
+    } catch {}
   };
 
   openMovieModal = () => {
@@ -2385,8 +2434,12 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   hasDuration = () => {
-    // Youtube, link, or magnet, etc. Has a defined runtime (not WebRTC)
-    return isHttp(this.state.roomMedia) || isMagnet(this.state.roomMedia);
+    // Youtube, link, magnet, or movie stream. Has a defined runtime (not WebRTC)
+    return (
+      isHttp(this.state.roomMedia) ||
+      isMagnet(this.state.roomMedia) ||
+      isMovie(this.state.roomMedia)
+    );
   };
 
   playingScreenShare = () => {
@@ -2849,6 +2902,9 @@ export class App extends React.Component<AppProps, AppState> {
   render() {
     const sharer = this.state.participants.find((p) => p.isScreenShare);
     const playlist = this.state.playlist;
+    const currentVideoTime = this.usingMovie()
+      ? (this.movieCurrentTime || 0)
+      : this.Player().getCurrentTime();
     const isBehind =
       !this.state.isLiveStream &&
       !this.playingScreenShare() &&
@@ -2856,7 +2912,7 @@ export class App extends React.Component<AppProps, AppState> {
       Boolean(this.getLeaderTime()) &&
       Number.isFinite(this.getLeaderTime()) &&
       this.getLeaderTime() > 0 &&
-      this.getLeaderTime() - this.Player().getCurrentTime() > 10;
+      this.getLeaderTime() - currentVideoTime > 10;
     const onSyncAction = () => {
       if (this.state.isLiveStream) {
         this.roomSeek(this.Player().getDuration());
