@@ -225,7 +225,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
           disabled={this.props.disabled}
           onChange={this.onChange}
           onOptionSubmit={(val: string) => this.setMediaAndClose(val)}
-          rightSectionWidth={hasInput ? 170 : (this.props.onOpenMovieModal ? 96 : undefined)}
+          rightSectionWidth={hasInput ? 170 : undefined}
           rightSection={
             hasInput ? (
               <React.Fragment>
@@ -290,46 +290,13 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                   ✕
                 </button>
               </React.Fragment>
-            ) : this.props.onOpenMovieModal ? (
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  this.props.onOpenMovieModal?.();
-                }}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  height: "28px",
-                  padding: "0 10px",
-                  marginRight: "6px",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(99, 102, 241, 0.45)",
-                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))",
-                  color: "#a5b4fc",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  transition: "all 0.2s ease",
-                }}
-                title="Search and stream Movies & Series"
-              >
-                <span>🎬</span>
-                <span>Movies</span>
-              </button>
             ) : null
           }
           styles={{
             input: {
               padding: "0 14px",
-              paddingRight: hasInput ? "175px" : (this.props.onOpenMovieModal ? "102px" : "14px"),
-              paddingInlineEnd: hasInput ? "175px" : (this.props.onOpenMovieModal ? "102px" : "14px"),
+              paddingRight: hasInput ? "175px" : "14px",
+              paddingInlineEnd: hasInput ? "175px" : "14px",
               height: "42px",
               fontSize: "13.5px",
               backgroundColor: "rgba(255, 255, 255, 0.05)",
@@ -387,7 +354,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             }
           }
         }}
-        placeholder="Enter video file URL, magnet link, YouTube link, or YouTube search term"
+        placeholder="Paste video URL, YouTube, magnet, stream..."
         value={
           this.state.inputMedia !== undefined
             ? this.state.inputMedia
