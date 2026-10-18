@@ -77,6 +77,9 @@
   max-height: 380px;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   scrollbar-width: thin;
   scrollbar-color: rgba(56, 189, 248, 0.35) transparent;
 }
@@ -499,14 +502,14 @@
 .menuContainerBottomSheet {
   width: 100vw !important;
   max-width: 100vw !important;
-  max-height: 72vh !important;
+  max-height: 84vh !important;
   border-radius: 20px 20px 0 0 !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   border-bottom: none !important;
   background: rgba(14, 16, 23, 0.98) !important;
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.15) !important;
   animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
 }
 
 .menuContainerBottomSheet .bottomSheetGrabHandle {
@@ -522,12 +525,17 @@
 }
 
 .menuContainerBottomSheet .menuList {
-  max-height: calc(72vh - 65px) !important;
+  max-height: calc(84vh - 75px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  touch-action: pan-y !important;
+  padding-bottom: 28px !important;
 }
 
 .menuContainerBottomSheet .menuRow,
 .menuContainerBottomSheet .optionRow {
-  min-height: 46px !important;
+  min-height: 48px !important;
   padding: 12px 18px !important;
 }
 
@@ -538,7 +546,7 @@
 
 .menuContainerBottomSheet .rowValue {
   font-size: 14px !important;
-  max-width: 140px !important;
+  max-width: 190px !important;
 }
 
 @keyframes sheetSlideUp {
@@ -557,14 +565,14 @@
   .menuContainer {
     width: 100vw !important;
     max-width: 100vw !important;
-    max-height: 72vh !important;
+    max-height: 84vh !important;
     border-radius: 20px 20px 0 0 !important;
     border: 1px solid rgba(255, 255, 255, 0.14) !important;
     border-bottom: none !important;
     background: rgba(14, 16, 23, 0.98) !important;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.15) !important;
     animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
   }
 
   .bottomSheetGrabHandle {
@@ -580,12 +588,17 @@
   }
 
   .menuList {
-    max-height: calc(72vh - 65px) !important;
+    max-height: calc(84vh - 75px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    touch-action: pan-y !important;
+    padding-bottom: 28px !important;
   }
 
   .menuRow,
   .optionRow {
-    min-height: 46px !important;
+    min-height: 48px !important;
     padding: 12px 18px !important;
   }
 
@@ -596,7 +609,7 @@
 
   .rowValue {
     font-size: 14px !important;
-    max-width: 140px !important;
+    max-width: 190px !important;
   }
 }
 

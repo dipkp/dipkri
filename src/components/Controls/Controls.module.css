@@ -1360,7 +1360,7 @@
   background: rgba(0, 0, 0, 0.65) !important;
   backdrop-filter: blur(6px) !important;
   -webkit-backdrop-filter: blur(6px) !important;
-  z-index: 2004 !important;
+  z-index: 9998 !important;
 }
 
 .settingsPopupWrapperMobilePortrait {
@@ -1371,7 +1371,7 @@
   top: auto !important;
   width: 100vw !important;
   max-width: 100vw !important;
-  z-index: 2005 !important;
+  z-index: 9999 !important;
   display: flex !important;
   justify-content: center !important;
   margin: 0 !important;
@@ -1393,7 +1393,7 @@
     background: rgba(0, 0, 0, 0.65) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
-    z-index: 2004 !important;
+    z-index: 9998 !important;
   }
 
   .settingsPopupWrapper {
@@ -1404,7 +1404,7 @@
     top: auto !important;
     width: 100vw !important;
     max-width: 100vw !important;
-    z-index: 2005 !important;
+    z-index: 9999 !important;
     display: flex !important;
     justify-content: center !important;
     margin: 0 !important;

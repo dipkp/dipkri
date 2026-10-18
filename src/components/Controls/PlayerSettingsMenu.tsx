@@ -1042,24 +1042,30 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         </div>
 
         <div className={styles.menuList}>
-          {(audioTracks || []).map((t, idx) => {
-            const isSelected = (currentAudioTrack ?? 0) === idx;
-            return (
-              <div
-                key={t.id}
-                className={`${styles.optionRow} ${isSelected ? styles.optionActive : ""}`}
-                onClick={() => {
-                  onSelectAudioTrack?.(idx);
-                  setCurrentMenu("main");
-                }}
-              >
-                <div className={styles.optionCheckWrapper}>
-                  {isSelected && <WPIconCheck size={18} color="#38bdf8" />}
+          {audioTracks && audioTracks.length > 0 ? (
+            audioTracks.map((t, idx) => {
+              const isSelected = (currentAudioTrack ?? 0) === idx;
+              return (
+                <div
+                  key={t.id ?? idx}
+                  className={`${styles.optionRow} ${isSelected ? styles.optionActive : ""}`}
+                  onClick={() => {
+                    onSelectAudioTrack?.(idx);
+                    setCurrentMenu("main");
+                  }}
+                >
+                  <div className={styles.optionCheckWrapper}>
+                    {isSelected && <WPIconCheck size={18} color="#38bdf8" />}
+                  </div>
+                  <span className={styles.optionText}>{t.label}</span>
                 </div>
-                <span className={styles.optionText}>{t.label}</span>
-              </div>
-            );
-          })}
+              );
+            })
+          ) : (
+            <div style={{ padding: "24px 16px", color: "#94a3b8", textAlign: "center", fontSize: "14px" }}>
+              Default Audio (Stream 1)
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1086,7 +1092,78 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         </button>
       </div>
       <div className={styles.menuList}>
-        {/* Item 1: Play Speed */}
+        {/* Item 1: Audio Language (Top priority for multi-language movies & surround sound) */}
+        <div
+          className={styles.menuRow}
+          onClick={() => setCurrentMenu("audio")}
+        >
+          <div className={styles.rowLeft}>
+            <div className={styles.rowIcon}>
+              <WPIconVolumeOn size={18} />
+            </div>
+            <span className={styles.rowLabel}>Audio Language</span>
+          </div>
+          <div className={styles.rowRight}>
+            <span
+              className={styles.rowValue}
+              style={{
+                maxWidth: isBottomSheet ? 180 : 130,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "inline-block",
+                textAlign: "right",
+              }}
+              title={
+                audioTracks && audioTracks[currentAudioTrack ?? 0]?.label
+                  ? audioTracks[currentAudioTrack ?? 0].label
+                  : "Default Audio"
+              }
+            >
+              {audioTracks && audioTracks[currentAudioTrack ?? 0]?.label
+                ? audioTracks[currentAudioTrack ?? 0].label
+                : "Default Audio"}
+            </span>
+            <div className={styles.chevronIcon}>
+              <WPIconChevronRight size={16} />
+            </div>
+          </div>
+        </div>
+
+        {/* Item 2: Subtitle */}
+        <div
+          className={styles.menuRow}
+          onClick={() => setCurrentMenu("subtitle")}
+        >
+          <div className={styles.rowLeft}>
+            <div className={styles.rowIcon}>
+              <WPIconSubtitleBubble size={18} />
+            </div>
+            <span className={styles.rowLabel}>Subtitle</span>
+          </div>
+          <div className={styles.rowRight}>
+            {currentSubtitleLabel && (
+              <span
+                className={styles.rowValue}
+                style={{
+                  maxWidth: isBottomSheet ? 160 : 95,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  display: "inline-block",
+                }}
+                title={currentSubtitleLabel}
+              >
+                {currentSubtitleLabel}
+              </span>
+            )}
+            <div className={styles.chevronIcon}>
+              <WPIconChevronRight size={16} />
+            </div>
+          </div>
+        </div>
+
+        {/* Item 3: Play Speed */}
         <div
           className={styles.menuRow}
           onClick={() => setCurrentMenu("speed")}
@@ -1105,45 +1182,32 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
           </div>
         </div>
 
-        {/* Item 2: Aspect Ratio */}
-        <div
-          className={styles.menuRow}
-          onClick={() => setCurrentMenu("aspect")}
-        >
+        {/* Item 4: Audio Boost (Inline Slider: 1x to 4x) */}
+        <div className={styles.menuRow}>
           <div className={styles.rowLeft}>
             <div className={styles.rowIcon}>
-              <WPIconAspectRatio size={18} />
+              <WPIconVolumeOn size={18} />
             </div>
-            <span className={styles.rowLabel}>Aspect Ratio</span>
+            <span className={styles.rowLabel}>Audio Boost</span>
           </div>
-          <div className={styles.rowRight}>
-            <span className={styles.rowValue}>{getAspectLabel(aspectRatio)}</span>
-            <div className={styles.chevronIcon}>
-              <WPIconChevronRight size={16} />
-            </div>
+
+          <div className={styles.sliderControlWrapper}>
+            <span className={styles.sliderValueText}>
+              {`${Math.round(audioBoost)}x`}
+            </span>
+            <input
+              type="range"
+              min="1"
+              max="4"
+              step="1"
+              className={styles.customSlider}
+              value={audioBoost}
+              onChange={(e) => onSetAudioBoost(parseInt(e.target.value, 10))}
+            />
           </div>
         </div>
 
-        {/* Item 3: Video Flip */}
-        <div
-          className={styles.menuRow}
-          onClick={() => setCurrentMenu("flip")}
-        >
-          <div className={styles.rowLeft}>
-            <div className={styles.rowIcon}>
-              <WPIconVideoFlip size={18} />
-            </div>
-            <span className={styles.rowLabel}>Video Flip</span>
-          </div>
-          <div className={styles.rowRight}>
-            <span className={styles.rowValue}>{getFlipLabel(videoFlip)}</span>
-            <div className={styles.chevronIcon}>
-              <WPIconChevronRight size={16} />
-            </div>
-          </div>
-        </div>
-
-        {/* Item 4: Subtitle Offset (Inline Slider) */}
+        {/* Item 5: Subtitle Offset (Inline Slider) */}
         <div className={styles.menuRow}>
           <div className={styles.rowLeft}>
             <div className={styles.rowIcon}>
@@ -1165,39 +1229,6 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
               value={subtitleOffset}
               onChange={(e) => onSetSubtitleOffset(parseFloat(e.target.value))}
             />
-          </div>
-        </div>
-
-        {/* Item 5: Subtitle */}
-        <div
-          className={styles.menuRow}
-          onClick={() => setCurrentMenu("subtitle")}
-        >
-          <div className={styles.rowLeft}>
-            <div className={styles.rowIcon}>
-              <WPIconSubtitleBubble size={18} />
-            </div>
-            <span className={styles.rowLabel}>Subtitle</span>
-          </div>
-          <div className={styles.rowRight}>
-            {currentSubtitleLabel && (
-              <span
-                className={styles.rowValue}
-                style={{
-                  maxWidth: 95,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  display: "inline-block",
-                }}
-                title={currentSubtitleLabel}
-              >
-                {currentSubtitleLabel}
-              </span>
-            )}
-            <div className={styles.chevronIcon}>
-              <WPIconChevronRight size={16} />
-            </div>
           </div>
         </div>
 
@@ -1224,55 +1255,66 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
           </div>
         </div>
 
-        {/* Item 7: Audio Boost (Inline Slider: 1x to 4x) */}
-        <div className={styles.menuRow}>
-          <div className={styles.rowLeft}>
-            <div className={styles.rowIcon}>
-              <WPIconVolumeOn size={18} />
-            </div>
-            <span className={styles.rowLabel}>Audio Boost</span>
-          </div>
-
-          <div className={styles.sliderControlWrapper}>
-            <span className={styles.sliderValueText}>
-              {`${Math.round(audioBoost)}x`}
-            </span>
-            <input
-              type="range"
-              min="1"
-              max="4"
-              step="1"
-              className={styles.customSlider}
-              value={audioBoost}
-              onChange={(e) => onSetAudioBoost(parseInt(e.target.value, 10))}
-            />
-          </div>
-        </div>
-
-        {/* Item 8: Video Bubbles */}
+        {/* Item 7: Aspect Ratio */}
         <div
           className={styles.menuRow}
-          onClick={() => setCurrentMenu("bubbles")}
+          onClick={() => setCurrentMenu("aspect")}
         >
           <div className={styles.rowLeft}>
             <div className={styles.rowIcon}>
-              <WPIconVideo size={18} />
+              <WPIconAspectRatio size={18} />
             </div>
-            <span className={styles.rowLabel}>Video Bubbles</span>
+            <span className={styles.rowLabel}>Aspect Ratio</span>
           </div>
           <div className={styles.rowRight}>
-            <span className={styles.rowValue}>
-              {webcamState.visible
-                ? webcamState.size.charAt(0).toUpperCase() + webcamState.size.slice(1)
-                : "Hidden"}
-            </span>
+            <span className={styles.rowValue}>{getAspectLabel(aspectRatio)}</span>
             <div className={styles.chevronIcon}>
               <WPIconChevronRight size={16} />
             </div>
           </div>
         </div>
 
-        {/* Item 9: Torrent & Magnet Stats (Only if media is a torrent or magnet stream) */}
+        {/* Item 8: Video Flip */}
+        <div
+          className={styles.menuRow}
+          onClick={() => setCurrentMenu("flip")}
+        >
+          <div className={styles.rowLeft}>
+            <div className={styles.rowIcon}>
+              <WPIconVideoFlip size={18} />
+            </div>
+            <span className={styles.rowLabel}>Video Flip</span>
+          </div>
+          <div className={styles.rowRight}>
+            <span className={styles.rowValue}>{getFlipLabel(videoFlip)}</span>
+            <div className={styles.chevronIcon}>
+              <WPIconChevronRight size={16} />
+            </div>
+          </div>
+        </div>
+
+        {/* Item 9: Quality (Only if media source supports adaptive quality / multiple renditions) */}
+        {hasMultipleQualities && (
+          <div
+            className={styles.menuRow}
+            onClick={() => setCurrentMenu("quality")}
+          >
+            <div className={styles.rowLeft}>
+              <div className={styles.rowIcon}>
+                <WPIconQuality size={18} />
+              </div>
+              <span className={styles.rowLabel}>Quality</span>
+            </div>
+            <div className={styles.rowRight}>
+              <span className={styles.rowValue}>{getQualityLabel(quality)}</span>
+              <div className={styles.chevronIcon}>
+                <WPIconChevronRight size={16} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Item 10: Torrent & Magnet Stats (Only if media is a torrent or magnet stream) */}
         {isTorrentMedia && (
           <div
             className={styles.menuRow}
@@ -1295,58 +1337,22 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
           </div>
         )}
 
-        {/* Item 10: Quality (Only if media source supports adaptive quality / multiple renditions) */}
-        {hasMultipleQualities && (
-          <div
-            className={styles.menuRow}
-            onClick={() => setCurrentMenu("quality")}
-          >
-            <div className={styles.rowLeft}>
-              <div className={styles.rowIcon}>
-                <WPIconQuality size={18} />
-              </div>
-              <span className={styles.rowLabel}>Quality</span>
-            </div>
-            <div className={styles.rowRight}>
-              <span className={styles.rowValue}>{getQualityLabel(quality)}</span>
-              <div className={styles.chevronIcon}>
-                <WPIconChevronRight size={16} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Item 11: Audio Language */}
+        {/* Item 11: Video Bubbles */}
         <div
           className={styles.menuRow}
-          onClick={() => setCurrentMenu("audio")}
+          onClick={() => setCurrentMenu("bubbles")}
         >
           <div className={styles.rowLeft}>
             <div className={styles.rowIcon}>
-              <WPIconVolumeOn size={18} />
+              <WPIconVideo size={18} />
             </div>
-            <span className={styles.rowLabel}>Audio Language</span>
+            <span className={styles.rowLabel}>Video Bubbles</span>
           </div>
           <div className={styles.rowRight}>
-            <span
-              className={styles.rowValue}
-              style={{
-                maxWidth: 130,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                display: "inline-block",
-                textAlign: "right",
-              }}
-              title={
-                audioTracks && audioTracks[currentAudioTrack ?? 0]?.label
-                  ? audioTracks[currentAudioTrack ?? 0].label
-                  : "Default Audio"
-              }
-            >
-              {audioTracks && audioTracks[currentAudioTrack ?? 0]?.label
-                ? audioTracks[currentAudioTrack ?? 0].label
-                : "Default Audio"}
+            <span className={styles.rowValue}>
+              {webcamState.visible
+                ? webcamState.size.charAt(0).toUpperCase() + webcamState.size.slice(1)
+                : "Hidden"}
             </span>
             <div className={styles.chevronIcon}>
               <WPIconChevronRight size={16} />

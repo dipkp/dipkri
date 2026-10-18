@@ -1593,6 +1593,9 @@ export const Controls = (props: ControlsProps) => {
           <div
             className={`${styles.settingsPopupWrapper} ${isPortraitMobile ? styles.settingsPopupWrapperMobilePortrait : ""}`}
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
           >
             <PlayerSettingsMenu
               isBottomSheet={isPortraitMobile}
