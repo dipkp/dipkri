@@ -3007,13 +3007,15 @@ export class App extends React.Component<AppProps, AppState> {
                 ? Math.min(
                     (this.state.downloaded / this.state.total) * 100,
                     100,
-                  ).toFixed(1) + "% downloaded"
+                  ).toFixed(1) + "%"
+                : isMobileLayout
+                ? "Connecting..."
                 : "Connecting to peers...",
               Boolean(this.state.total) && formatSpeed(this.state.speed),
               Boolean(this.state.total) &&
-                this.state.connections + " peers",
+                (isMobileLayout ? `${this.state.connections}p` : `${this.state.connections} peers`),
               this.state.convertProgress !== undefined &&
-                (this.state.convertProgress * 100).toFixed(1) + "% converted",
+                (this.state.convertProgress * 100).toFixed(1) + "% conv",
             ]
               .filter(Boolean)
               .join(" • ")}
@@ -3026,10 +3028,10 @@ export class App extends React.Component<AppProps, AppState> {
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
+                    gap: 4,
                     marginLeft: 6,
-                    padding: '1px 7px',
-                    borderRadius: 5,
+                    padding: '1px 6px',
+                    borderRadius: 9999,
                     background: audioStatus.isDecoded
                       ? isEAC
                         ? 'rgba(16, 185, 129, 0.16)'
@@ -3037,15 +3039,15 @@ export class App extends React.Component<AppProps, AppState> {
                       : 'rgba(234, 179, 8, 0.18)',
                     border: `1px solid ${audioStatus.isDecoded ? (isEAC ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)') : 'rgba(234, 179, 8, 0.4)'}`,
                     color: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
-                    fontSize: 11,
+                    fontSize: isMobileLayout ? 10 : 11,
                     fontWeight: 600,
                   }}
                   title={audioStatus.statusText}
                 >
                   <span
                     style={{
-                      width: 6,
-                      height: 6,
+                      width: 5,
+                      height: 5,
                       borderRadius: '50%',
                       background: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
                       boxShadow: audioStatus.isDecoded
@@ -3057,7 +3059,9 @@ export class App extends React.Component<AppProps, AppState> {
                     {audioStatus.codec ? audioStatus.codec.toUpperCase() : 'AUDIO'}:{' '}
                     {audioStatus.isDecoded
                       ? audioStatus.isTranscoding
-                        ? `Decoded MP3 (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
+                        ? isMobileLayout
+                          ? `Decoded (+${Math.round(audioStatus.bufferedSeconds)}s)`
+                          : `Decoded MP3 (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
                         : 'Decoded'
                       : 'Decoding...'}
                   </span>

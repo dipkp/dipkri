@@ -40,8 +40,8 @@
 
 .torrentStatsBadge {
   position: absolute;
-  top: 60px;
-  left: 18px;
+  top: 14px;
+  right: 18px;
   z-index: 94;
   background: rgba(9, 10, 15, 0.85);
   backdrop-filter: blur(12px);
@@ -49,25 +49,33 @@
   color: #38bdf8;
   font-family: var(--font-body, 'Inter', -apple-system, sans-serif);
   font-weight: 600;
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
   pointer-events: none;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   letter-spacing: 0.2px;
+  max-width: calc(100% - 36px);
+  box-sizing: border-box;
 }
 
-@media only screen and (max-width: 600px) {
+@media only screen and (max-width: 768px) {
   .torrentStatsBadge {
-    top: 54px;
-    left: 14px;
-    font-size: 11px;
-    padding: 4px 10px;
-    gap: 6px;
+    top: 8px;
+    left: 8px;
+    right: auto;
+    font-size: 10px;
+    padding: 3px 8px;
+    gap: 5px;
+    border-radius: 9999px;
+    max-width: calc(100% - 16px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
