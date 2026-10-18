@@ -6,6 +6,8 @@ import {
   getColorForStringHex,
   formatSpeed,
   serverPath,
+  type MovieServer,
+  isMovie,
 } from "../../utils/utils";
 import styles from "./Controls.module.css";
 import {
@@ -169,6 +171,10 @@ interface ControlsProps {
   speed?: number;
   connections?: number;
   convertProgress?: number;
+  isMovie?: boolean;
+  movieServer?: MovieServer;
+  onSelectMovieServer?: (server: MovieServer) => void;
+  onOpenMovieModal?: () => void;
 }
 
 export const Controls = (props: ControlsProps) => {
@@ -1690,6 +1696,10 @@ export const Controls = (props: ControlsProps) => {
                 setPlayerSettings({ showStatsOverlay: !playerSettingsState.showStatsOverlay });
                 resetHideTimer();
               }}
+              isMovie={props.isMovie ?? (props.video ? isMovie(props.video) : false)}
+              movieServer={props.movieServer}
+              onSelectMovieServer={props.onSelectMovieServer}
+              onChangeMovie={props.onOpenMovieModal}
             />
           </div>
         </>

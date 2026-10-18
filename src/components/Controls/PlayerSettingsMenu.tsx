@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Socket } from "socket.io-client";
-import { serverPath, formatSpeed } from "../../utils/utils";
+import { serverPath, formatSpeed, type MovieServer } from "../../utils/utils";
 import { cleanMovieTitle } from "./Controls";
 import {
   WPIconSpeedGauge,
@@ -38,7 +38,8 @@ export type SubmenuType =
   | "quality"
   | "audio"
   | "bubbles"
-  | "torrent";
+  | "torrent"
+  | "movieServer";
 
 export interface SubtitleTrackItem {
   index: number;
@@ -92,6 +93,11 @@ export interface PlayerSettingsMenuProps {
   convertProgress?: number;
   showStatsOverlay?: boolean;
   onToggleStatsOverlay?: () => void;
+  // Movie Streaming
+  isMovie?: boolean;
+  movieServer?: MovieServer;
+  onSelectMovieServer?: (server: MovieServer) => void;
+  onChangeMovie?: () => void;
 }
 
 export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
@@ -129,6 +135,10 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
   convertProgress,
   showStatsOverlay = true,
   onToggleStatsOverlay,
+  isMovie = false,
+  movieServer = "vidlink",
+  onSelectMovieServer,
+  onChangeMovie,
 }) => {
   const [currentMenu, setCurrentMenu] = useState<SubmenuType>("main");
 
@@ -196,6 +206,24 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         return "Auto";
       default:
         return q.toUpperCase();
+    }
+  };
+
+  // Streaming Server label helper
+  const getServerLabel = (srv?: MovieServer): string => {
+    switch (srv) {
+      case "vidlink":
+        return "VidLink HD";
+      case "vidsrc_pm":
+        return "VidSrc PM";
+      case "twoembed":
+        return "2Embed";
+      case "autoembed":
+        return "AutoEmbed";
+      case "apiplayer":
+        return "APIPlayer";
+      default:
+        return "VidLink HD";
     }
   };
 
@@ -282,6 +310,97 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
       setDownloadingSubId(null);
     }
   };
+
+  // ---------------------------------------------------------------------------
+  // 0. MOVIE STREAMING SERVER SUBMENU
+  // ---------------------------------------------------------------------------
+  if (currentMenu === "movieServer") {
+    const servers: Array<{ id: MovieServer; label: string; tag: string }> = [
+      { id: "vidlink", label: "VidLink HD", tag: "Fast CDN • Auto Subs • Sync" },
+      { id: "vidsrc_pm", label: "VidSrc PM", tag: "Fast Mirror • Multiple Streams" },
+      { id: "twoembed", label: "2Embed", tag: "Direct Stream Mirror" },
+      { id: "autoembed", label: "AutoEmbed", tag: "Multi-Source Player" },
+      { id: "apiplayer", label: "APIPlayer", tag: "Russian & Global Mirror" },
+    ];
+
+    return (
+      <div
+        className={`${styles.menuContainer} ${isBottomSheet ? styles.menuContainerBottomSheet : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.bottomSheetGrabHandle} />
+        <div className={styles.menuHeader} onClick={() => setCurrentMenu("main")}>
+          <div className={styles.backIcon}>
+            <WPIconChevronLeft size={18} />
+          </div>
+          <span className={styles.menuTitle}>Streaming Server</span>
+          <button
+            type="button"
+            className={styles.bottomSheetCloseBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className={styles.menuList}>
+          {servers.map((s) => {
+            const isSelected = movieServer === s.id;
+            return (
+              <div
+                key={s.id}
+                className={`${styles.optionRow} ${isSelected ? styles.optionActive : ""}`}
+                onClick={() => {
+                  onSelectMovieServer?.(s.id);
+                  onClose();
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <div className={styles.optionCheckWrapper}>
+                  {isSelected && <WPIconCheck size={18} color="#38bdf8" />}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+                  <span className={styles.optionText} style={{ fontWeight: isSelected ? 700 : 500 }}>
+                    {s.label}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted, #94a3b8)", marginTop: 1 }}>
+                    {s.tag}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {onChangeMovie && (
+            <div
+              className={styles.optionRow}
+              style={{
+                marginTop: 8,
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                paddingTop: 10,
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                onClose();
+                onChangeMovie();
+              }}
+            >
+              <div className={styles.optionCheckWrapper}>
+                <span style={{ fontSize: 16 }}>🎬</span>
+              </div>
+              <span className={styles.optionText} style={{ color: "#34d399", fontWeight: 600 }}>
+                Change Movie or Episode...
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // 1. VIDEO BUBBLES SUBMENU
@@ -1092,6 +1211,29 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         </button>
       </div>
       <div className={styles.menuList}>
+        {/* Item 0: Streaming Server (Movie Mode) */}
+        {isMovie && (
+          <div
+            className={styles.menuRow}
+            onClick={() => setCurrentMenu("movieServer")}
+          >
+            <div className={styles.rowLeft}>
+              <div className={styles.rowIcon}>
+                <span style={{ fontSize: 18 }}>🎬</span>
+              </div>
+              <span className={styles.rowLabel}>Streaming Server</span>
+            </div>
+            <div className={styles.rowRight}>
+              <span className={styles.rowValue} style={{ color: "#818cf8", fontWeight: 600 }}>
+                {getServerLabel(movieServer)}
+              </span>
+              <div className={styles.chevronIcon}>
+                <WPIconChevronRight size={16} />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Item 1: Audio Language (Top priority for multi-language movies & surround sound) */}
         <div
           className={styles.menuRow}

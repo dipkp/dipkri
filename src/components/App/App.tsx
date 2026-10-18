@@ -59,6 +59,7 @@ import firebase from "firebase/compat/app";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
+import { Movie } from "./Movie";
 import styles from "./App.module.css";
 import config from "../../config";
 import { MetadataContext } from "../../MetadataContext";
@@ -355,9 +356,14 @@ export class App extends React.Component<AppProps, AppState> {
   movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
   HTMLInterface: HTML = new HTML("leftVideo");
+  MovieInterface: Movie = new Movie("leftMovie", (target) => {
+    this.syncMovieToTime(target);
+  });
   Player = () => {
     if (this.usingYoutube()) {
       return this.YouTubeInterface;
+    } else if (this.usingMovie()) {
+      return this.MovieInterface;
     } else {
       return this.HTMLInterface;
     }
@@ -2401,16 +2407,36 @@ export class App extends React.Component<AppProps, AppState> {
           ? data.data.currentTime
           : undefined;
 
-      if (typeof curTime === "number" && !isNaN(curTime) && curTime >= 0) {
-        this.movieCurrentTime = curTime;
+      const dur =
+        typeof data.duration === "number"
+          ? data.duration
+          : typeof data.data?.duration === "number"
+          ? data.data.duration
+          : undefined;
+
+      if (typeof dur === "number" && dur > 0) {
+        this.MovieInterface.duration = dur;
       }
 
-      if (this.haveLock()) {
-        if (evType === "pause" && !this.state.roomPaused) {
+      if (typeof curTime === "number" && !isNaN(curTime) && curTime >= 0) {
+        this.movieCurrentTime = curTime;
+        this.MovieInterface.currentTime = curTime;
+      }
+
+      if (evType === "pause") {
+        this.MovieInterface.isPaused = true;
+        if (this.haveLock() && !this.state.roomPaused) {
           this.socket.emit("CMD:pause");
-        } else if (evType === "play" && this.state.roomPaused) {
+          this.setState({ roomPaused: true });
+        }
+      } else if (evType === "play") {
+        this.MovieInterface.isPaused = false;
+        if (this.haveLock() && this.state.roomPaused) {
           this.socket.emit("CMD:play");
-        } else if (evType === "seeked" && typeof curTime === "number") {
+          this.setState({ roomPaused: false });
+        }
+      } else if (evType === "seeked" && typeof curTime === "number") {
+        if (this.haveLock()) {
           this.socket.emit("CMD:seek", curTime);
         }
       }
@@ -2989,6 +3015,10 @@ export class App extends React.Component<AppProps, AppState> {
         speed={this.state.speed}
         connections={this.state.connections}
         convertProgress={this.state.convertProgress}
+        isMovie={this.usingMovie()}
+        movieServer={parseMovieUrl(this.state.roomMedia)?.server || "vidlink"}
+        onSelectMovieServer={this.switchMovieServer}
+        onOpenMovieModal={this.openMovieModal}
       />
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (
@@ -3135,171 +3165,61 @@ export class App extends React.Component<AppProps, AppState> {
                 this.setState({ nonPlayableMedia: false });
               }}
             />
-            {/* Quick Switch Server Bar - Positioned at top-left, clearly separated from top-right reactions */}
-            {(() => {
-              const currentInfo = parseMovieUrl(this.state.roomMedia);
-              if (!currentInfo) return null;
-              const activeServer = currentInfo.server || "vidlink";
-              const servers: Array<{ id: MovieServer; label: string }> = [
-                { id: "vidlink", label: "VidLink HD" },
-                { id: "vidsrc_pm", label: "VidSrc PM" },
-                { id: "twoembed", label: "2Embed" },
-                { id: "autoembed", label: "AutoEmbed" },
-                { id: "apiplayer", label: "APIPlayer" },
-              ];
-              return (
+            {/* Playback Paused Overlay */}
+            {this.state.roomPaused && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  background: "rgba(10, 12, 22, 0.65)",
+                  backdropFilter: "blur(6px)",
+                  WebkitBackdropFilter: "blur(6px)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 15,
+                  cursor: this.haveLock() ? "pointer" : "default",
+                  pointerEvents: this.haveLock() ? "auto" : "none",
+                }}
+                onClick={this.roomTogglePlay}
+              >
                 <div
                   style={{
-                    position: "absolute",
-                    top: isMobileLayout ? 8 : 12,
-                    left: isMobileLayout ? 8 : 54,
-                    maxWidth: isMobileLayout ? "calc(100% - 16px)" : "calc(100% - 240px)",
+                    width: 72,
+                    height: 72,
+                    borderRadius: "50%",
+                    background:
+                      "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
                     display: "flex",
                     alignItems: "center",
-                    gap: 6,
-                    padding: isMobileLayout ? "4px 8px" : "5px 10px",
-                    borderRadius: 12,
-                    background: "rgba(10, 12, 22, 0.90)",
-                    backdropFilter: "blur(16px)",
-                    WebkitBackdropFilter: "blur(16px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.55)",
-                    zIndex: 30,
-                    overflowX: "auto",
-                    whiteSpace: "nowrap",
-                    scrollbarWidth: "none",
-                    msOverflowStyle: "none",
-                    WebkitOverflowScrolling: "touch",
-                    pointerEvents: "auto",
+                    justifyContent: "center",
+                    boxShadow: "0 0 35px rgba(99, 102, 241, 0.6)",
+                    marginBottom: 14,
                   }}
                 >
-                  {/* Media Title Badge */}
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 7px",
-                      borderRadius: 9999,
-                      background: "rgba(99, 102, 241, 0.18)",
-                      border: "1px solid rgba(99, 102, 241, 0.35)",
-                      color: "#a5b4fc",
-                      fontSize: isMobileLayout ? 10 : 11,
-                      fontWeight: 700,
-                      flexShrink: 0,
-                      maxWidth: isMobileLayout ? 120 : 180,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={currentInfo.title}
-                  >
-                    <span>{currentInfo.type === "tv" ? "📺" : "🎬"}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {currentInfo.title}
-                      {currentInfo.type === "tv" && currentInfo.season && currentInfo.episode
-                        ? ` S${currentInfo.season}E${currentInfo.episode}`
-                        : ""}
-                    </span>
-                  </div>
-
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "#94a3b8",
-                      display: isMobileLayout ? "none" : "inline",
-                      flexShrink: 0,
-                    }}
-                  >
-                    Server:
-                  </span>
-                  {servers.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      disabled={!this.haveLock()}
-                      onClick={() => this.switchMovieServer(s.id)}
-                      style={{
-                        background:
-                          activeServer === s.id
-                            ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
-                            : "rgba(255, 255, 255, 0.08)",
-                        border:
-                          activeServer === s.id
-                            ? "1px solid #818cf8"
-                            : "1px solid rgba(255, 255, 255, 0.06)",
-                        borderRadius: 6,
-                        color: activeServer === s.id ? "#fff" : "#cbd5e1",
-                        fontSize: isMobileLayout ? 10 : 11,
-                        fontWeight: 600,
-                        padding: "2px 7px",
-                        cursor: this.haveLock() ? "pointer" : "not-allowed",
-                        transition: "all 0.2s",
-                        flexShrink: 0,
-                        boxShadow: activeServer === s.id ? "0 0 10px rgba(99, 102, 241, 0.4)" : "none",
-                      }}
-                      title={this.haveLock() ? `Switch server to ${s.label}` : "Room is locked by host"}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={!this.haveLock()}
-                    onClick={this.openMovieModal}
-                    style={{
-                      background: "rgba(16, 185, 129, 0.2)",
-                      border: "1px solid rgba(16, 185, 129, 0.4)",
-                      borderRadius: 6,
-                      color: "#34d399",
-                      fontSize: isMobileLayout ? 10 : 11,
-                      fontWeight: 600,
-                      padding: "2px 7px",
-                      cursor: this.haveLock() ? "pointer" : "not-allowed",
-                      flexShrink: 0,
-                      transition: "all 0.2s",
-                    }}
-                    title={this.haveLock() ? "Change movie or episode" : "Room is locked by host"}
-                  >
-                    🎬 Change
-                  </button>
-                  {/* Quick Resync Button */}
-                  <button
-                    type="button"
-                    onClick={() => this.localSeek()}
-                    style={{
-                      background: isBehind
-                        ? "linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(245, 158, 11, 0.35))"
-                        : "rgba(255, 255, 255, 0.06)",
-                      border: isBehind
-                        ? "1px solid rgba(234, 179, 8, 0.6)"
-                        : "1px solid rgba(255, 255, 255, 0.08)",
-                      borderRadius: 6,
-                      color: isBehind ? "#fef08a" : "#94a3b8",
-                      fontSize: isMobileLayout ? 10 : 11,
-                      fontWeight: 600,
-                      padding: "2px 7px",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      flexShrink: 0,
-                      transition: "all 0.2s",
-                      boxShadow: isBehind ? "0 0 10px rgba(234, 179, 8, 0.4)" : "none",
-                    }}
-                    title={
-                      isBehind
-                        ? `You are ${Math.round(this.getLeaderTime() - currentVideoTime)}s behind host. Click to catch up!`
-                        : "Click to sync playback with room host"
-                    }
-                  >
-                    <span>🔄</span>
-                    <span>{isBehind ? `Sync (+${Math.round(this.getLeaderTime() - currentVideoTime)}s)` : "Sync"}</span>
-                  </button>
+                  <WPIconPlay size={36} color="#fff" />
                 </div>
-              );
-            })()}
+                <div
+                  style={{
+                    color: "#fff",
+                    fontSize: 18,
+                    fontWeight: 700,
+                    letterSpacing: "-0.3px",
+                  }}
+                >
+                  Playback Paused
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
+                  {this.haveLock()
+                    ? "Click or press Space to Resume"
+                    : "Host paused the movie"}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {this.playingVBrowser() &&
@@ -3437,7 +3357,7 @@ export class App extends React.Component<AppProps, AppState> {
             })()}
           </div>
         )}
-        {this.state.roomMedia && !this.usingMovie() && controls}
+        {this.state.roomMedia && controls}
         <LiveCaptions
           paused={this.state.roomPaused}
           videoEl={this.HTMLInterface.getVideoEl()}
