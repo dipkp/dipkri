@@ -39,6 +39,7 @@ import { TopBar } from "../TopBar/TopBar";
 import { VBrowser } from "../VBrowser/VBrowser";
 import { VideoChat } from "../VideoChat/VideoChat";
 import { FloatingWebcamBubbles } from "../VideoChat/FloatingWebcamBubbles";
+import { RemoteAudioRenderer } from "../VideoChat/RemoteAudioRenderer";
 import { getCurrentSettings } from "../Settings/LocalSettings";
 import { MultiStreamModal } from "../Modal/MultiStreamModal";
 import { ComboBox } from "../ComboBox/ComboBox";
@@ -349,6 +350,9 @@ export class App extends React.Component<AppProps, AppState> {
   progressUpdater?: number;
   heartbeat: number | undefined = undefined;
   tsInterval: number | undefined = undefined;
+  movieCurrentTime = 0;
+  movieStartAt = 0;
+  movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
   HTMLInterface: HTML = new HTML("leftVideo");
   Player = () => {
@@ -514,6 +518,7 @@ export class App extends React.Component<AppProps, AppState> {
     window.addEventListener("beforeunload", this.handleBeforeUnload);
     window.addEventListener("pagehide", this.handleBeforeUnload);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("message", this.handleMovieMessage);
 
     const canAutoplay = await testAutoplay();
     this.setState({ isAutoPlayable: canAutoplay });
@@ -533,6 +538,7 @@ export class App extends React.Component<AppProps, AppState> {
     window.removeEventListener("beforeunload", this.handleBeforeUnload);
     window.removeEventListener("pagehide", this.handleBeforeUnload);
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    window.removeEventListener("message", this.handleMovieMessage);
     // Assigned as document properties in componentDidMount, so
     // removeEventListener() never removed them (they kept firing after unmount).
     document.onfullscreenchange = null;
@@ -1430,7 +1436,9 @@ export class App extends React.Component<AppProps, AppState> {
     }
     this.tsInterval = window.setInterval(() => {
       if (this.state.roomMedia) {
-        const curTime = this.Player().getCurrentTime();
+        const curTime = this.usingMovie()
+          ? (this.movieCurrentTime || 0)
+          : this.Player().getCurrentTime();
         const toSend = this.getRoomTSToSet(curTime);
         this.socket.emit("CMD:ts", toSend);
         if (curTime > 0 && this.state.roomId) {
@@ -2411,6 +2419,10 @@ export class App extends React.Component<AppProps, AppState> {
     // For live this is the offset from the leading edge (negative)
     if (this.state.isLiveStream) {
       target = this.Player().getDuration() + (customTime ?? 0);
+    }
+    if (this.usingMovie()) {
+      this.syncMovieToTime(target);
+      return;
     }
     if (target >= 0 && target < Infinity) {
       console.log("syncing self to leader or custom:", target);
@@ -3433,19 +3445,22 @@ export class App extends React.Component<AppProps, AppState> {
           </Alert>
         )}
         {this.state.state === "connected" && (
-          <FloatingWebcamBubbles
-            participants={this.state.participants}
-            nameMap={this.state.nameMap}
-            pictureMap={this.state.pictureMap}
-            socket={this.socket}
-            onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-            onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-            onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-            onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-            isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-            isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
-            isFullScreen={this.state.fullScreen}
-          />
+          <>
+            <RemoteAudioRenderer participants={this.state.participants} />
+            <FloatingWebcamBubbles
+              participants={this.state.participants}
+              nameMap={this.state.nameMap}
+              pictureMap={this.state.pictureMap}
+              socket={this.socket}
+              onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
+              onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
+              onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
+              onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
+              isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
+              isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+              isFullScreen={this.state.fullScreen}
+            />
+          </>
         )}
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>

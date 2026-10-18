@@ -245,52 +245,61 @@ export function createMovieProtocolUrl(info: MovieMediaInfo): string {
   return `movie://${info.tmdbId}?${params.toString()}`;
 }
 
-export function buildMovieEmbedUrl(info: MovieMediaInfo | null): string {
+export function buildMovieEmbedUrl(
+  info: MovieMediaInfo | null,
+  startAt?: number,
+): string {
   if (!info || !info.tmdbId) return "";
   const server = info.server || "vidlink";
   const { tmdbId, type, season = 1, episode = 1 } = info;
+  const startSec = startAt && startAt > 2 ? Math.floor(startAt) : undefined;
+  const startParam = startSec ? `&startAt=${startSec}` : "";
 
   if (server === "vidlink") {
-    // VidLink Pro (Fast HD, responsive embed, multi-subtitles)
+    // VidLink Pro (Fast HD, responsive embed, multi-subtitles, timestamp sync support)
     if (type === "tv") {
-      return `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?autoplay=true`;
+      return `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?autoplay=true${startParam}`;
     }
-    return `https://vidlink.pro/movie/${tmdbId}?autoplay=true`;
+    return `https://vidlink.pro/movie/${tmdbId}?autoplay=true${startParam}`;
   }
 
   if (server === "vidsrc_pm") {
     // VidSrc PM
+    const tParam = startSec ? `?t=${startSec}` : "";
     if (type === "tv") {
-      return `https://vidsrc.pm/embed/tv/${tmdbId}/${season}/${episode}`;
+      return `https://vidsrc.pm/embed/tv/${tmdbId}/${season}/${episode}${tParam}`;
     }
-    return `https://vidsrc.pm/embed/movie/${tmdbId}`;
+    return `https://vidsrc.pm/embed/movie/${tmdbId}${tParam}`;
   }
 
   if (server === "twoembed") {
     // 2Embed
+    const tHash = startSec ? `#t=${startSec}` : "";
     if (type === "tv") {
-      return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`;
+      return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}${tHash}`;
     }
-    return `https://www.2embed.cc/embed/${tmdbId}`;
+    return `https://www.2embed.cc/embed/${tmdbId}${tHash}`;
   }
 
   if (server === "autoembed") {
     // AutoEmbed
+    const tParam = startSec ? `&startAt=${startSec}` : "";
     if (type === "tv") {
-      return `https://player.autoembed.cc/embed/tv/${tmdbId}/${season}/${episode}`;
+      return `https://player.autoembed.cc/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1${tParam}`;
     }
-    return `https://player.autoembed.cc/embed/movie/${tmdbId}`;
+    return `https://player.autoembed.cc/embed/movie/${tmdbId}?autoplay=1${tParam}`;
   }
 
   if (server === "apiplayer") {
     // APIPlayer.ru
+    const tParam = startSec ? `&t=${startSec}` : "";
     if (type === "tv") {
-      return `https://apiplayer.ru/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1&muted=0`;
+      return `https://apiplayer.ru/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1&muted=0${tParam}`;
     }
-    return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0`;
+    return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0${tParam}`;
   }
 
-  return `https://vidlink.pro/movie/${tmdbId}?autoplay=true`;
+  return `https://vidlink.pro/movie/${tmdbId}?autoplay=true${startParam}`;
 }
 
 /**
@@ -424,31 +433,22 @@ export function shuffle(array: any[]) {
   }
 }
 
-export const iceServers = () => [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun3.l.google.com:19302" },
-  { urls: "stun:stun4.l.google.com:19302" },
-  { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:global.stun.twilio.com:3478" },
-  // Free TURN relay for NAT/firewall traversal (OpenRelay project)
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-];
+export const iceServers = (): RTCIceServer[] => {
+  if (typeof window !== "undefined" && (window as any).watchparty_iceServers) {
+    return (window as any).watchparty_iceServers;
+  }
+  return [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:stun.nextcloud.com:443" },
+    { urls: "stun:stun.nextcloud.com:3478" },
+  ];
+};
 
 export const serverPath =
   config.VITE_SERVER_HOST ||
