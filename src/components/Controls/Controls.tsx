@@ -5,6 +5,7 @@ import {
   getDefaultPicture,
   getColorForStringHex,
   formatSpeed,
+  serverPath,
 } from "../../utils/utils";
 import styles from "./Controls.module.css";
 import {

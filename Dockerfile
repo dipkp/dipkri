@@ -4,6 +4,8 @@ COPY . /usr/src
 
 WORKDIR /usr/src
 
+RUN apk add --no-cache ffmpeg
+
 RUN npm ci
 
 RUN npm run build

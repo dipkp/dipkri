@@ -1,4 +1,5 @@
 import { DualAudioMode, getPlayerSettings } from "./playerSettings";
+import { serverPath } from "../../utils/utils";
 
 const LANG_MAP: Record<string, string> = {
   hin: "Hindi",
@@ -106,6 +107,8 @@ export interface AudioTrackInfo {
   language?: string;
   enabled: boolean;
   isAttached?: boolean;
+  codec?: string;
+  streamIndex?: number;
 }
 
 export interface AudioDecodingStatus {
@@ -490,6 +493,25 @@ class AudioEnhancerManager {
     this.mediaName = effectiveName;
     this.mediaTracks = this.extractLanguagesFromMediaName(effectiveName);
 
+    // Fast-path: detect non-native surround / cinema codecs directly from media name (e.g. DDP 2.0 / 5.1, EAC3, AC3, TrueHD, DTS)
+    const hasNonNativeCodec = /\b(ddp\b|ddp\s*\d\.\d|eac3|e-ac-3|ac3|ac-3|truehd|dts(-hd)?|atmos)\b/i.test(effectiveName);
+    if (hasNonNativeCodec) {
+      this.requiresTranscoding = true;
+      if (this.mediaTracks.length > 0) {
+        this.mediaTracks.forEach((t) => {
+          if (!t.codec) t.codec = "eac3";
+        });
+      }
+      const el =
+        this.currentVideoEl ||
+        (typeof document !== "undefined"
+          ? (document.getElementById("leftVideo") as HTMLMediaElement)
+          : null);
+      if (el) {
+        this.playAuxAudio(this.selectedTrackIndex, el);
+      }
+    }
+
     // Fetch ffprobe stream details from server if playing a torrent stream or direct multi-track media
     const target = mediaUrl || effectiveName;
     const isProbeableMedia =
@@ -523,7 +545,7 @@ class AudioEnhancerManager {
         cleanTorrent = decodeURIComponent(cleanTorrent);
       } catch {}
 
-      const res = await fetch(`/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
+      const res = await fetch(`${serverPath}/streamInfo?torrent=${encodeURIComponent(cleanTorrent)}${fileIndexParam}`);
       if (res.ok) {
         const data = await res.json();
         if (data.subtitleTracks && Array.isArray(data.subtitleTracks)) {
@@ -604,10 +626,10 @@ class AudioEnhancerManager {
       };
     }
 
-    const isEAC3orAC3 = ["eac3", "ac3", "dts", "truehd"].includes(codec);
+    const isEAC3orAC3 = ["eac3", "ac3", "dts", "truehd"].includes(codec) || this.requiresTranscoding;
     const isTranscoding = this.requiresTranscoding || isEAC3orAC3;
     const formatName = isEAC3orAC3
-      ? codec === "eac3"
+      ? codec === "eac3" || !codec
         ? "Dolby Digital Plus (EAC-3 / DDP 2.0)"
         : codec.toUpperCase()
       : codec ? codec.toUpperCase() : "Native Stereo";
@@ -870,7 +892,25 @@ class AudioEnhancerManager {
           el.muted = true;
         }
       };
+      this.auxAudio.oncanplay = () => {
+        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
+        if (v && !v.paused && this.auxAudio && this.auxAudio.paused) {
+          this.auxAudio.play().catch(() => {});
+        }
+      };
       document.body.appendChild(this.auxAudio);
+
+      // Auto-unlock audio playback on user gesture if browser blocks unmuted autoplay
+      const unlockAudio = () => {
+        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
+        if (this.auxAudio && v && !v.paused && this.auxAudio.paused) {
+          this.auxAudio.play().catch(() => {});
+        }
+      };
+      window.addEventListener("pointerdown", unlockAudio, { passive: true });
+      window.addEventListener("click", unlockAudio, { passive: true });
+      window.addEventListener("touchstart", unlockAudio, { passive: true });
+      window.addEventListener("keydown", unlockAudio, { passive: true });
     }
 
     if (this.auxAttachedVideo !== el) {
@@ -919,6 +959,12 @@ class AudioEnhancerManager {
     this.resyncAuxAudio(trackIndex, el);
   }
 
+  public resumeAuxAudio() {
+    if (this.auxAudio && this.auxAudio.paused) {
+      this.auxAudio.play().catch(() => {});
+    }
+  }
+
   private resyncAuxAudio(trackIndex: number, videoEl: HTMLMediaElement) {
     if (!this.auxAudio) return;
     const ss = Math.max(0, videoEl.currentTime);
@@ -933,7 +979,7 @@ class AudioEnhancerManager {
       torrentRef = leftEl?.currentSrc || leftEl?.src || "";
     }
     let fileParam = "";
-    const fIdx = torrentRef.match(/[?&]fileIndex=(\d+)/);
+    const fIdx = torrentRef.match(/[?&]fileIndex=(\d+)/i) || torrentRef.match(/%26fileIndex%3D(\d+)/i);
     if (fIdx) {
       fileParam = `&fileIndex=${fIdx[1]}`;
     }
@@ -949,7 +995,7 @@ class AudioEnhancerManager {
 
     if (!cleanTorrent) return;
 
-    const url = `/streamAudio?torrent=${encodeURIComponent(cleanTorrent)}&track=${trackIndex}&ss=${ss.toFixed(1)}${fileParam}`;
+    const url = `${serverPath}/streamAudio?torrent=${encodeURIComponent(cleanTorrent)}&track=${trackIndex}&ss=${ss.toFixed(1)}${fileParam}`;
     this.auxAudio.src = url;
     this.auxAudio.playbackRate = videoEl.playbackRate || 1;
     this.auxAudio.volume = videoEl.volume;

@@ -1,6 +1,18 @@
 import WebTorrent from "webtorrent";
 import { spawn, execFile } from "node:child_process";
 import config from "./config.ts";
+// @ts-ignore
+import ffmpegStatic from "ffmpeg-static";
+// @ts-ignore
+import ffprobeStatic from "ffprobe-static";
+
+function getFfmpegPath(): string {
+  return (ffmpegStatic as any)?.default || (ffmpegStatic as any) || "ffmpeg";
+}
+
+function getFfprobePath(): string {
+  return (ffprobeStatic as any)?.path || (ffprobeStatic as any)?.default?.path || "ffprobe";
+}
 
 // Singleton WebTorrent client for server-side torrent streaming
 let torrentClient: WebTorrent.Instance | null = null;
@@ -508,25 +520,30 @@ export async function handleTorrentInfo(req: any, res: any) {
   }
 
   try {
+    const streamPort = config.PORT || process.env.PORT || 8080;
     let streamUrl = magnetUri;
     if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
     }
 
     execFile(
-      "ffprobe",
+      getFfprobePath(),
       [
         "-v",
         "error",
+        "-probesize",
+        "1000000",
+        "-analyzeduration",
+        "1500000",
         "-show_entries",
         "stream=index,codec_name,codec_type:stream_tags=language,title",
         "-of",
         "json",
         streamUrl,
       ],
-      { timeout: 15000 },
+      { timeout: 20000 },
       (err, stdout) => {
         if (err || !stdout) {
           return res.json({ audioTracks: [], subtitleTracks: [] });
@@ -589,21 +606,47 @@ export async function handleTorrentAudio(req: any, res: any) {
   const fileIndex = extractFileIndexFromRequest(req);
 
   try {
+    const streamPort = config.PORT || process.env.PORT || 8080;
     let streamUrl = magnetUri;
     if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
     }
 
-    const args: string[] = ["-nostdin", "-v", "error"];
+    const args: string[] = [
+      "-nostdin",
+      "-v",
+      "error",
+      "-probesize",
+      "1000000",
+      "-analyzeduration",
+      "1000000",
+      "-fflags",
+      "+nobuffer+fastseek",
+      "-flush_packets",
+      "1",
+    ];
     if (ss > 0) {
       args.push("-ss", String(ss));
     }
     args.push("-i", streamUrl);
-    args.push("-vn", "-map", `0:a:${track}`, "-c:a", "libmp3lame", "-ac", "2", "-b:a", "192k", "-f", "mp3", "pipe:1");
+    args.push(
+      "-vn",
+      "-map",
+      `0:a:${track}`,
+      "-c:a",
+      "libmp3lame",
+      "-ac",
+      "2",
+      "-b:a",
+      "192k",
+      "-f",
+      "mp3",
+      "pipe:1"
+    );
 
-    const ff = spawn("ffmpeg", args);
+    const ff = spawn(getFfmpegPath(), args);
     const cleanup = () => { try { ff.kill("SIGKILL"); } catch {} };
     req.on("close", cleanup);
     res.on("close", cleanup);
@@ -642,17 +685,22 @@ export async function handleTorrentSubtitle(req: any, res: any) {
   const fileIndex = extractFileIndexFromRequest(req);
 
   try {
+    const streamPort = config.PORT || process.env.PORT || 8080;
     let streamUrl = magnetUri;
     if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}${magnetUri}`;
+      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${process.env.PORT || 8080}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
     }
 
     const args: string[] = [
       "-nostdin",
       "-v",
       "error",
+      "-probesize",
+      "1000000",
+      "-analyzeduration",
+      "1000000",
       "-i",
       streamUrl,
       "-map",
@@ -662,7 +710,7 @@ export async function handleTorrentSubtitle(req: any, res: any) {
       "pipe:1",
     ];
 
-    const ff = spawn("ffmpeg", args);
+    const ff = spawn(getFfmpegPath(), args);
     const cleanup = () => {
       try {
         ff.kill("SIGKILL");
