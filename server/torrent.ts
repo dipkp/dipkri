@@ -308,6 +308,44 @@ export function pickBestVideoFile(
   return sorted[0];
 }
 
+export interface TorrentEpisodeFile {
+  name: string;
+  index: number;
+  length: number;
+  file: WebTorrent.TorrentFile;
+}
+
+export function getPlayableEpisodeFiles(
+  files: WebTorrent.TorrentFile[]
+): TorrentEpisodeFile[] {
+  if (!files || files.length === 0) return [];
+
+  const videoExtensions = [".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".ts"];
+  let videoFiles = files
+    .map((f, i) => ({ file: f, index: i, name: f.name, length: f.length }))
+    .filter((f) => videoExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)));
+
+  // If multiple video files, filter out tiny sample clips or trailers (< 40MB)
+  if (videoFiles.length > 1) {
+    const withoutSamples = videoFiles.filter((f) => {
+      const lower = f.name.toLowerCase();
+      const isSampleName = lower.includes("sample") || lower.includes("trailer");
+      const isVerySmall = f.length < 40 * 1024 * 1024;
+      return !(isSampleName && isVerySmall);
+    });
+    if (withoutSamples.length > 0) {
+      videoFiles = withoutSamples;
+    }
+  }
+
+  // Natural alphabetical/numeric sort so S01E01 comes before S01E02, Episode 1 before Episode 2
+  videoFiles.sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+  );
+
+  return videoFiles;
+}
+
 export function getMimeType(fileName: string): string {
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "video/mp4";

@@ -3135,6 +3135,7 @@ export class App extends React.Component<AppProps, AppState> {
           <MultiStreamModal
             streams={this.state.fileSelection}
             setMedia={this.roomSetMedia}
+            playlistAdd={this.roomPlaylistAdd}
             resetMultiSelect={this.resetMultiSelect}
           />
         )}
