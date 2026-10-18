@@ -1,5 +1,8 @@
 import WebTorrent from "webtorrent";
 import { spawn, execFile } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import config from "./config.ts";
 // @ts-ignore
 import ffmpegStatic from "ffmpeg-static";
@@ -13,6 +16,20 @@ function getFfmpegPath(): string {
 function getFfprobePath(): string {
   return (ffprobeStatic as any)?.path || (ffprobeStatic as any)?.default?.path || "ffprobe";
 }
+
+const AUDIO_CACHE_DIR = path.join(os.tmpdir(), "watchparty_audio_cache");
+if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+  try {
+    fs.mkdirSync(AUDIO_CACHE_DIR, { recursive: true });
+  } catch {}
+}
+
+interface AudioCacheState {
+  filePath: string;
+  complete: boolean;
+  process?: any;
+}
+const audioTranscodeMap = new Map<string, AudioCacheState>();
 
 // Singleton WebTorrent client for server-side torrent streaming
 let torrentClient: WebTorrent.Instance | null = null;
@@ -592,9 +609,6 @@ export async function handleTorrentInfo(req: any, res: any) {
 export async function handleTorrentAudio(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "*");
-  res.setHeader("Content-Type", "audio/mpeg");
-  res.setHeader("Cache-Control", "no-cache, no-store");
-  res.setHeader("Accept-Ranges", "none");
 
   const magnetUri = extractMagnetFromRequest(req);
   if (!magnetUri) {
@@ -604,6 +618,48 @@ export async function handleTorrentAudio(req: any, res: any) {
   const track = parseInt(req.query?.track || "0", 10);
   const ss = parseFloat(req.query?.ss || "0");
   const fileIndex = extractFileIndexFromRequest(req);
+  const infoHash = extractInfoHash(magnetUri) || magnetUri;
+  const cacheKey = `${infoHash}_file_${fileIndex != null ? fileIndex : "default"}_track_${track}`;
+
+  const cached = audioTranscodeMap.get(cacheKey);
+
+  // 1. If already fully transcoded to disk, serve with full HTTP Range seek support!
+  if (cached?.complete && fs.existsSync(cached.filePath)) {
+    const stat = fs.statSync(cached.filePath);
+    const fileSize = stat.size;
+    const range = req.headers?.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunkSize,
+        "Content-Type": "audio/mpeg",
+      });
+      const stream = fs.createReadStream(cached.filePath, { start, end });
+      stream.pipe(res);
+      req.on("close", () => stream.destroy());
+    } else {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Content-Type": "audio/mpeg",
+        "Accept-Ranges": "bytes",
+      });
+      const stream = fs.createReadStream(cached.filePath);
+      stream.pipe(res);
+      req.on("close", () => stream.destroy());
+    }
+    return;
+  }
+
+  // 2. Otherwise, stream live while caching in background
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Cache-Control", "no-cache, no-store");
+  res.setHeader("Accept-Ranges", "none");
 
   try {
     const streamPort = config.PORT || process.env.PORT || 8080;
@@ -647,7 +703,34 @@ export async function handleTorrentAudio(req: any, res: any) {
     );
 
     const ff = spawn(getFfmpegPath(), args);
-    const cleanup = () => { try { ff.kill("SIGKILL"); } catch {} };
+
+    // If starting from 0:00 and no background transcode is active, simultaneously save to cache file!
+    let fileStream: fs.WriteStream | null = null;
+    let cacheState: AudioCacheState | null = null;
+    if (ss === 0 && !audioTranscodeMap.has(cacheKey)) {
+      const filePath = path.join(AUDIO_CACHE_DIR, `${cacheKey}.mp3`);
+      cacheState = { filePath, complete: false, process: ff };
+      audioTranscodeMap.set(cacheKey, cacheState);
+      fileStream = fs.createWriteStream(filePath);
+      ff.stdout.pipe(fileStream);
+
+      ff.on("close", (code) => {
+        if (code === 0 && fs.existsSync(filePath)) {
+          if (cacheState) cacheState.complete = true;
+          console.log(`[AudioCache] Track fully cached to disk: ${cacheKey}`);
+        }
+      });
+    }
+
+    ff.stdout.pipe(res);
+
+    const cleanup = () => {
+      ff.stdout.unpipe(res);
+      // If we are actively saving the full file in background, do NOT kill ff! Let it finish saving!
+      if (!fileStream) {
+        try { ff.kill("SIGKILL"); } catch {}
+      }
+    };
     req.on("close", cleanup);
     res.on("close", cleanup);
 
@@ -660,7 +743,6 @@ export async function handleTorrentAudio(req: any, res: any) {
       console.warn("[TorrentAudio ffmpeg stderr]:", chunk.toString());
     });
 
-    ff.stdout.pipe(res);
   } catch (err: any) {
     console.error("[TorrentAudio handler error]:", err?.message);
     if (!res.headersSent) res.status(500).end();

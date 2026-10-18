@@ -930,8 +930,8 @@ export const Controls = (props: ControlsProps) => {
         </button>
       )}
 
-      {/* Video Title Overlay (Top-Left Position in Fullscreen / Mobile Landscape) */}
-      {isFullBleedVideo && !isScreenLocked && isControlsVisible && (
+      {/* Video Title Overlay (Top-Left Position in Fullscreen / Mobile Landscape, hidden on YouTube to avoid header clash) */}
+      {isFullBleedVideo && !isScreenLocked && isControlsVisible && !props.isYouTube && (
         <div className={styles.videoTitleOverlay} onClick={(e) => e.stopPropagation()}>
           <div className={styles.videoTitleMain}>
             {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle || "WatchParty"}

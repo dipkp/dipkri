@@ -713,9 +713,11 @@ export class App extends React.Component<AppProps, AppState> {
         // Ignore, it's probably a reconnection
         return;
       }
+      const mediaChanged = this.state.roomMedia !== currentMedia;
       this.setState(
         {
           roomMedia: currentMedia,
+          detectedMediaName: mediaChanged ? "" : this.state.detectedMediaName,
           roomVideoTS: data.videoTS ?? 0,
           roomPaused: data.paused,
           roomSubtitle: data.subtitle,
@@ -730,6 +732,16 @@ export class App extends React.Component<AppProps, AppState> {
           isLiveStream: false,
         },
         async () => {
+          if (currentMedia && (currentMedia.includes("youtube.com") || currentMedia.includes("youtu.be"))) {
+            fetch(`https://noembed.com/embed?url=${encodeURIComponent(currentMedia)}`)
+              .then((r) => r.json())
+              .then((d) => {
+                if (d?.title && this.state.roomMedia === currentMedia) {
+                  this.setState({ detectedMediaName: d.title });
+                }
+              })
+              .catch(() => {});
+          }
           const displayName = this.getMediaDisplayName(currentMedia);
           audioEnhancer.setMediaName(displayName || currentMedia, currentMedia);
           const leftVideo = this.HTMLInterface.getVideoEl();
@@ -2576,12 +2588,25 @@ export class App extends React.Component<AppProps, AppState> {
     if (!input) {
       return "";
     }
-    if (this.state?.detectedMediaName) {
-      return this.state.detectedMediaName;
-    }
-    // Show the whole URL for youtube
-    if (this.usingYoutube()) {
+    // If input is YouTube, return YouTube video title if detected or input
+    if (this.usingYoutube() || input.includes("youtube.com") || input.includes("youtu.be")) {
+      const ytData = ((this.YouTubeInterface as any).player || (this.YouTubeInterface as any))?.getVideoData?.();
+      if (ytData?.title) {
+        return ytData.title;
+      }
+      if (
+        this.state?.detectedMediaName &&
+        !this.state.detectedMediaName.includes("720p") &&
+        !this.state.detectedMediaName.includes("1080p") &&
+        !this.state.detectedMediaName.includes("BluRay")
+      ) {
+        return this.state.detectedMediaName;
+      }
       return input;
+    }
+    // Only return detectedMediaName if input is actually the torrent stream
+    if (this.state?.detectedMediaName && (input.includes("/stream?torrent=") || isMagnet(input))) {
+      return this.state.detectedMediaName;
     }
     if (input.startsWith("screenshare://")) {
       const sharer = this.state.participants.find((user) => user.isScreenShare);
