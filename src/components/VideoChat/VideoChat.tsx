@@ -385,10 +385,10 @@ export class VideoChat extends React.Component<VideoChatProps> {
       if (!user.isVideoChat || id === selfId) {
         return;
       }
-      let pc = videoPCs[id];
+      let pc: RTCPeerConnection | undefined = videoPCs[id];
       if (!pc || pc.connectionState === "closed" || pc.connectionState === "failed") {
         pc = this.createPeerConnection(id);
-      } else if (ourStream) {
+      } else if (ourStream && pc) {
         const senders = pc.getSenders();
         ourStream.getTracks().forEach((track) => {
           if (!senders.some((s) => s.track === track)) {

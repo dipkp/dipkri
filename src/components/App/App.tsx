@@ -2368,7 +2368,7 @@ export class App extends React.Component<AppProps, AppState> {
     const startAt =
       this.movieStartAt > 0
         ? this.movieStartAt
-        : this.state.roomVideoTS > 5
+        : typeof this.state.roomVideoTS === "number" && this.state.roomVideoTS > 5
         ? this.state.roomVideoTS
         : undefined;
     return buildMovieEmbedUrl(info, startAt);
@@ -3116,6 +3116,7 @@ export class App extends React.Component<AppProps, AppState> {
           >
             <iframe
               id="leftMovie"
+              key={`${this.state.roomMedia}_${this.movieSyncKey}`}
               title="Movie Player"
               style={{
                 width: "100%",
@@ -3134,7 +3135,7 @@ export class App extends React.Component<AppProps, AppState> {
                 this.setState({ nonPlayableMedia: false });
               }}
             />
-            {/* Quick Switch Server Bar */}
+            {/* Quick Switch Server Bar - Positioned at top-left, clearly separated from top-right reactions */}
             {(() => {
               const currentInfo = parseMovieUrl(this.state.roomMedia);
               if (!currentInfo) return null;
@@ -3151,25 +3152,64 @@ export class App extends React.Component<AppProps, AppState> {
                   style={{
                     position: "absolute",
                     top: isMobileLayout ? 8 : 12,
-                    right: isMobileLayout ? 8 : 12,
+                    left: isMobileLayout ? 8 : 54,
+                    maxWidth: isMobileLayout ? "calc(100% - 16px)" : "calc(100% - 240px)",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
-                    padding: "4px 8px",
-                    borderRadius: 10,
-                    background: "rgba(10, 12, 20, 0.85)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
+                    padding: isMobileLayout ? "4px 8px" : "5px 10px",
+                    borderRadius: 12,
+                    background: "rgba(10, 12, 22, 0.90)",
+                    backdropFilter: "blur(16px)",
+                    WebkitBackdropFilter: "blur(16px)",
                     border: "1px solid rgba(255, 255, 255, 0.12)",
-                    zIndex: 20,
+                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.55)",
+                    zIndex: 30,
+                    overflowX: "auto",
+                    whiteSpace: "nowrap",
+                    scrollbarWidth: "none",
+                    msOverflowStyle: "none",
+                    WebkitOverflowScrolling: "touch",
+                    pointerEvents: "auto",
                   }}
                 >
+                  {/* Media Title Badge */}
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 7px",
+                      borderRadius: 9999,
+                      background: "rgba(99, 102, 241, 0.18)",
+                      border: "1px solid rgba(99, 102, 241, 0.35)",
+                      color: "#a5b4fc",
+                      fontSize: isMobileLayout ? 10 : 11,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                      maxWidth: isMobileLayout ? 120 : 180,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={currentInfo.title}
+                  >
+                    <span>{currentInfo.type === "tv" ? "📺" : "🎬"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {currentInfo.title}
+                      {currentInfo.type === "tv" && currentInfo.season && currentInfo.episode
+                        ? ` S${currentInfo.season}E${currentInfo.episode}`
+                        : ""}
+                    </span>
+                  </div>
+
                   <span
                     style={{
                       fontSize: 11,
                       fontWeight: 600,
                       color: "#94a3b8",
                       display: isMobileLayout ? "none" : "inline",
+                      flexShrink: 0,
                     }}
                   >
                     Server:
@@ -3196,14 +3236,17 @@ export class App extends React.Component<AppProps, AppState> {
                         padding: "2px 7px",
                         cursor: this.haveLock() ? "pointer" : "not-allowed",
                         transition: "all 0.2s",
+                        flexShrink: 0,
+                        boxShadow: activeServer === s.id ? "0 0 10px rgba(99, 102, 241, 0.4)" : "none",
                       }}
-                      title={`Switch server to ${s.label}`}
+                      title={this.haveLock() ? `Switch server to ${s.label}` : "Room is locked by host"}
                     >
                       {s.label}
                     </button>
                   ))}
                   <button
                     type="button"
+                    disabled={!this.haveLock()}
                     onClick={this.openMovieModal}
                     style={{
                       background: "rgba(16, 185, 129, 0.2)",
@@ -3213,11 +3256,46 @@ export class App extends React.Component<AppProps, AppState> {
                       fontSize: isMobileLayout ? 10 : 11,
                       fontWeight: 600,
                       padding: "2px 7px",
-                      cursor: "pointer",
+                      cursor: this.haveLock() ? "pointer" : "not-allowed",
+                      flexShrink: 0,
+                      transition: "all 0.2s",
                     }}
-                    title="Change movie or episode"
+                    title={this.haveLock() ? "Change movie or episode" : "Room is locked by host"}
                   >
                     🎬 Change
+                  </button>
+                  {/* Quick Resync Button */}
+                  <button
+                    type="button"
+                    onClick={() => this.localSeek()}
+                    style={{
+                      background: isBehind
+                        ? "linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(245, 158, 11, 0.35))"
+                        : "rgba(255, 255, 255, 0.06)",
+                      border: isBehind
+                        ? "1px solid rgba(234, 179, 8, 0.6)"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                      borderRadius: 6,
+                      color: isBehind ? "#fef08a" : "#94a3b8",
+                      fontSize: isMobileLayout ? 10 : 11,
+                      fontWeight: 600,
+                      padding: "2px 7px",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      flexShrink: 0,
+                      transition: "all 0.2s",
+                      boxShadow: isBehind ? "0 0 10px rgba(234, 179, 8, 0.4)" : "none",
+                    }}
+                    title={
+                      isBehind
+                        ? `You are ${Math.round(this.getLeaderTime() - currentVideoTime)}s behind host. Click to catch up!`
+                        : "Click to sync playback with room host"
+                    }
+                  >
+                    <span>🔄</span>
+                    <span>{isBehind ? `Sync (+${Math.round(this.getLeaderTime() - currentVideoTime)}s)` : "Sync"}</span>
                   </button>
                 </div>
               );
