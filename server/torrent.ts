@@ -293,13 +293,26 @@ export function pickBestVideoFile(
   if (!files || files.length === 0) return undefined;
 
   const videoExtensions = [".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".ts"];
-  const videoFiles = files.filter((f) =>
+  let videoFiles = files.filter((f) =>
     videoExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
   );
 
   if (videoFiles.length > 0) {
-    // Sort descending by size to get the main feature film / episode
-    videoFiles.sort((a, b) => b.length - a.length);
+    if (videoFiles.length > 1) {
+      // Filter out small sample clips / trailers (< 40MB)
+      const withoutSamples = videoFiles.filter((f) => {
+        const lower = f.name.toLowerCase();
+        return !(lower.includes("sample") || lower.includes("trailer")) || f.length > 40 * 1024 * 1024;
+      });
+      if (withoutSamples.length > 0) {
+        videoFiles = withoutSamples;
+      }
+      // If multiple episodes/parts, pick Episode 1 by natural alphanumeric sorting
+      videoFiles.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+      );
+      return videoFiles[0];
+    }
     return videoFiles[0];
   }
 
@@ -721,8 +734,6 @@ export async function handleTorrentAudio(req: any, res: any) {
       "-nostdin",
       "-v",
       "error",
-      "-threads",
-      "0",
       "-probesize",
       "1000000",
       "-analyzeduration",

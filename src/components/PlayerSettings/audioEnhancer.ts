@@ -924,10 +924,6 @@ class AudioEnhancerManager {
 
       this.auxAudio.onerror = (e) => {
         console.warn("[WatchParty AudioTrack] Aux audio error", e);
-        if (this.isBufferingHold && el) {
-          this.isBufferingHold = false;
-          if (!this.isUserPaused) el.play().catch(() => {});
-        }
         if (el && this.selectedTrackIndex === 0 && !this.requiresTranscoding) el.muted = false;
       };
 
@@ -935,40 +931,12 @@ class AudioEnhancerManager {
         if (el && (this.selectedTrackIndex > 0 || this.requiresTranscoding)) {
           el.muted = true;
         }
-        if (!this.isUserPaused && this.isBufferingHold && el) {
-          this.isBufferingHold = false;
-          if (el.paused && el.readyState >= 2) {
-            el.play().catch(() => {});
-          }
-        }
-      };
-
-      this.auxAudio.onwaiting = () => {
-        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
-        if (v && !v.paused) {
-          this.isBufferingHold = true;
-          v.pause();
-        }
-      };
-
-      this.auxAudio.onstalled = () => {
-        const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
-        if (v && !v.paused) {
-          this.isBufferingHold = true;
-          v.pause();
-        }
       };
 
       this.auxAudio.oncanplay = () => {
         const v = this.currentVideoEl || (document.getElementById("leftVideo") as HTMLMediaElement);
-        if (v && !this.isUserPaused && this.isBufferingHold) {
-          this.isBufferingHold = false;
-          if (this.auxAudio && this.auxAudio.paused) {
-            this.auxAudio.play().catch(() => {});
-          }
-          if (v.paused && v.readyState >= 2) {
-            v.play().catch(() => {});
-          }
+        if (v && !v.paused && this.auxAudio && this.auxAudio.paused) {
+          this.auxAudio.play().catch(() => {});
         }
       };
 
@@ -989,49 +957,31 @@ class AudioEnhancerManager {
 
     if (this.auxAttachedVideo !== el) {
       this.auxAttachedVideo = el;
-      this.isUserPaused = el.paused;
 
       el.addEventListener("play", () => {
-        this.isUserPaused = false;
         if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && this.auxAudio) {
-          if (this.auxAudio.readyState >= 2) {
-            this.auxAudio.play().catch(() => {});
-          } else {
-            // Audio still buffering -> hold video until auxAudio canplay
-            this.isBufferingHold = true;
-            el.pause();
-          }
+          this.auxAudio.play().catch(() => {});
         }
       });
 
       el.addEventListener("pause", () => {
-        if (!this.isBufferingHold) {
-          this.isUserPaused = true;
-        }
         if (this.auxAudio && !this.auxAudio.paused) {
           this.auxAudio.pause();
         }
       });
 
       el.addEventListener("waiting", () => {
+        // When video freezes or buffers from torrent, pause audio so it doesn't run ahead
         if (this.auxAudio && !this.auxAudio.paused) {
-          this.isBufferingHold = true;
           this.auxAudio.pause();
         }
       });
 
       el.addEventListener("playing", () => {
-        if (!this.isBufferingHold) {
-          this.isUserPaused = false;
-        }
+        // When video unfreezes and resumes, resume audio
         if ((this.selectedTrackIndex > 0 || this.requiresTranscoding) && this.auxAudio) {
-          if (this.auxAudio.readyState >= 2) {
-            if (this.auxAudio.paused && !this.isUserPaused) {
-              this.auxAudio.play().catch(() => {});
-            }
-          } else {
-            this.isBufferingHold = true;
-            el.pause();
+          if (this.auxAudio.paused && !el.paused) {
+            this.auxAudio.play().catch(() => {});
           }
         }
       });
@@ -1076,26 +1026,25 @@ class AudioEnhancerManager {
           !el.paused &&
           !this.auxAudio.paused &&
           this.auxAudio.readyState >= 2 &&
-          !this.isSeeking &&
-          !this.isBufferingHold
+          !this.isSeeking
         ) {
           const currentAudioPos = this.auxAudio.currentTime + this.auxAudioStartOffset;
           const diff = el.currentTime - currentAudioPos; // >0 if video is ahead, <0 if audio is ahead
           const absDiff = Math.abs(diff);
 
-          if (absDiff > 2.5) {
+          if (absDiff > 3.0) {
             // Significant desync: schedule a debounced resync
             this.debouncedResync(this.selectedTrackIndex, el);
-          } else if (absDiff > 0.06) {
-            // Dynamic micro-drift correction (±6%) to maintain lip-sync without reloading stream
+          } else if (absDiff > 0.08) {
+            // Smoothly nudge auxAudio playbackRate by ±5% to lock lip-sync seamlessly without audio reloading
             const baseRate = el.playbackRate || 1;
             if (diff > 0) {
-              this.auxAudio.playbackRate = Math.min(2.0, baseRate * 1.06);
+              this.auxAudio.playbackRate = Math.min(2.0, baseRate * 1.05);
             } else {
-              this.auxAudio.playbackRate = Math.max(0.5, baseRate * 0.94);
+              this.auxAudio.playbackRate = Math.max(0.5, baseRate * 0.95);
             }
           } else {
-            // In sync within 60ms
+            // Well synced within 80ms
             if (this.auxAudio.playbackRate !== (el.playbackRate || 1)) {
               this.auxAudio.playbackRate = el.playbackRate || 1;
             }
@@ -1142,46 +1091,24 @@ class AudioEnhancerManager {
     }
 
     let cleanTorrent = torrentRef.replace(/^.*\/stream\?torrent=/, "");
-    const cutIdx = cleanTorrent.indexOf("&fileIndex=");
-    if (cutIdx !== -1) {
-      cleanTorrent = cleanTorrent.slice(0, cutIdx);
-    }
+    // Remove only fileIndex parameter so all trackers and hashes are fully preserved!
+    cleanTorrent = cleanTorrent.replace(/[?&]fileIndex=\d+/g, "").replace(/%26fileIndex%3D\d+/g, "");
     try {
       cleanTorrent = decodeURIComponent(cleanTorrent);
     } catch {}
 
     if (!cleanTorrent) return;
 
-    const wasPlaying = !videoEl.paused;
-    if (wasPlaying) {
-      // Hold video while audio stream is connecting & buffering to avoid video running ahead in silence
-      videoEl.pause();
-      this.isBufferingHold = true;
-    }
-
     const url = `${serverPath}/streamAudio?torrent=${encodeURIComponent(cleanTorrent)}&track=${trackIndex}&ss=${ss.toFixed(1)}${fileParam}`;
-    this.auxAudio.pause();
     this.auxAudio.src = url;
     this.auxAudio.playbackRate = videoEl.playbackRate || 1;
     this.auxAudio.volume = videoEl.volume;
     this.auxAudio.muted = false;
     videoEl.muted = true;
-    this.auxAudio.load();
 
-    const onAudioReady = () => {
-      this.auxAudio?.removeEventListener("canplay", onAudioReady);
-      if (wasPlaying && !this.isUserPaused) {
-        this.isBufferingHold = false;
-        if (Math.abs(videoEl.currentTime - ss) > 0.1) {
-          videoEl.currentTime = ss;
-        }
-        Promise.all([
-          videoEl.play().catch(() => {}),
-          this.auxAudio?.play().catch(() => {}),
-        ]);
-      }
-    };
-    this.auxAudio.addEventListener("canplay", onAudioReady, { once: true });
+    if (!videoEl.paused) {
+      this.auxAudio.play().catch(() => {});
+    }
   }
 }
 

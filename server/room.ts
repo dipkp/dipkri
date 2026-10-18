@@ -689,13 +689,12 @@ export class Room {
       let cleanMagnet = data;
       if (data.includes("/stream?torrent=")) {
         cleanMagnet = data.replace(/^.*\/stream\?torrent=/, "");
-        const cut = cleanMagnet.indexOf("&");
-        if (cut !== -1) cleanMagnet = cleanMagnet.slice(0, cut);
+        cleanMagnet = cleanMagnet.replace(/[&?]fileIndex=\d+/g, "").replace(/%26fileIndex%3D\d+/g, "");
         try {
           cleanMagnet = decodeURIComponent(cleanMagnet);
         } catch {}
       } else {
-        cleanMagnet = data.replace(/[&?]fileIndex=\d+/, "");
+        cleanMagnet = data.replace(/[&?]fileIndex=\d+/g, "");
       }
 
       if (fileIndex != null) {
@@ -705,7 +704,7 @@ export class Room {
         data = `/stream?torrent=${encodeURIComponent(cleanMagnet)}`;
         try {
           const torrentPromise = getOrAddTorrent(cleanMagnet);
-          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 2500));
+          const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 8000));
           const torrent = await Promise.race([torrentPromise, timeoutPromise]);
           if (torrent && torrent.files && torrent.files.length > 0) {
             const episodes = getPlayableEpisodeFiles(torrent.files);
@@ -741,11 +740,7 @@ export class Room {
                 const lateTorrent = await torrentPromise;
                 if (lateTorrent && lateTorrent.files) {
                   const lateEpisodes = getPlayableEpisodeFiles(lateTorrent.files);
-                  if (
-                    lateEpisodes.length > 1 &&
-                    this.video &&
-                    (this.video.includes(encodeURIComponent(cleanMagnet)) || this.video.includes(cleanMagnet))
-                  ) {
+                  if (lateEpisodes.length > 1) {
                     const queueEpisodes = lateEpisodes.slice(1).map((ep, idx) => {
                       let epName = ep.name
                         .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
@@ -766,7 +761,9 @@ export class Room {
                     this.io.of(this.roomId).emit("playlist", this.playlist);
                   }
                 }
-              } catch {}
+              } catch (e) {
+                console.warn("[Multi-Episode Late Warning]:", e);
+              }
             })();
           }
         } catch (e) {
@@ -809,16 +806,15 @@ export class Room {
         let cleanMagnet = data;
         if (data.includes("/stream?torrent=")) {
           cleanMagnet = data.replace(/^.*\/stream\?torrent=/, "");
-          const cut = cleanMagnet.indexOf("&");
-          if (cut !== -1) cleanMagnet = cleanMagnet.slice(0, cut);
+          cleanMagnet = cleanMagnet.replace(/[&?]fileIndex=\d+/g, "").replace(/%26fileIndex%3D\d+/g, "");
           try {
             cleanMagnet = decodeURIComponent(cleanMagnet);
           } catch {}
         } else {
-          cleanMagnet = data.replace(/[&?]fileIndex=\d+/, "");
+          cleanMagnet = data.replace(/[&?]fileIndex=\d+/g, "");
         }
         const torrentPromise = getOrAddTorrent(cleanMagnet);
-        const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 2500));
+        const timeoutPromise = new Promise<null>((r) => setTimeout(() => r(null), 8000));
         const torrent = await Promise.race([torrentPromise, timeoutPromise]);
         if (torrent && torrent.files && torrent.files.length > 0) {
           const episodes = getPlayableEpisodeFiles(torrent.files);
