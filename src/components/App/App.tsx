@@ -3054,7 +3054,7 @@ export class App extends React.Component<AppProps, AppState> {
             : undefined
         }
       >
-        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && this.Player().isMuted() && (
+        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && !this.usingMovie() && this.Player().isMuted() && (
           <div
             className={styles.unmuteOverlay}
             onClick={() => {
@@ -3235,49 +3235,65 @@ export class App extends React.Component<AppProps, AppState> {
                   left: 0,
                   width: "100%",
                   height: "100%",
-                  background: "rgba(10, 12, 22, 0.65)",
-                  backdropFilter: "blur(6px)",
-                  WebkitBackdropFilter: "blur(6px)",
+                  background: "rgba(10, 12, 22, 0.35)",
+                  backdropFilter: "blur(2px)",
+                  WebkitBackdropFilter: "blur(2px)",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
                   zIndex: 15,
-                  cursor: this.haveLock() ? "pointer" : "default",
-                  pointerEvents: this.haveLock() ? "auto" : "none",
+                  pointerEvents: "none",
                 }}
-                onClick={this.roomTogglePlay}
               >
                 <div
                   style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: "50%",
-                    background:
-                      "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
+                    background: "rgba(15, 23, 42, 0.88)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(99, 102, 241, 0.4)",
+                    borderRadius: 20,
+                    padding: "16px 24px",
                     display: "flex",
+                    flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "center",
-                    boxShadow: "0 0 35px rgba(99, 102, 241, 0.6)",
-                    marginBottom: 14,
+                    boxShadow: "0 12px 36px rgba(0, 0, 0, 0.7)",
+                    cursor: this.haveLock() ? "pointer" : "default",
+                    pointerEvents: this.haveLock() ? "auto" : "none",
                   }}
+                  onClick={this.roomTogglePlay}
                 >
-                  <WPIconPlay size={36} color="#fff" />
-                </div>
-                <div
-                  style={{
-                    color: "#fff",
-                    fontSize: 18,
-                    fontWeight: 700,
-                    letterSpacing: "-0.3px",
-                  }}
-                >
-                  Playback Paused
-                </div>
-                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
-                  {this.haveLock()
-                    ? "Click or press Space to Resume"
-                    : "Host paused the movie"}
+                  <div
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: "50%",
+                      background:
+                        "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 0 25px rgba(99, 102, 241, 0.6)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <WPIconPlay size={28} color="#fff" />
+                  </div>
+                  <div
+                    style={{
+                      color: "#fff",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: "-0.3px",
+                    }}
+                  >
+                    Playback Paused
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, textAlign: "center" }}>
+                    {this.haveLock()
+                      ? "Tap here to Resume room or touch player directly"
+                      : "Host paused the movie"}
+                  </div>
                 </div>
               </div>
             )}
