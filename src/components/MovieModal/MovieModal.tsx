@@ -151,6 +151,10 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         const data = await res.json();
         const streams: MovieDirectStream[] = data.streams || [];
         setDirectStreams(streams);
+        if (data.imdbId && (!media.imdbId || media.imdbId !== data.imdbId)) {
+          media.imdbId = data.imdbId;
+          setSelectedMedia((prev) => (prev ? { ...prev, imdbId: data.imdbId } : null));
+        }
         if (streams.length > 0) {
           // Pre-select 1080p stream with highest seeders, or first stream
           const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
@@ -180,8 +184,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
       if (res.ok) {
         const details: MovieDetails = await res.json();
         setSelectedMedia(details);
-        if (details.type === "tv" && details.seasons && details.seasons.length > 0) {
-          const firstSeasonNum = details.seasons[0].seasonNumber || 1;
+        if (details.type === "tv") {
+          const firstSeasonNum =
+            details.seasons && details.seasons.length > 0 && details.seasons[0].seasonNumber
+              ? details.seasons[0].seasonNumber
+              : 1;
           setSelectedSeason(firstSeasonNum);
           setSelectedEpisode(1);
           fetchSeasonEpisodes(details.id, firstSeasonNum);
@@ -507,7 +514,10 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       <span>📺 1. Select Season</span>
                     </h4>
                     <div className={styles.seasonSelector}>
-                      {(selectedMedia.seasons || []).map((s) => (
+                      {(selectedMedia.seasons && selectedMedia.seasons.length > 0
+                        ? selectedMedia.seasons
+                        : [{ id: 1, seasonNumber: 1, name: "Season 1", episodeCount: selectedMedia.numberOfEpisodes || 10 }]
+                      ).map((s) => (
                         <button
                           key={s.id}
                           type="button"

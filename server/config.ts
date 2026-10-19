@@ -69,4 +69,5 @@ const defaults = {
 export default {
   ...defaults,
   ...process.env,
+  TMDB_API_KEY: (process.env.TMDB_API_KEY && process.env.TMDB_API_KEY.trim()) || defaults.TMDB_API_KEY,
 };
