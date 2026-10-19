@@ -112,6 +112,13 @@ const PRESEEDED_IMDB: Record<string, string> = {
   "the shawshank redemption": "tt0111161",
 };
 
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
 const imdbIdMap = new Map<string, string>();
 
 export async function resolveImdbId(
@@ -145,8 +152,8 @@ export async function resolveImdbId(
       const letter = q[0] || "a";
       const url = `https://v3.sg.media-imdb.com/suggestion/${letter}/${encodeURIComponent(q)}.json`;
       const r = await axios.get(url, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-        timeout: 3000,
+        headers: BROWSER_HEADERS,
+        timeout: 4000,
       });
       const items = r.data?.d || [];
       const match =
@@ -168,7 +175,7 @@ export async function resolveImdbId(
     try {
       const cType = type === "tv" ? "series" : "movie";
       const url = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(rawTitle)}.json`;
-      const r = await axios.get(url, { timeout: 3500 });
+      const r = await axios.get(url, { headers: BROWSER_HEADERS, timeout: 4500 });
       const metas = r.data?.metas || [];
       const match =
         metas.find((m: any) => m.name.toLowerCase() === cleanTitle) ||
@@ -186,7 +193,7 @@ export async function resolveImdbId(
     try {
       const apiKey = config.TMDB_API_KEY;
       const url = `${TMDB_BASE_URL}/${type}/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids`;
-      const response = await axios.get(url, { timeout: 3500 });
+      const response = await axios.get(url, { headers: BROWSER_HEADERS, timeout: 4000 });
       const found =
         response.data?.external_ids?.imdb_id || response.data?.imdb_id;
       if (found && typeof found === "string" && found.startsWith("tt")) {
@@ -521,7 +528,10 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
         ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
         : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
 
-    const response = await axios.get(stremioEndpoint, { timeout: 9000 });
+    const response = await axios.get(stremioEndpoint, {
+      headers: BROWSER_HEADERS,
+      timeout: 12000,
+    });
     const rawStreams = response.data?.streams || [];
 
     const formatted = rawStreams.map((s: any, idx: number) => {

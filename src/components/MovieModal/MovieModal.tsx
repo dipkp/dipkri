@@ -135,6 +135,121 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     }
   };
 
+  const fetchClientSideStreams = async (
+    media: MovieDetails,
+    season: number,
+    episode: number
+  ): Promise<MovieDirectStream[]> => {
+    try {
+      let imdbId = media.imdbId;
+
+      // 1. If no imdbId, attempt fast Cinemeta search via public CORS
+      if (!imdbId && media.title) {
+        try {
+          const cType = media.type === "tv" ? "series" : "movie";
+          const cinemetaUrl = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(media.title)}.json`;
+          const cRes = await fetch(cinemetaUrl);
+          if (cRes.ok) {
+            const cData = await cRes.json();
+            const metas = cData?.metas || [];
+            const match =
+              metas.find((m: any) => m.name.toLowerCase() === media.title.toLowerCase()) ||
+              metas[0];
+            if (match?.id && match.id.startsWith("tt")) {
+              imdbId = match.id;
+              media.imdbId = match.id;
+              setSelectedMedia((prev) => (prev ? { ...prev, imdbId: match.id } : null));
+            }
+          }
+        } catch (cErr) {
+          console.warn("Client-side Cinemeta lookup failed:", cErr);
+        }
+      }
+
+      if (!imdbId) return [];
+
+      // 2. Fetch directly from Torrentio via CORS
+      const stremioEndpoint =
+        media.type === "tv"
+          ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
+          : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
+
+      const response = await fetch(stremioEndpoint);
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      const rawStreams = data?.streams || [];
+
+      const formatted: MovieDirectStream[] = rawStreams.map((s: any, idx: number) => {
+        const titleStr = s.title || "";
+        const nameStr = s.name || "";
+        const combined = `${nameStr} ${titleStr}`;
+
+        const seederMatch = titleStr.match(/👤\s*(\d+)/);
+        const sizeMatch = titleStr.match(/💾\s*([\d.]+\s*[GM]B)/i);
+        const seeders = seederMatch ? parseInt(seederMatch[1], 10) : 0;
+        const size = sizeMatch ? sizeMatch[1] : "";
+
+        const qualityMatch = combined.match(/(2160p|4k|1080p|720p|480p)/i);
+        const quality = qualityMatch ? qualityMatch[1].toUpperCase() : "HD";
+
+        let codec = "";
+        if (/x265|hevc/i.test(combined)) codec = "HEVC";
+        else if (/x264|h264|avc/i.test(combined)) codec = "x264";
+
+        const titleLines = titleStr.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        const episodeFile =
+          s.behaviorHints?.filename ||
+          (titleLines.length > 1 && !titleLines[1].includes("👤") ? titleLines[1] : "");
+        const cleanTitle = media.type === "tv" && episodeFile ? episodeFile : titleLines[0] || "Stream";
+
+        const trackers = (s.sources || [])
+          .filter((src: string) => src.startsWith("tracker:"))
+          .map((src: string) => src.replace("tracker:", ""));
+        const trackerQuery =
+          trackers.length > 0
+            ? "&tr=" + trackers.map((t: string) => encodeURIComponent(t)).join("&tr=")
+            : "";
+
+        const displayTitle = media.title || "Movie";
+        const seasonEpSuffix = media.type === "tv" && season && episode ? ` S${season}E${episode}` : "";
+        const dn = encodeURIComponent(`${displayTitle}${seasonEpSuffix} ${quality}`);
+
+        const seasonParam = media.type === "tv" && season ? `&season=${season}` : "";
+        const episodeParam = media.type === "tv" && episode ? `&episode=${episode}` : "";
+        const fileIndexParam = s.fileIdx != null ? `&fileIndex=${s.fileIdx}` : "";
+        const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}&isMovie=1${seasonParam}${episodeParam}${fileIndexParam}${trackerQuery}`;
+
+        const episodeBadge = media.type === "tv" && season && episode ? `📺 S${season}:E${episode} • ` : "";
+        const label = `${episodeBadge}${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
+
+        return {
+          id: idx,
+          label,
+          quality,
+          codec,
+          seeders,
+          size,
+          cleanTitle,
+          infoHash: s.infoHash,
+          fileIdx: s.fileIdx,
+          magnet,
+        };
+      });
+
+      formatted.sort((a, b) => {
+        const aCompat = a.codec === "x264" ? 60 : 0;
+        const bCompat = b.codec === "x264" ? 60 : 0;
+        return b.seeders + bCompat - (a.seeders + aCompat);
+      });
+
+      return formatted.slice(0, 20);
+    } catch (err) {
+      console.warn("Client-side direct torrent fetch error:", err);
+      return [];
+    }
+  };
+
   const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
     setLoadingStreams(true);
     try {
@@ -144,26 +259,40 @@ export const MovieModal: React.FC<MovieModalProps> = ({
       const seasonParam = media.type === "tv" ? `&season=${season}&episode=${episode}` : "";
       const titleParam = `&title=${encodeURIComponent(media.title)}`;
 
-      const res = await fetch(
-        `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const streams: MovieDirectStream[] = data.streams || [];
-        setDirectStreams(streams);
-        if (data.imdbId && (!media.imdbId || media.imdbId !== data.imdbId)) {
-          media.imdbId = data.imdbId;
-          setSelectedMedia((prev) => (prev ? { ...prev, imdbId: data.imdbId } : null));
+      let streams: MovieDirectStream[] = [];
+
+      // 1. Try server-side streams endpoint first
+      try {
+        const res = await fetch(
+          `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          streams = data.streams || [];
+          if (data.imdbId && (!media.imdbId || media.imdbId !== data.imdbId)) {
+            media.imdbId = data.imdbId;
+            setSelectedMedia((prev) => (prev ? { ...prev, imdbId: data.imdbId } : null));
+          }
         }
-        if (streams.length > 0) {
-          // Pre-select 1080p stream with highest seeders, or first stream
-          const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
-          setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
-          setPlaybackMode("direct");
-        } else {
-          // Fallback to web mirror if no direct streams found
-          setPlaybackMode("web_mirror");
-        }
+      } catch (serverErr) {
+        console.warn("Backend streams fetch failed, attempting client fallback:", serverErr);
+      }
+
+      // 2. If server returns 0 streams (e.g. Render datacenter IP blocked/rate-limited by Torrentio),
+      // seamlessly fetch directly from Torrentio via CORS in user's browser!
+      if (streams.length === 0) {
+        streams = await fetchClientSideStreams(media, season, episode);
+      }
+
+      setDirectStreams(streams);
+      if (streams.length > 0) {
+        // Pre-select 1080p stream with highest seeders, or first stream
+        const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
+        setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
+        setPlaybackMode("direct");
+      } else {
+        // Fallback to web mirror if no direct streams found
+        setPlaybackMode("web_mirror");
       }
     } catch (e) {
       console.warn("Failed to fetch direct streams:", e);
