@@ -313,7 +313,9 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
       else if (/x264|h264|avc/i.test(combined)) codec = "x264";
 
       // Clean release title for display
-      const cleanTitle = titleStr.split("\n")[0].trim();
+      const titleLines = titleStr.split("\n").map((l: string) => l.trim()).filter(Boolean);
+      const episodeFile = s.behaviorHints?.filename || (titleLines.length > 1 && !titleLines[1].includes("👤") ? titleLines[1] : "");
+      const cleanTitle = (type === "tv" && episodeFile) ? episodeFile : (titleLines[0] || "Stream");
 
       // Collect announce trackers
       const trackers = (s.sources || [])
@@ -326,13 +328,16 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
 
       // Media title for display in player
       const displayTitle = rawTitle || "Movie";
-      const seasonEpSuffix = type === "tv" ? ` S${season}E${episode}` : "";
+      const seasonEpSuffix = type === "tv" && season && episode ? ` S${season}E${episode}` : "";
       const dn = encodeURIComponent(`${displayTitle}${seasonEpSuffix} ${quality}`);
 
+      const seasonParam = type === "tv" && season ? `&season=${season}` : "";
+      const episodeParam = type === "tv" && episode ? `&episode=${episode}` : "";
       const fileIndexParam = s.fileIdx != null ? `&fileIndex=${s.fileIdx}` : "";
-      const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}&isMovie=1${fileIndexParam}${trackerQuery}`;
+      const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}&isMovie=1${seasonParam}${episodeParam}${fileIndexParam}${trackerQuery}`;
 
-      const label = `${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
+      const episodeBadge = type === "tv" && season && episode ? `📺 S${season}:E${episode} • ` : "";
+      const label = `${episodeBadge}${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
 
       return {
         id: idx,

@@ -499,6 +499,97 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               </div>
 
+              {/* TV Series: Season selector & Episode list (Select episode first) */}
+              {selectedMedia.type === "tv" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14, marginBottom: 8 }}>
+                  <div className={styles.serverSection}>
+                    <h4 className={styles.sectionHeading}>
+                      <span>📺 1. Select Season</span>
+                    </h4>
+                    <div className={styles.seasonSelector}>
+                      {(selectedMedia.seasons || []).map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`${styles.seasonPill} ${selectedSeason === s.seasonNumber ? styles.seasonPillActive : ""}`}
+                          onClick={() => handleSeasonSelect(s.seasonNumber)}
+                        >
+                          {s.name} ({s.episodeCount} eps)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <h4 className={styles.sectionHeading} style={{ marginTop: 4 }}>
+                    <span>📺 2. Select Episode (Active: Season {selectedSeason} • Episode {selectedEpisode})</span>
+                  </h4>
+
+                  {loadingEpisodes ? (
+                    <div className={styles.loadingSpinner}>
+                      <Loader size="sm" color="indigo" />
+                      <span>Loading episodes...</span>
+                    </div>
+                  ) : (
+                    <div className={styles.episodeGrid}>
+                      {episodes.map((ep) => (
+                        <div
+                          key={ep.id}
+                          className={`${styles.episodeCard} ${selectedEpisode === ep.episodeNumber ? styles.streamCardActive : ""}`}
+                          onClick={() => handleSelectEpisode(ep.episodeNumber)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <div className={styles.episodeLeft}>
+                            {ep.still ? (
+                              <img
+                                src={ep.still}
+                                alt={ep.name}
+                                className={styles.episodeThumb}
+                              />
+                            ) : (
+                              <div className={styles.episodeThumb} />
+                            )}
+                            <div className={styles.episodeInfo}>
+                              <span className={styles.episodeNumber}>
+                                Season {selectedSeason} • Episode {ep.episodeNumber}
+                                {selectedEpisode === ep.episodeNumber ? " (Selected)" : ""}
+                              </span>
+                              <h5 className={styles.episodeName}>{ep.name}</h5>
+                              <p className={styles.episodeOverview}>
+                                {ep.overview || "No episode synopsis."}
+                              </p>
+                            </div>
+                          </div>
+                          <div className={styles.episodeActions}>
+                            <button
+                              type="button"
+                              className={styles.episodePlayBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlayEpisode(selectedSeason, ep.episodeNumber);
+                              }}
+                              title="Play this episode directly in room"
+                            >
+                              ▶ Play
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.episodeQueueBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQueueMedia(selectedSeason, ep.episodeNumber);
+                              }}
+                              title="Add to queue"
+                            >
+                              + Queue
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Player Mode Switcher Tabs */}
               <div className={styles.playerModeTabs}>
                 <button
@@ -683,97 +774,6 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   >
                     {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
                   </button>
-                </div>
-              )}
-
-              {/* TV Series: Season selector & Episode list */}
-              {selectedMedia.type === "tv" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
-                  <div className={styles.serverSection}>
-                    <h4 className={styles.sectionHeading}>
-                      <span>📺 Select Season</span>
-                    </h4>
-                    <div className={styles.seasonSelector}>
-                      {(selectedMedia.seasons || []).map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className={`${styles.seasonPill} ${selectedSeason === s.seasonNumber ? styles.seasonPillActive : ""}`}
-                          onClick={() => handleSeasonSelect(s.seasonNumber)}
-                        >
-                          {s.name} ({s.episodeCount} eps)
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <h4 className={styles.sectionHeading} style={{ marginTop: 4 }}>
-                    <span>Episodes ({episodes.length})</span>
-                  </h4>
-
-                  {loadingEpisodes ? (
-                    <div className={styles.loadingSpinner}>
-                      <Loader size="sm" color="indigo" />
-                      <span>Loading episodes...</span>
-                    </div>
-                  ) : (
-                    <div className={styles.episodeGrid}>
-                      {episodes.map((ep) => (
-                        <div
-                          key={ep.id}
-                          className={`${styles.episodeCard} ${selectedEpisode === ep.episodeNumber ? styles.streamCardActive : ""}`}
-                          onClick={() => handleSelectEpisode(ep.episodeNumber)}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <div className={styles.episodeLeft}>
-                            {ep.still ? (
-                              <img
-                                src={ep.still}
-                                alt={ep.name}
-                                className={styles.episodeThumb}
-                              />
-                            ) : (
-                              <div className={styles.episodeThumb} />
-                            )}
-                            <div className={styles.episodeInfo}>
-                              <span className={styles.episodeNumber}>
-                                Season {selectedSeason} • Episode {ep.episodeNumber}
-                                {selectedEpisode === ep.episodeNumber ? " (Selected)" : ""}
-                              </span>
-                              <h5 className={styles.episodeName}>{ep.name}</h5>
-                              <p className={styles.episodeOverview}>
-                                {ep.overview || "No episode synopsis."}
-                              </p>
-                            </div>
-                          </div>
-                          <div className={styles.episodeActions}>
-                            <button
-                              type="button"
-                              className={styles.episodePlayBtn}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePlayEpisode(selectedSeason, ep.episodeNumber);
-                              }}
-                              title="Play in room"
-                            >
-                              ▶ Play
-                            </button>
-                            <button
-                              type="button"
-                              className={styles.episodeQueueBtn}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleQueueMedia(selectedSeason, ep.episodeNumber);
-                              }}
-                              title="Add to queue"
-                            >
-                              + Queue
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 

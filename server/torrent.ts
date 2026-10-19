@@ -109,6 +109,50 @@ export function extractFileIndexFromRequest(req: any): number | undefined {
 }
 
 /**
+ * Extracts season number safely from query, URL, or dn parameter (e.g. S01E03, season=1).
+ */
+export function extractSeasonFromRequest(req: any): number | undefined {
+  if (req.query?.season != null && req.query.season !== "") {
+    const parsed = parseInt(String(req.query.season), 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  const fullUrl = req.originalUrl || req.url || "";
+  const match =
+    fullUrl.match(/[?&]season=(\d+)/i) ||
+    fullUrl.match(/%26season%3D(\d+)/i) ||
+    fullUrl.match(/[sS](\d+)[eE]\d+/i) ||
+    fullUrl.match(/%20S(\d+)E\d+/i) ||
+    fullUrl.match(/\bS(\d+)\b/i);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/**
+ * Extracts episode number safely from query, URL, or dn parameter (e.g. S01E03, episode=3).
+ */
+export function extractEpisodeFromRequest(req: any): number | undefined {
+  if (req.query?.episode != null && req.query.episode !== "") {
+    const parsed = parseInt(String(req.query.episode), 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  const fullUrl = req.originalUrl || req.url || "";
+  const match =
+    fullUrl.match(/[?&]episode=(\d+)/i) ||
+    fullUrl.match(/%26episode%3D(\d+)/i) ||
+    fullUrl.match(/[sS]\d+[eE](\d+)/i) ||
+    fullUrl.match(/%20S\d+E(\d+)/i) ||
+    fullUrl.match(/\bE(\d+)\b/i);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/**
  * Extracts the full magnet link from the request query or raw URL,
  * safely preserving all tracker parameters even if unencoded.
  */
@@ -119,10 +163,14 @@ export function extractMagnetFromRequest(req: any): string {
     let sub = fullUrl.slice(idx + 8);
     const cutParams = [
       "&fileIndex=",
+      "&season=",
+      "&episode=",
       "&track=",
       "&ss=",
       "&streamIndex=",
       "%26fileIndex%3D",
+      "%26season%3D",
+      "%26episode%3D",
       "%26track%3D",
       "%26ss%3D",
       "%26streamIndex%3D",
@@ -148,7 +196,14 @@ export function extractMagnetFromRequest(req: any): string {
         break;
       }
     }
-    const decodedCutParams = ["&fileIndex=", "&track=", "&ss=", "&streamIndex="];
+    const decodedCutParams = [
+      "&fileIndex=",
+      "&season=",
+      "&episode=",
+      "&track=",
+      "&ss=",
+      "&streamIndex=",
+    ];
     for (const param of decodedCutParams) {
       const pIdx = sub.indexOf(param);
       if (pIdx !== -1) {
@@ -321,6 +376,129 @@ export function pickBestVideoFile(
   return sorted[0];
 }
 
+/**
+ * Optimizes WebTorrent bandwidth & memory:
+ * Deselects all other files in the torrent so WebTorrent ONLY downloads chunks for the active target file!
+ */
+export function selectOnlyTargetFile(
+  torrent: WebTorrent.Torrent,
+  target: WebTorrent.TorrentFile
+): WebTorrent.TorrentFile {
+  try {
+    if (torrent.files && torrent.files.length > 1) {
+      for (const f of torrent.files) {
+        if (f !== target) {
+          try { (f as any).deselect?.(); } catch {}
+        }
+      }
+      try { (target as any).select?.(); } catch {}
+    }
+  } catch {}
+  return target;
+}
+
+/**
+ * Resolves the EXACT video file to stream.
+ * For TV Series with season packs (containing 10-25 episodes),
+ * it matches the specific Season & Episode requested via regex patterns,
+ * natural index sorting, or fileIndex, and deselects all other episodes!
+ */
+export function resolveTargetVideoFile(
+  torrent: WebTorrent.Torrent,
+  req: any
+): WebTorrent.TorrentFile | undefined {
+  if (!torrent || !torrent.files || torrent.files.length === 0) return undefined;
+
+  const fileIndex = extractFileIndexFromRequest(req);
+  const season = extractSeasonFromRequest(req);
+  const episode = extractEpisodeFromRequest(req);
+
+  const videoExtensions = [".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".ts"];
+  const videoFiles = torrent.files.filter((f) =>
+    videoExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
+  );
+
+  // Filter out tiny sample clips or trailers (< 35MB)
+  const withoutSamples = videoFiles.filter((f) => {
+    const lower = f.name.toLowerCase();
+    const isSample = lower.includes("sample") || lower.includes("trailer");
+    const isTiny = f.length < 35 * 1024 * 1024;
+    return !(isSample && isTiny);
+  });
+  const candidates = withoutSamples.length > 0 ? withoutSamples : videoFiles.length > 0 ? videoFiles : torrent.files;
+
+  // 1. If an individual episode is requested (Web Series mode):
+  if (episode != null && !isNaN(episode)) {
+    const sStr = season != null ? String(season) : undefined;
+    const epStr = String(episode);
+
+    // Regex Pattern A: S01E03, S1E3, s01e03
+    const sEpRegex = sStr
+      ? new RegExp(`[sS]0?${sStr}[eE]0?${epStr}\\b`, "i")
+      : new RegExp(`[eE]0?${epStr}\\b`, "i");
+
+    // Regex Pattern B: 1x03, 1x3
+    const xRegex = sStr
+      ? new RegExp(`\\b0?${sStr}[xX]0?${epStr}\\b`, "i")
+      : undefined;
+
+    // Regex Pattern C: Episode 03, Ep 03, Part 03
+    const epWordRegex = new RegExp(`(?:episode|ep|part)[\\s._-]*0?${epStr}\\b`, "i");
+
+    // Regex Pattern D: standalone episode number at word boundary (e.g. "Series Name - 03 - ...")
+    const standAloneNumRegex = new RegExp(`(?:^|[\\W_])0?${epStr}(?:[\\W_]|$)`, "i");
+
+    // Search candidate video files
+    for (const f of candidates) {
+      const name = f.name;
+      const path = (f as any).path || "";
+      if (sEpRegex.test(name) || sEpRegex.test(path)) {
+        return selectOnlyTargetFile(torrent, f);
+      }
+      if (xRegex && (xRegex.test(name) || xRegex.test(path))) {
+        return selectOnlyTargetFile(torrent, f);
+      }
+      if (epWordRegex.test(name) || epWordRegex.test(path)) {
+        return selectOnlyTargetFile(torrent, f);
+      }
+    }
+
+    for (const f of candidates) {
+      if (standAloneNumRegex.test(f.name)) {
+        return selectOnlyTargetFile(torrent, f);
+      }
+    }
+
+    // If fileIndex was specifically provided and points to a video in candidates
+    if (fileIndex != null && !isNaN(fileIndex) && torrent.files[fileIndex]) {
+      const f = torrent.files[fileIndex];
+      const isVideo = videoExtensions.some((ext) => f.name.toLowerCase().endsWith(ext));
+      if (isVideo) {
+        return selectOnlyTargetFile(torrent, f);
+      }
+    }
+
+    // Natural alphabetical/numeric sorted order fallback:
+    // S01E01, S01E02, S01E03...
+    const sorted = [...candidates].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    );
+    const targetIdx = episode - 1;
+    if (targetIdx >= 0 && targetIdx < sorted.length) {
+      return selectOnlyTargetFile(torrent, sorted[targetIdx]);
+    }
+  }
+
+  // 2. Direct fileIndex fallback
+  if (fileIndex != null && !isNaN(fileIndex) && torrent.files[fileIndex]) {
+    return selectOnlyTargetFile(torrent, torrent.files[fileIndex]);
+  }
+
+  // 3. Overall best video file
+  const chosen = pickBestVideoFile(torrent.files);
+  return chosen ? selectOnlyTargetFile(torrent, chosen) : undefined;
+}
+
 export interface TorrentEpisodeFile {
   name: string;
   index: number;
@@ -454,14 +632,7 @@ export async function handleTorrentStream(req: any, res: any) {
 
   try {
     const torrent = await getOrAddTorrent(magnetUri);
-    let targetFile: WebTorrent.TorrentFile | undefined;
-
-    const fileIndex = extractFileIndexFromRequest(req);
-    if (fileIndex != null && !isNaN(fileIndex) && torrent.files[fileIndex]) {
-      targetFile = torrent.files[fileIndex];
-    } else {
-      targetFile = pickBestVideoFile(torrent.files);
-    }
+    const targetFile = resolveTargetVideoFile(torrent, req);
 
     if (!targetFile) {
       return res.status(404).send("No playable file found in torrent");
@@ -581,18 +752,22 @@ export async function handleTorrentInfo(req: any, res: any) {
 
   const infoHash = extractInfoHash(magnetUri) || magnetUri;
   const fileIndex = extractFileIndexFromRequest(req);
-  const cacheKey = `${infoHash}_file_${fileIndex != null ? fileIndex : "default"}`;
+  const season = extractSeasonFromRequest(req);
+  const episode = extractEpisodeFromRequest(req);
+  const sEpKey = season != null && episode != null ? `_s${season}e${episode}` : "";
+  const cacheKey = `${infoHash}${sEpKey}_file_${fileIndex != null ? fileIndex : "default"}`;
   if (streamInfoCache.has(cacheKey)) {
     return res.json(streamInfoCache.get(cacheKey));
   }
 
   try {
     const streamPort = config.PORT || process.env.PORT || 8080;
+    const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
     let streamUrl = magnetUri;
     if (magnetUri.startsWith("/")) {
       streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
     }
 
     execFile(
@@ -668,8 +843,11 @@ export async function handleTorrentAudio(req: any, res: any) {
   const track = parseInt(req.query?.track || "0", 10);
   const ss = parseFloat(req.query?.ss || "0");
   const fileIndex = extractFileIndexFromRequest(req);
+  const season = extractSeasonFromRequest(req);
+  const episode = extractEpisodeFromRequest(req);
+  const sEpKey = season != null && episode != null ? `_s${season}e${episode}` : "";
   const infoHash = extractInfoHash(magnetUri) || magnetUri;
-  const cacheKey = `${infoHash}_file_${fileIndex != null ? fileIndex : "default"}_track_${track}`;
+  const cacheKey = `${infoHash}${sEpKey}_file_${fileIndex != null ? fileIndex : "default"}_track_${track}`;
 
   const cached = audioTranscodeMap.get(cacheKey);
 
@@ -726,7 +904,8 @@ export async function handleTorrentAudio(req: any, res: any) {
     if (magnetUri.startsWith("/")) {
       streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
     }
 
     const args: string[] = [
@@ -829,14 +1008,17 @@ export async function handleTorrentSubtitle(req: any, res: any) {
 
   const streamIndex = parseInt(req.query?.streamIndex || "0", 10);
   const fileIndex = extractFileIndexFromRequest(req);
+  const season = extractSeasonFromRequest(req);
+  const episode = extractEpisodeFromRequest(req);
 
   try {
     const streamPort = config.PORT || process.env.PORT || 8080;
+    const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
     let streamUrl = magnetUri;
     if (magnetUri.startsWith("/")) {
       streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
     } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}`;
+      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
     }
 
     const args: string[] = [
