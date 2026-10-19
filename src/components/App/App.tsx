@@ -341,6 +341,11 @@ export class App extends React.Component<AppProps, AppState> {
   };
   socket: Socket = null!;
   videoChatRef = React.createRef<VideoChat>();
+  mobileVideoChatRef = React.createRef<VideoChat>();
+
+  getActiveVideoChat = (): VideoChat | null => {
+    return this.videoChatRef.current || this.mobileVideoChatRef.current || null;
+  };
   mediasoupPubSocket: Socket | null = null;
   mediasoupSubSocket: Socket | null = null;
   ytDebounce = true;
@@ -3027,12 +3032,12 @@ export class App extends React.Component<AppProps, AppState> {
         unreadCount={this.state.unreadCount}
         onClearUnread={() => this.setState({ unreadCount: 0 })}
         participants={this.state.participants}
-        onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-        onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-        onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-        onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-        isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-        isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+        onJoinVideo={() => this.getActiveVideoChat()?.setupWebRTC()}
+        onLeaveVideo={() => this.getActiveVideoChat()?.stopWebRTC()}
+        onToggleVideo={() => this.getActiveVideoChat()?.toggleVideoWebRTC()}
+        onToggleAudio={() => this.getActiveVideoChat()?.toggleAudioWebRTC()}
+        isVideoMuted={!this.getActiveVideoChat()?.getVideoWebRTC()}
+        isAudioMuted={!this.getActiveVideoChat()?.getAudioWebRTC()}
         downloaded={this.state.downloaded}
         total={this.state.total}
         speed={this.state.speed}
@@ -3583,12 +3588,12 @@ export class App extends React.Component<AppProps, AppState> {
               nameMap={this.state.nameMap}
               pictureMap={this.state.pictureMap}
               socket={this.socket}
-              onJoinVideo={() => this.videoChatRef.current?.setupWebRTC()}
-              onLeaveVideo={() => this.videoChatRef.current?.stopWebRTC()}
-              onToggleVideo={() => this.videoChatRef.current?.toggleVideoWebRTC()}
-              onToggleAudio={() => this.videoChatRef.current?.toggleAudioWebRTC()}
-              isVideoMuted={!this.videoChatRef.current?.getVideoWebRTC()}
-              isAudioMuted={!this.videoChatRef.current?.getAudioWebRTC()}
+              onJoinVideo={() => this.getActiveVideoChat()?.setupWebRTC()}
+              onLeaveVideo={() => this.getActiveVideoChat()?.stopWebRTC()}
+              onToggleVideo={() => this.getActiveVideoChat()?.toggleVideoWebRTC()}
+              onToggleAudio={() => this.getActiveVideoChat()?.toggleAudioWebRTC()}
+              isVideoMuted={!this.getActiveVideoChat()?.getVideoWebRTC()}
+              isAudioMuted={!this.getActiveVideoChat()?.getAudioWebRTC()}
               isFullScreen={this.state.fullScreen}
             />
           </>
@@ -3887,7 +3892,7 @@ export class App extends React.Component<AppProps, AppState> {
                       </span>
                     </div>
                     <VideoChat
-                      ref={this.videoChatRef}
+                      ref={this.mobileVideoChatRef}
                       socket={this.socket}
                       participants={this.state.participants}
                       nameMap={this.state.nameMap}

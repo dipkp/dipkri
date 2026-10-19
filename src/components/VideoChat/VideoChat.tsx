@@ -33,11 +33,12 @@ interface VideoChatProps {
   getLeaderTime: () => number;
 }
 
-export class VideoChat extends React.Component<VideoChatProps> {
+export class VideoChat extends React.Component<VideoChatProps, { mediaError?: string }> {
   static contextType = MetadataContext;
   declare context: React.ContextType<typeof MetadataContext>;
 
   socket = this.props.socket;
+  state: { mediaError?: string } = {};
 
   componentDidMount() {
     this.socket.on("signal", this.handleSignal);
@@ -169,8 +170,13 @@ export class VideoChat extends React.Component<VideoChatProps> {
     }
   };
 
+
   setupWebRTC = async () => {
+    this.setState({ mediaError: undefined });
     let stream: MediaStream | undefined;
+    let videoFailed = false;
+
+    // Step 1: Try camera + mic together
     try {
       stream = await navigator?.mediaDevices?.getUserMedia({
         audio: {
@@ -184,8 +190,15 @@ export class VideoChat extends React.Component<VideoChatProps> {
           frameRate: { ideal: 30, max: 30 },
         },
       });
-    } catch (e) {
-      console.warn("Camera+Mic request failed, falling back to audio only:", e);
+    } catch (e: any) {
+      videoFailed = true;
+      const errName = e?.name || "";
+      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+        this.setState({ mediaError: "Camera/Mic permission denied. Please allow access in browser settings and try again." });
+        return;
+      }
+      console.warn("Camera+Mic request failed, trying audio only:", errName, e?.message);
+      // Step 2: Fall back to audio-only
       try {
         stream = await navigator?.mediaDevices?.getUserMedia({
           audio: {
@@ -195,16 +208,31 @@ export class VideoChat extends React.Component<VideoChatProps> {
           },
           video: false,
         });
-      } catch (err) {
-        console.warn("Microphone request also failed:", err);
+      } catch (err: any) {
+        const audioErrName = err?.name || "";
+        if (audioErrName === "NotAllowedError" || audioErrName === "PermissionDeniedError") {
+          this.setState({ mediaError: "Microphone permission denied. Please allow access in browser settings." });
+        } else if (audioErrName === "NotFoundError" || audioErrName === "DevicesNotFoundError") {
+          this.setState({ mediaError: "No microphone found. Please connect a mic and try again." });
+        } else {
+          this.setState({ mediaError: `Could not access microphone: ${err?.message || audioErrName}` });
+        }
+        console.warn("Audio-only request also failed:", err);
+        return;
       }
     }
 
-    if (!stream) {
-      stream = new MediaStream();
+    if (!stream || stream.getTracks().length === 0) {
+      // getUserMedia returned nothing usable — don't join video chat
+      this.setState({ mediaError: "No media tracks available. Check your camera/microphone." });
+      return;
     }
 
     window.watchparty.ourStream = stream;
+    if (videoFailed) {
+      // Let user know they joined audio-only
+      this.setState({ mediaError: "📷 Camera not available — joined with audio only." });
+    }
     this.socket.emit("CMD:joinVideo");
     this.emitUserMute();
 
@@ -219,6 +247,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
     this.updateWebRTC();
     this.forceUpdate();
   };
+
 
   stopWebRTC = () => {
     const ourStream = window.watchparty.ourStream;
@@ -426,20 +455,68 @@ export class VideoChat extends React.Component<VideoChatProps> {
   render() {
     const { participants, pictureMap, nameMap, tsMap, socket, owner } =
       this.props;
+    const { mediaError } = this.state;
     const ourStream = window.watchparty.ourStream;
     const videoRefs = window.watchparty.videoRefs;
     const selfId = getOrCreateClientId();
+    const isInfoMsg = mediaError?.startsWith("📷");
     return (
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: "10px",
-          padding: "8px",
+          display: this.props.hide ? "none" : "flex",
+          flexDirection: "column",
           width: "100%",
           boxSizing: "border-box",
         }}
       >
+        {/* Media error / info banner */}
+        {mediaError && (
+          <div
+            style={{
+              margin: "8px 8px 4px",
+              padding: "8px 12px",
+              borderRadius: "10px",
+              fontSize: "12px",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              background: isInfoMsg
+                ? "rgba(99,102,241,0.15)"
+                : "rgba(239,68,68,0.15)",
+              border: `1px solid ${isInfoMsg ? "rgba(99,102,241,0.35)" : "rgba(239,68,68,0.35)"}`,
+              color: isInfoMsg ? "#a5b4fc" : "#f87171",
+            }}
+          >
+            <span style={{ flex: 1 }}>{mediaError}</span>
+            <button
+              onClick={() => this.setState({ mediaError: undefined })}
+              style={{
+                background: "none",
+                border: "none",
+                color: "inherit",
+                cursor: "pointer",
+                fontSize: "14px",
+                padding: "0 2px",
+                lineHeight: 1,
+              }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: "10px",
+            padding: "8px",
+            width: "100%",
+            boxSizing: "border-box",
+          }}
+        >
+
         {participants.map((p) => {
           const isSelf = p.id === selfId;
           const isUserInVideo = p.isVideoChat;
@@ -684,6 +761,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
             </div>
           );
         })}
+        </div>
       </div>
     );
   }

@@ -250,6 +250,15 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     }
   };
 
+  const prewarmTorrent = (stream?: MovieDirectStream, season = selectedSeason, episode = selectedEpisode) => {
+    if (!stream || !stream.magnet) return;
+    try {
+      const seasonParam = selectedMedia?.type === "tv" ? `&season=${season}&episode=${episode}` : "";
+      const fileIdxParam = stream.fileIdx != null ? `&fileIndex=${stream.fileIdx}` : "";
+      fetch(`/streamPrewarm?torrent=${encodeURIComponent(stream.magnet)}${seasonParam}${fileIdxParam}`).catch(() => {});
+    } catch {}
+  };
+
   const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
     setLoadingStreams(true);
     try {
@@ -286,10 +295,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
       setDirectStreams(streams);
       if (streams.length > 0) {
-        // Pre-select 1080p stream with highest seeders, or first stream
         const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
-        setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
+        const chosenIdx = bestIdx !== -1 ? bestIdx : 0;
+        setSelectedStreamIndex(chosenIdx);
         setPlaybackMode("direct");
+        prewarmTorrent(streams[chosenIdx], season, episode);
       } else {
         // Fallback to web mirror if no direct streams found
         setPlaybackMode("web_mirror");
@@ -779,7 +789,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <div
                               key={s.id}
                               className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
-                              onClick={() => setSelectedStreamIndex(idx)}
+                              onClick={() => {
+                                setSelectedStreamIndex(idx);
+                                prewarmTorrent(s);
+                              }}
+                              onMouseEnter={() => prewarmTorrent(s)}
                               onDoubleClick={() => handlePlaySelectedStream(idx)}
                             >
                               <div className={styles.streamQualityRow}>

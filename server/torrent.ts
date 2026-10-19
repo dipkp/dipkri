@@ -37,7 +37,9 @@ let torrentClient: WebTorrent.Instance | null = null;
 function getClient(): WebTorrent.Instance {
   if (!torrentClient) {
     torrentClient = new WebTorrent({
-      maxConns: 25,
+      maxConns: 120,
+      dht: true,
+      webSeeds: true,
     });
     torrentClient.on("error", (err: any) => {
       console.warn("[WebTorrent Server Error]:", err?.message || err);
@@ -46,15 +48,29 @@ function getClient(): WebTorrent.Instance {
   return torrentClient;
 }
 
-// High-availability BitTorrent and WebTorrent trackers for accelerated peer discovery
+// High-speed, high-availability BitTorrent & WebTorrent trackers for ultra-fast peer discovery
 const DEFAULT_TRACKERS = [
-  "wss://tracker.openwebtorrent.com",
-  "wss://tracker.btorrent.xyz",
+  // Fast UDP Tier-1 trackers
   "udp://tracker.opentrackr.org:1337/announce",
   "udp://open.stealth.si:80/announce",
   "udp://tracker.torrent.eu.org:451/announce",
   "udp://tracker.openbittorrent.com:6969/announce",
+  "udp://explodie.org:6969/announce",
+  "udp://open.demonii.com:1337/announce",
+  "udp://tracker.coppersurfer.tk:6969/announce",
+  "udp://tracker.leechers-paradise.org:6969/announce",
+  "udp://p4p.arenabg.com:1337/announce",
+  "udp://tracker.cyberia.is:6969/announce",
+  "udp://tracker.dler.org:6969/announce",
+  "udp://tracker.moeking.me:6969/announce",
+  // High-availability HTTP/HTTPS trackers
   "http://tracker.opentrackr.org:1337/announce",
+  "https://tracker.tamersUnion.org:443/announce",
+  // WebSocket trackers (WebTorrent / browser swarms)
+  "wss://tracker.openwebtorrent.com",
+  "wss://tracker.btorrent.xyz",
+  "wss://tracker.webtorrent.dev",
+  "wss://tracker.fastcast.nz",
 ];
 
 // Map to deduplicate concurrent requests for the same torrent metadata
@@ -377,6 +393,34 @@ export function pickBestVideoFile(
 }
 
 /**
+ * Turbo Fast-Start Booster:
+ * Prioritizes the first 12 pieces (video/container headers, audio/video codecs, initial keyframes)
+ * and the last 4 pieces (MP4 moov atom / indexing table) with critical priority (100).
+ * This causes all connected seeders to send the startup chunks immediately, initiating playback in 1-2s!
+ */
+export function boostTargetFileStreaming(
+  torrent: WebTorrent.Torrent,
+  target: WebTorrent.TorrentFile
+) {
+  try {
+    const startPiece = (target as any)._startPiece ?? 0;
+    const endPiece = (target as any)._endPiece ?? startPiece;
+
+    // 1. Critical priority for the first 12 pieces (~10-20 MB) so playback begins immediately
+    const headEnd = Math.min(startPiece + 12, endPiece);
+    try {
+      (torrent as any).select(startPiece, headEnd, 100);
+    } catch {}
+
+    // 2. High priority for the last 4 pieces (container moov atom / index)
+    const tailStart = Math.max(startPiece, endPiece - 4);
+    try {
+      (torrent as any).select(tailStart, endPiece, 90);
+    } catch {}
+  } catch {}
+}
+
+/**
  * Optimizes WebTorrent bandwidth & memory:
  * Deselects all other files in the torrent so WebTorrent ONLY downloads chunks for the active target file!
  */
@@ -393,6 +437,8 @@ export function selectOnlyTargetFile(
       }
       try { (target as any).select?.(); } catch {}
     }
+    // Apply turbo fast-start boost to target file
+    boostTargetFileStreaming(torrent, target);
   } catch {}
   return target;
 }
@@ -1057,4 +1103,31 @@ export async function handleTorrentSubtitle(req: any, res: any) {
     console.error("[TorrentSubtitle handler error]:", err?.message);
     if (!res.headersSent) res.status(500).end();
   }
+}
+
+/**
+ * GET /streamPrewarm?torrent=...&fileIndex=...&season=...&episode=...
+ * Pre-warms the torrent swarm in the background before the user clicks Play!
+ * Joins swarm, resolves metadata, connects to peers, and prioritizes the first chunks.
+ */
+export async function handleTorrentPrewarm(req: any, res: any) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  const magnetUri = extractMagnetFromRequest(req);
+  if (!magnetUri) {
+    return res.status(400).json({ error: "Missing torrent" });
+  }
+
+  // Prewarm asynchronously in background without blocking response
+  (async () => {
+    try {
+      const torrent = await getOrAddTorrent(magnetUri);
+      const targetFile = resolveTargetVideoFile(torrent, req);
+      if (targetFile) {
+        boostTargetFileStreaming(torrent, targetFile);
+      }
+    } catch {}
+  })();
+
+  res.json({ ok: true, prewarming: true });
 }

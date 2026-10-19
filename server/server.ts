@@ -34,6 +34,7 @@ import {
   handleTorrentAudio,
   handleTorrentInfo,
   handleTorrentSubtitle,
+  handleTorrentPrewarm,
 } from "./torrent.ts";
 import { movieRouter } from "./movieService.ts";
 
@@ -717,6 +718,7 @@ app.get("/progress", handleTorrentProgress);
 app.get("/streamAudio", handleTorrentAudio);
 app.get("/streamInfo", handleTorrentInfo);
 app.get("/streamSubtitle", handleTorrentSubtitle);
+app.get("/streamPrewarm", handleTorrentPrewarm);
 
 app.get("/resolveRoom/:vanity", async (req, res) => {
   const vanity = req.params.vanity;
