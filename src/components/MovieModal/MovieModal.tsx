@@ -46,6 +46,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
+  const [selectedEpisode, setSelectedEpisode] = useState(1);
   const [episodes, setEpisodes] = useState<MovieSeasonEpisode[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -182,6 +183,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         if (details.type === "tv" && details.seasons && details.seasons.length > 0) {
           const firstSeasonNum = details.seasons[0].seasonNumber || 1;
           setSelectedSeason(firstSeasonNum);
+          setSelectedEpisode(1);
           fetchSeasonEpisodes(details.id, firstSeasonNum);
           fetchDirectStreams(details, firstSeasonNum, 1);
         } else {
@@ -212,25 +214,47 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const handleSeasonSelect = (seasonNum: number) => {
     setSelectedSeason(seasonNum);
+    setSelectedEpisode(1);
     if (selectedMedia) {
       fetchSeasonEpisodes(selectedMedia.id, seasonNum);
       fetchDirectStreams(selectedMedia, seasonNum, 1);
     }
   };
 
-  const handlePlayMedia = (season = 1, episode = 1) => {
+  const handleSelectEpisode = (episodeNum: number) => {
+    setSelectedEpisode(episodeNum);
+    if (selectedMedia) {
+      fetchDirectStreams(selectedMedia, selectedSeason, episodeNum);
+    }
+  };
+
+  const handlePlaySelectedStream = (streamIdx?: number) => {
+    if (!selectedMedia) return;
+    const targetIdx = typeof streamIdx === "number" ? streamIdx : selectedStreamIndex;
+    const stream = directStreams[targetIdx] || directStreams[0];
+    if (stream && stream.magnet) {
+      onPlay(stream.magnet);
+      onClose();
+    }
+  };
+
+  const handlePlayMedia = (season = selectedSeason, episode = selectedEpisode) => {
     if (!selectedMedia) return;
 
-    if (playbackMode === "direct" && directStreams.length > 0) {
-      const stream = directStreams[selectedStreamIndex] || directStreams[0];
-      if (stream && stream.magnet) {
-        onPlay(stream.magnet);
-        onClose();
-        return;
+    if (playbackMode === "direct") {
+      if (directStreams.length > 0) {
+        const stream = directStreams[selectedStreamIndex] || directStreams[0];
+        if (stream && stream.magnet) {
+          onPlay(stream.magnet);
+          onClose();
+          return;
+        }
       }
+      alert("No direct high-speed streams available right now for this title. You can switch to Web Embed Mirror.");
+      return;
     }
 
-    // Web embed mirror fallback
+    // Web embed mirror fallback - ONLY when explicitly in web_mirror mode!
     const protocolUrl = createMovieProtocolUrl({
       tmdbId: String(selectedMedia.id),
       type: selectedMedia.type,
@@ -243,14 +267,16 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     onClose();
   };
 
-  const handleQueueMedia = (season = 1, episode = 1) => {
+  const handleQueueMedia = (season = selectedSeason, episode = selectedEpisode) => {
     if (!selectedMedia) return;
 
-    if (playbackMode === "direct" && directStreams.length > 0) {
-      const stream = directStreams[selectedStreamIndex] || directStreams[0];
-      if (stream && stream.magnet) {
-        onQueue(stream.magnet);
-        return;
+    if (playbackMode === "direct") {
+      if (directStreams.length > 0) {
+        const stream = directStreams[selectedStreamIndex] || directStreams[0];
+        if (stream && stream.magnet) {
+          onQueue(stream.magnet);
+          return;
+        }
       }
     }
 
@@ -267,8 +293,20 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const handlePlayEpisode = async (seasonNum: number, episodeNum: number) => {
     if (!selectedMedia) return;
+    setSelectedSeason(seasonNum);
+    setSelectedEpisode(episodeNum);
 
     if (playbackMode === "direct") {
+      // If directStreams are already loaded for this episode:
+      if (seasonNum === selectedSeason && episodeNum === selectedEpisode && directStreams.length > 0) {
+        const stream = directStreams[selectedStreamIndex] || directStreams[0];
+        if (stream && stream.magnet) {
+          onPlay(stream.magnet);
+          onClose();
+          return;
+        }
+      }
+
       setLoadingStreams(true);
       try {
         const imdbParam = selectedMedia.imdbId ? `&imdbId=${selectedMedia.imdbId}` : "";
@@ -283,20 +321,28 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         if (res.ok) {
           const data = await res.json();
           const streams: MovieDirectStream[] = data.streams || [];
+          setDirectStreams(streams);
           if (streams.length > 0) {
+            setSelectedStreamIndex(0);
             onPlay(streams[0].magnet);
             onClose();
+            return;
+          } else {
+            alert(`No direct streams found for Season ${seasonNum} Episode ${episodeNum}. You can switch to Web Embed Mirror.`);
             return;
           }
         }
       } catch (e) {
         console.warn("Direct episode stream error:", e);
+        alert("Failed to load direct stream. Please try again or switch to Web Embed Mirror.");
+        return;
       } finally {
         setLoadingStreams(false);
       }
+      return;
     }
 
-    // Web mirror fallback
+    // ONLY when user is in web_mirror mode:
     handlePlayMedia(seasonNum, episodeNum);
   };
 
@@ -483,7 +529,10 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   </div>
 
                   <h4 className={styles.sectionHeading}>
-                    <span>⚡ Available HD Streams ({directStreams.length})</span>
+                    <span>
+                      ⚡ Available HD Streams ({directStreams.length})
+                      {selectedMedia.type === "tv" ? ` — Season ${selectedSeason} Episode ${selectedEpisode}` : ""}
+                    </span>
                   </h4>
 
                   {loadingStreams ? (
@@ -492,35 +541,78 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       <span>Finding high-speed HD streams...</span>
                     </div>
                   ) : directStreams.length > 0 ? (
-                    <div className={styles.streamListGrid}>
-                      {directStreams.map((s, idx) => {
-                        const isSelected = selectedStreamIndex === idx;
-                        return (
-                          <div
-                            key={s.id}
-                            className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
-                            onClick={() => setSelectedStreamIndex(idx)}
-                          >
-                            <div className={styles.streamQualityRow}>
-                              <span className={styles.streamQualityBadge}>
-                                {isSelected ? "✓ " : ""}
-                                {s.quality}
+                    <>
+                      <div className={styles.streamListGrid}>
+                        {directStreams.map((s, idx) => {
+                          const isSelected = selectedStreamIndex === idx;
+                          return (
+                            <div
+                              key={s.id}
+                              className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
+                              onClick={() => setSelectedStreamIndex(idx)}
+                              onDoubleClick={() => handlePlaySelectedStream(idx)}
+                            >
+                              <div className={styles.streamQualityRow}>
+                                <span className={styles.streamQualityBadge}>
+                                  {isSelected ? "✓ " : ""}
+                                  {s.quality}
+                                </span>
+                                {s.codec && (
+                                  <span
+                                    className={styles.streamCodecBadge}
+                                    style={{
+                                      background: s.codec === "x264" ? "rgba(16, 185, 129, 0.2)" : undefined,
+                                      borderColor: s.codec === "x264" ? "#10b981" : undefined,
+                                      color: s.codec === "x264" ? "#6ee7b7" : undefined,
+                                    }}
+                                  >
+                                    {s.codec === "x264" ? "x264 (Universal)" : s.codec}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  className={styles.cardPlayBtn}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePlaySelectedStream(idx);
+                                  }}
+                                  title="Play this stream immediately in room"
+                                >
+                                  ▶ Play
+                                </button>
+                              </div>
+                              <div className={styles.streamMetaRow}>
+                                <span>💾 {s.size || "Direct Stream"}</span>
+                                <span className={s.seeders > 50 ? styles.streamSeedersGood : styles.streamSeedersOk}>
+                                  👤 {s.seeders} seeders
+                                </span>
+                              </div>
+                              <span className={styles.streamReleaseTitle} title={s.cleanTitle}>
+                                {s.cleanTitle}
                               </span>
-                              {s.codec && <span className={styles.streamCodecBadge}>{s.codec}</span>}
                             </div>
-                            <div className={styles.streamMetaRow}>
-                              <span>💾 {s.size || "Direct Stream"}</span>
-                              <span className={s.seeders > 50 ? styles.streamSeedersGood : styles.streamSeedersOk}>
-                                👤 {s.seeders} seeders
-                              </span>
-                            </div>
-                            <span className={styles.streamReleaseTitle} title={s.cleanTitle}>
-                              {s.cleanTitle}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Primary Action Row for Selected Direct Stream */}
+                      <div className={styles.actionRow} style={{ marginTop: 12 }}>
+                        <button
+                          type="button"
+                          className={styles.playRoomBtn}
+                          onClick={() => handlePlaySelectedStream()}
+                        >
+                          ▶ Play Selected Stream in Room
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.queueBtn}
+                          onClick={() => handleQueueMedia(selectedSeason, selectedEpisode)}
+                        >
+                          + Add to Queue
+                        </button>
+                      </div>
+                    </>
                   ) : (
                     <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                       No direct peer streams currently active for this specific release.
@@ -567,8 +659,8 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               )}
 
-              {/* Movie Primary Actions */}
-              {selectedMedia.type === "movie" ? (
+              {/* Web Mirror Movie Primary Actions */}
+              {playbackMode === "web_mirror" && selectedMedia.type === "movie" && (
                 <div className={styles.actionRow} style={{ marginTop: 12 }}>
                   <button
                     type="button"
@@ -584,18 +676,18 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   >
                     + Add to Queue
                   </button>
-                  {playbackMode === "web_mirror" && (
-                    <button
-                      type="button"
-                      className={styles.previewBtn}
-                      onClick={() => setIsPreviewing(!isPreviewing)}
-                    >
-                      {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={styles.previewBtn}
+                    onClick={() => setIsPreviewing(!isPreviewing)}
+                  >
+                    {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
+                  </button>
                 </div>
-              ) : (
-                /* TV Series: Season selector & Episode list */
+              )}
+
+              {/* TV Series: Season selector & Episode list */}
+              {selectedMedia.type === "tv" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
                   <div className={styles.serverSection}>
                     <h4 className={styles.sectionHeading}>
@@ -627,7 +719,12 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   ) : (
                     <div className={styles.episodeGrid}>
                       {episodes.map((ep) => (
-                        <div key={ep.id} className={styles.episodeCard}>
+                        <div
+                          key={ep.id}
+                          className={`${styles.episodeCard} ${selectedEpisode === ep.episodeNumber ? styles.streamCardActive : ""}`}
+                          onClick={() => handleSelectEpisode(ep.episodeNumber)}
+                          style={{ cursor: "pointer" }}
+                        >
                           <div className={styles.episodeLeft}>
                             {ep.still ? (
                               <img
@@ -641,6 +738,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <div className={styles.episodeInfo}>
                               <span className={styles.episodeNumber}>
                                 Season {selectedSeason} • Episode {ep.episodeNumber}
+                                {selectedEpisode === ep.episodeNumber ? " (Selected)" : ""}
                               </span>
                               <h5 className={styles.episodeName}>{ep.name}</h5>
                               <p className={styles.episodeOverview}>
@@ -652,7 +750,10 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <button
                               type="button"
                               className={styles.episodePlayBtn}
-                              onClick={() => handlePlayEpisode(selectedSeason, ep.episodeNumber)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlayEpisode(selectedSeason, ep.episodeNumber);
+                              }}
                               title="Play in room"
                             >
                               ▶ Play
@@ -660,7 +761,10 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <button
                               type="button"
                               className={styles.episodeQueueBtn}
-                              onClick={() => handleQueueMedia(selectedSeason, ep.episodeNumber)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQueueMedia(selectedSeason, ep.episodeNumber);
+                              }}
                               title="Add to queue"
                             >
                               + Queue

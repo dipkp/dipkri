@@ -348,8 +348,13 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
       };
     });
 
-    // Sort by seeders descending (highest seeders first for instant buffering)
-    formatted.sort((a: any, b: any) => b.seeders - a.seeders);
+    // Sort: boost x264/h264 streams by +60 virtual seeders so universally playable codecs rank first,
+    // while keeping massive swarms accessible.
+    formatted.sort((a: any, b: any) => {
+      const aCompat = a.codec === "x264" ? 60 : 0;
+      const bCompat = b.codec === "x264" ? 60 : 0;
+      return (b.seeders + bCompat) - (a.seeders + aCompat);
+    });
 
     // Keep top 20 best streams
     const result = {
