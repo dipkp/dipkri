@@ -63,6 +63,7 @@ const defaults = {
   TWITCH_PROXY_PATH: "", // Optional, URL of the server that can proxy twitch HLS stream playlists and segments
   VBROWSER_ADMIN_KEY: "", // Optional, the key to hit admin endpoints on the vbrowser
   OPENSUBTITLES_KEY: "", // Optional, key to OpenSubtitles API
+  TMDB_API_KEY: "4e44d9029b1270a757cddc766a1bcb63", // TMDB API key for Movie and TV series discovery
 };
 
 export default {

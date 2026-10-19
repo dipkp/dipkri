@@ -23,6 +23,12 @@ import {
   pickSingleLargeFile,
   isVBrowser,
   isDash,
+  isMovie,
+  isMovieStream,
+  parseMovieUrl,
+  buildMovieEmbedUrl,
+  createMovieProtocolUrl,
+  type MovieServer,
   resolveMediaUrl,
   VIDEO_MAX_HEIGHT_CSS,
   softWhite,
@@ -40,6 +46,7 @@ import { MultiStreamModal } from "../Modal/MultiStreamModal";
 import { ComboBox } from "../ComboBox/ComboBox";
 import { SearchComponent } from "../SearchComponent/SearchComponent";
 import { Controls } from "../Controls/Controls";
+import { MovieModal } from "../MovieModal/MovieModal";
 import { SettingsModal } from "../Settings/SettingsModal";
 import { ErrorModal } from "../Modal/ErrorModal";
 import { PasswordModal } from "../Modal/PasswordModal";
@@ -53,6 +60,7 @@ import firebase from "firebase/compat/app";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
+import { Movie } from "./Movie";
 import styles from "./App.module.css";
 import config from "../../config";
 import { MetadataContext } from "../../MetadataContext";
@@ -209,6 +217,7 @@ interface AppState {
   audioBoost: number;
   copiedLink: boolean;
   quickQueueUrl: string;
+  isMovieModalOpen: boolean;
 }
 
 const checkIsMobileDevice = () => {
@@ -291,6 +300,7 @@ export class App extends React.Component<AppProps, AppState> {
     isFileShareModalOpen: false,
     isSubtitleModalOpen: false,
     isMultiSelectModalOpen: false,
+    isMovieModalOpen: false,
     roomLock: "",
     controller: "",
     roomId: "",
@@ -342,11 +352,19 @@ export class App extends React.Component<AppProps, AppState> {
   progressUpdater?: number;
   heartbeat: number | undefined = undefined;
   tsInterval: number | undefined = undefined;
+  movieCurrentTime = 0;
+  movieStartAt = 0;
+  movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
   HTMLInterface: HTML = new HTML("leftVideo");
+  MovieInterface: Movie = new Movie("leftMovie", (target) => {
+    this.syncMovieToTime(target);
+  });
   Player = () => {
     if (this.usingYoutube()) {
       return this.YouTubeInterface;
+    } else if (this.usingMovie()) {
+      return this.MovieInterface;
     } else {
       return this.HTMLInterface;
     }
@@ -507,6 +525,7 @@ export class App extends React.Component<AppProps, AppState> {
     window.addEventListener("beforeunload", this.handleBeforeUnload);
     window.addEventListener("pagehide", this.handleBeforeUnload);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("message", this.handleMovieMessage);
 
     const canAutoplay = await testAutoplay();
     this.setState({ isAutoPlayable: canAutoplay });
@@ -526,6 +545,7 @@ export class App extends React.Component<AppProps, AppState> {
     window.removeEventListener("beforeunload", this.handleBeforeUnload);
     window.removeEventListener("pagehide", this.handleBeforeUnload);
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    window.removeEventListener("message", this.handleMovieMessage);
     // Assigned as document properties in componentDidMount, so
     // removeEventListener() never removed them (they kept firing after unmount).
     document.onfullscreenchange = null;
@@ -912,6 +932,12 @@ export class App extends React.Component<AppProps, AppState> {
           }
           if (data.playbackRate) {
             this.Player().setPlaybackRate(data.playbackRate);
+          }
+
+          if (this.usingMovie()) {
+            this.setLoadingFalse();
+            this.setState({ nonPlayableMedia: false });
+            return;
           }
 
           if (
@@ -2335,14 +2361,131 @@ export class App extends React.Component<AppProps, AppState> {
     return isYouTube(this.state.roomMedia);
   };
 
+  usingMovie = () => {
+    return isMovie(this.state.roomMedia);
+  };
+
+  isAnyMovie = () => {
+    return this.usingMovie() || isMovieStream(this.state.roomMedia);
+  };
+
   usingNative = () => {
-    // Anything that uses HTML Video (e.g. not YouTube, Vimeo, or other embedded JS player)
-    return !this.usingYoutube();
+    // Anything that uses HTML Video (e.g. not YouTube, Movie iframe, or other embedded JS player)
+    return !this.usingYoutube() && !this.usingMovie();
+  };
+
+  getMovieUrl = () => {
+    const info = parseMovieUrl(this.state.roomMedia);
+    const startAt =
+      this.movieStartAt > 0
+        ? this.movieStartAt
+        : typeof this.state.roomVideoTS === "number" && this.state.roomVideoTS > 5
+        ? this.state.roomVideoTS
+        : undefined;
+    return buildMovieEmbedUrl(info, startAt);
+  };
+
+  syncMovieToTime = (targetTime: number) => {
+    if (!Number.isFinite(targetTime) || targetTime < 0) return;
+    this.movieStartAt = Math.floor(targetTime);
+    this.movieCurrentTime = targetTime;
+    this.movieSyncKey = (this.movieSyncKey || 0) + 1;
+    this.setState({ roomVideoTS: targetTime });
+  };
+
+  handleMovieMessage = (event: MessageEvent) => {
+    if (!this.usingMovie()) return;
+    try {
+      let data = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      }
+      if (!data || typeof data !== "object") return;
+
+      const evType = data.event || data.type;
+      const curTime =
+        typeof data.currentTime === "number"
+          ? data.currentTime
+          : typeof data.data?.currentTime === "number"
+          ? data.data.currentTime
+          : undefined;
+
+      const dur =
+        typeof data.duration === "number"
+          ? data.duration
+          : typeof data.data?.duration === "number"
+          ? data.data.duration
+          : undefined;
+
+      if (typeof dur === "number" && dur > 0) {
+        this.MovieInterface.duration = dur;
+      }
+
+      if (typeof curTime === "number" && !isNaN(curTime) && curTime >= 0) {
+        this.movieCurrentTime = curTime;
+        this.MovieInterface.currentTime = curTime;
+      }
+
+      if (evType === "pause") {
+        this.MovieInterface.isPaused = true;
+        if (this.haveLock() && !this.state.roomPaused) {
+          this.socket.emit("CMD:pause");
+          this.setState({ roomPaused: true });
+        }
+      } else if (evType === "play") {
+        this.MovieInterface.isPaused = false;
+        if (this.haveLock() && this.state.roomPaused) {
+          this.socket.emit("CMD:play");
+          this.setState({ roomPaused: false });
+        }
+      } else if (evType === "seeked" && typeof curTime === "number") {
+        if (this.haveLock()) {
+          this.socket.emit("CMD:seek", curTime);
+        }
+      }
+    } catch {}
+  };
+
+  openMovieModal = () => {
+    this.setState({ isMovieModalOpen: true });
+  };
+
+  closeMovieModal = () => {
+    this.setState({ isMovieModalOpen: false });
+  };
+
+  switchMovieServer = (newServer: MovieServer) => {
+    const info = parseMovieUrl(this.state.roomMedia);
+    if (!info) return;
+    info.server = newServer;
+    const newUrl = createMovieProtocolUrl(info);
+    this.roomSetMedia(newUrl);
+  };
+
+  cycleNextMovieServer = () => {
+    const servers: MovieServer[] = [
+      "vidlink",
+      "vidsrc_pm",
+      "twoembed",
+      "apiplayer",
+    ];
+    const info = parseMovieUrl(this.state.roomMedia);
+    if (!info) return;
+    const currentServer = info.server || "vidlink";
+    const curIdx = servers.indexOf(currentServer);
+    const nextServer = servers[(curIdx + 1) % servers.length];
+    this.switchMovieServer(nextServer);
   };
 
   hasDuration = () => {
-    // Youtube, link, or magnet, etc. Has a defined runtime (not WebRTC)
-    return isHttp(this.state.roomMedia) || isMagnet(this.state.roomMedia);
+    // Youtube, link, magnet, or movie stream. Has a defined runtime (not WebRTC)
+    return (
+      isHttp(this.state.roomMedia) ||
+      isMagnet(this.state.roomMedia) ||
+      isMovie(this.state.roomMedia)
+    );
   };
 
   playingScreenShare = () => {
@@ -2375,6 +2518,10 @@ export class App extends React.Component<AppProps, AppState> {
     // For live this is the offset from the leading edge (negative)
     if (this.state.isLiveStream) {
       target = this.Player().getDuration() + (customTime ?? 0);
+    }
+    if (this.usingMovie()) {
+      this.syncMovieToTime(target);
+      return;
     }
     if (target >= 0 && target < Infinity) {
       console.log("syncing self to leader or custom:", target);
@@ -2633,6 +2780,16 @@ export class App extends React.Component<AppProps, AppState> {
     if (!input) {
       return "";
     }
+    if (isMovie(input)) {
+      const info = parseMovieUrl(input);
+      if (info) {
+        if (info.type === "tv" && info.season && info.episode) {
+          return `📺 ${info.title} (S${info.season} E${info.episode})`;
+        }
+        return `🎬 ${info.title}`;
+      }
+      return "🎬 Movie Stream";
+    }
     // If input is YouTube, return YouTube video title if detected or input
     if (this.usingYoutube() || input.includes("youtube.com") || input.includes("youtu.be")) {
       const ytData = ((this.YouTubeInterface as any).player || (this.YouTubeInterface as any))?.getVideoData?.();
@@ -2671,7 +2828,10 @@ export class App extends React.Component<AppProps, AppState> {
         if (name.includes("%")) {
           try { name = decodeURIComponent(name); } catch {}
         }
-        return name;
+        if (/s\d+e\d+/i.test(name)) {
+          return `📺 ${name}`;
+        }
+        return `🎬 ${name}`;
       } catch {}
     }
     if (isMagnet(input)) {
@@ -2791,6 +2951,9 @@ export class App extends React.Component<AppProps, AppState> {
   render() {
     const sharer = this.state.participants.find((p) => p.isScreenShare);
     const playlist = this.state.playlist;
+    const currentVideoTime = this.usingMovie()
+      ? (this.movieCurrentTime || 0)
+      : this.Player().getCurrentTime();
     const isBehind =
       !this.state.isLiveStream &&
       !this.playingScreenShare() &&
@@ -2798,7 +2961,7 @@ export class App extends React.Component<AppProps, AppState> {
       Boolean(this.getLeaderTime()) &&
       Number.isFinite(this.getLeaderTime()) &&
       this.getLeaderTime() > 0 &&
-      this.getLeaderTime() - this.Player().getCurrentTime() > 10;
+      this.getLeaderTime() - currentVideoTime > 10;
     const onSyncAction = () => {
       if (this.state.isLiveStream) {
         this.roomSeek(this.Player().getDuration());
@@ -2875,6 +3038,10 @@ export class App extends React.Component<AppProps, AppState> {
         speed={this.state.speed}
         connections={this.state.connections}
         convertProgress={this.state.convertProgress}
+        isMovie={this.isAnyMovie()}
+        movieServer={parseMovieUrl(this.state.roomMedia)?.server || "vidlink"}
+        onSelectMovieServer={this.switchMovieServer}
+        onOpenMovieModal={this.openMovieModal}
       />
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (
@@ -2887,7 +3054,7 @@ export class App extends React.Component<AppProps, AppState> {
             : undefined
         }
       >
-        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && this.Player().isMuted() && (
+        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && !this.usingMovie() && this.Player().isMuted() && (
           <div
             className={styles.unmuteOverlay}
             onClick={() => {
@@ -2931,7 +3098,8 @@ export class App extends React.Component<AppProps, AppState> {
         {(this.state.loading ||
           !this.state.roomMedia ||
           this.state.nonPlayableMedia) &&
-          !this.state.isLiveStream && (
+          !this.state.isLiveStream &&
+          !this.usingMovie() && (
             <div
               id="loader"
               className={`${styles.videoContent} ${styles.flexCenter}`}
@@ -2941,14 +3109,28 @@ export class App extends React.Component<AppProps, AppState> {
                   className={styles.flexCenter}
                   style={{
                     flexDirection: "column",
+                    gap: 12,
+                    background: "rgba(9, 10, 15, 0.75)",
+                    padding: "24px 32px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(99, 102, 241, 0.25)",
+                    backdropFilter: "blur(12px)",
+                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
                   }}
                 >
-                  <Loader />
-                  <div>
-                    {this.playingVBrowser()
+                  <Loader size="lg" color="indigo" />
+                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, textAlign: "center" }}>
+                    {isMovieStream(this.state.roomMedia)
+                      ? "🎬 Connecting to High-Speed Stream..."
+                      : this.playingVBrowser()
                       ? "Launching virtual browser. This can take up to a minute."
-                      : ""}
+                      : "Loading stream..."}
                   </div>
+                  {isMovieStream(this.state.roomMedia) && (
+                    <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>
+                      Buffering HD video chunks & synchronizing room audio...
+                    </div>
+                  )}
                 </div>
               )}
               {!this.state.loading && !this.state.roomMedia && (
@@ -2988,6 +3170,135 @@ export class App extends React.Component<AppProps, AppState> {
           allow="autoplay; encrypted-media"
           src="https://www.youtube.com/embed/?enablejsapi=1&controls=0&rel=0"
         />
+        {this.usingMovie() && (
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              minHeight: isMobileLayout ? "260px" : "480px",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <iframe
+              id="leftMovie"
+              key={`${this.state.roomMedia}_${this.movieSyncKey}`}
+              title="Movie Player"
+              style={{
+                width: "100%",
+                height: "100%",
+                flex: 1,
+                minHeight: isMobileLayout ? "260px" : "480px",
+                border: "none",
+                borderRadius: isMobileLayout ? "0" : "12px",
+                backgroundColor: "#000",
+              }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              allowFullScreen
+              src={this.getMovieUrl()}
+              onLoad={() => {
+                this.setLoadingFalse();
+                this.setState({ nonPlayableMedia: false });
+              }}
+            />
+            {/* Audio Autoplay Unmute Helper for Web Iframes */}
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                left: 10,
+                zIndex: 20,
+                background: "rgba(15, 23, 42, 0.85)",
+                backdropFilter: "blur(10px)",
+                border: "1px solid rgba(99, 102, 241, 0.35)",
+                borderRadius: 20,
+                padding: "4px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 11,
+                color: "#cbd5e1",
+                pointerEvents: "none",
+                userSelect: "none",
+              }}
+            >
+              <span>🔊</span>
+              <span>Click player to unmute if silent</span>
+            </div>
+            {/* Playback Paused Overlay */}
+            {this.state.roomPaused && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  background: "rgba(10, 12, 22, 0.35)",
+                  backdropFilter: "blur(2px)",
+                  WebkitBackdropFilter: "blur(2px)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 15,
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  style={{
+                    background: "rgba(15, 23, 42, 0.88)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(99, 102, 241, 0.4)",
+                    borderRadius: 20,
+                    padding: "16px 24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    boxShadow: "0 12px 36px rgba(0, 0, 0, 0.7)",
+                    cursor: this.haveLock() ? "pointer" : "default",
+                    pointerEvents: this.haveLock() ? "auto" : "none",
+                  }}
+                  onClick={this.roomTogglePlay}
+                >
+                  <div
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: "50%",
+                      background:
+                        "linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 0 25px rgba(99, 102, 241, 0.6)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <WPIconPlay size={28} color="#fff" />
+                  </div>
+                  <div
+                    style={{
+                      color: "#fff",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: "-0.3px",
+                    }}
+                  >
+                    Playback Paused
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, textAlign: "center" }}>
+                    {this.haveLock()
+                      ? "Tap here to Resume room or touch player directly"
+                      : "Host paused the movie"}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {this.playingVBrowser() &&
         this.getVBrowserPass() &&
         this.getVBrowserHost() ? (
@@ -3180,6 +3491,12 @@ export class App extends React.Component<AppProps, AppState> {
             getSubtitleMode={this.Player().getSubtitleMode}
           />
         )}
+        <MovieModal
+          isOpen={this.state.isMovieModalOpen}
+          onClose={this.closeMovieModal}
+          onPlay={this.roomSetMedia}
+          onQueue={this.roomPlaylistAdd}
+        />
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>
             <Title order={2}>Loading...</Title>
@@ -3407,9 +3724,34 @@ export class App extends React.Component<AppProps, AppState> {
                       getMediaDisplayName={this.getMediaDisplayName}
                       mediaPath={this.state.mediaPath}
                       disabled={!this.haveLock()}
+                      onOpenMovieModal={this.openMovieModal}
                     />
                     {/* Quick Action Source Cards */}
                     <div className={styles.quickSourceGrid}>
+                      <button
+                        type="button"
+                        className={`${styles.sourceCardBtn} ${styles.sourceCardScreen}`}
+                        style={{
+                          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2))",
+                          borderColor: "rgba(99, 102, 241, 0.45)",
+                        }}
+                        disabled={!this.haveLock()}
+                        onClick={this.openMovieModal}
+                        title="Browse & stream Movies & Series"
+                      >
+                        <div
+                          className={styles.sourceCardIcon}
+                          style={{
+                            background: "rgba(99, 102, 241, 0.25)",
+                            color: "#a5b4fc",
+                            fontSize: "14px",
+                          }}
+                        >
+                          🎬
+                        </div>
+                        <span className={styles.sourceCardTitle} style={{ color: "#c7d2fe" }}>Movies</span>
+                        <span className={styles.sourceCardSub}>& Series HD</span>
+                      </button>
                       {!this.localStreamToPublish && !sharer ? (
                         <button
                           type="button"
@@ -3717,11 +4059,27 @@ export class App extends React.Component<AppProps, AppState> {
                         getMediaDisplayName={this.getMediaDisplayName}
                         mediaPath={this.state.mediaPath}
                         disabled={!this.haveLock()}
+                        onOpenMovieModal={this.openMovieModal}
                       />
                     </div>
 
                     {/* Media Actions */}
                     <div className={styles.desktopMediaActions}>
+                      <button
+                        type="button"
+                        className={`${styles.desktopPillBtn} ${styles.desktopPillScreen}`}
+                        style={{
+                          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))",
+                          borderColor: "rgba(99, 102, 241, 0.5)",
+                          color: "#c7d2fe",
+                        }}
+                        disabled={!this.haveLock()}
+                        onClick={this.openMovieModal}
+                        title="Search and stream Movies & Series"
+                      >
+                        <span style={{ fontSize: 13 }}>🎬</span>
+                        <span>Movies</span>
+                      </button>
                       {this.localStreamToPublish ? (
                         <button
                           type="button"

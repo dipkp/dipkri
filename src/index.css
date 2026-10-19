@@ -447,10 +447,16 @@ a:hover {
     width: 38px !important;
   }
 
-  .watchparty-media-combobox .mantine-Autocomplete-input,
-  .watchparty-media-combobox .mantine-Input-input {
+  .watchparty-media-combobox:has(.watchparty-combobox-mobile-clear) .mantine-Autocomplete-input,
+  .watchparty-media-combobox:has(.watchparty-combobox-mobile-clear) .mantine-Input-input {
     padding-right: 38px !important;
     padding-inline-end: 38px !important;
+  }
+
+  .watchparty-media-combobox:not(:has(.watchparty-combobox-mobile-clear)) .mantine-Autocomplete-input,
+  .watchparty-media-combobox:not(:has(.watchparty-combobox-mobile-clear)) .mantine-Input-input {
+    padding-right: 14px !important;
+    padding-inline-end: 14px !important;
   }
 
   /* Show spacious, thumb-friendly mobile action buttons below the input */

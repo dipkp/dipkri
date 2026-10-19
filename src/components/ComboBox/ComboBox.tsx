@@ -6,6 +6,7 @@ import {
   isHttp,
   isMagnet,
   isYouTube,
+  isMovie,
   resolveMediaUrl,
 } from "../../utils/utils";
 import { examples } from "../../utils/examples";
@@ -20,6 +21,7 @@ type ComboBoxProps = {
   getMediaDisplayName: (input: string) => string;
   mediaPath: string | undefined;
   disabled?: boolean;
+  onOpenMovieModal?: () => void;
 };
 
 type ComboBoxState = {
@@ -61,7 +63,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     if (
       query === "" ||
       // Anything that doesn't pass this check we pass to YouTube as a search query
-      (query && (isHttp(query) || isMagnet(query)))
+      (query && (isHttp(query) || isMagnet(query) || isMovie(query)))
     ) {
       if (!query && this.props.mediaPath) {
         items = await getMediaPathResults(this.props.mediaPath, "");
@@ -82,7 +84,11 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
         items = [
           {
             name: displayName,
-            channel: isMagnet(query) ? "🧲 Torrent Stream" : "Direct Video Stream",
+            channel: isMovie(query)
+              ? "🎬 Movie Stream"
+              : isMagnet(query)
+              ? "🧲 Torrent Stream"
+              : "Direct Video Stream",
             type,
             url: query,
             duration: 0,
@@ -305,7 +311,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             {
               // Display the real string value (currentMedia) when focused
               inputMedia:
-                isHttp(currentMedia) || isMagnet(currentMedia)
+                isHttp(currentMedia) || isMagnet(currentMedia) || isMovie(currentMedia)
                   ? currentMedia
                   : getMediaDisplayName(currentMedia),
             },
@@ -314,7 +320,8 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                 !this.state.inputMedia ||
                 (this.state.inputMedia &&
                   (isHttp(this.state.inputMedia) ||
-                    isMagnet(this.state.inputMedia)))
+                    isMagnet(this.state.inputMedia) ||
+                    isMovie(this.state.inputMedia)))
               ) {
                 this.doSearch();
               }
@@ -347,7 +354,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             }
           }
         }}
-        placeholder="Enter video file URL, magnet link, YouTube link, or YouTube search term"
+        placeholder="Paste video URL, YouTube, magnet, stream..."
         value={
           this.state.inputMedia !== undefined
             ? this.state.inputMedia

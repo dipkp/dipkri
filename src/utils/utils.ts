@@ -152,6 +152,172 @@ export const isVBrowser = (input: string) => {
   return input.startsWith("vbrowser://");
 };
 
+export const isMovie = (input: string) => {
+  return Boolean(input && typeof input === "string" && input.startsWith("movie://"));
+};
+
+export const isMovieStream = (input: string) => {
+  return Boolean(
+    input &&
+      typeof input === "string" &&
+      (input.includes("isMovie=1") || input.includes("movie=1"))
+  );
+};
+
+export type MovieServer =
+  | "vidlink"
+  | "vidsrc_pm"
+  | "twoembed"
+  | "apiplayer";
+
+export interface MovieDirectStream {
+  id: number;
+  label: string;
+  quality: string;
+  codec?: string;
+  seeders: number;
+  size: string;
+  cleanTitle: string;
+  infoHash: string;
+  fileIdx?: number;
+  magnet: string;
+}
+
+export interface MovieMediaInfo {
+  tmdbId: string;
+  type: "movie" | "tv";
+  title: string;
+  season?: number;
+  episode?: number;
+  server?: MovieServer;
+}
+
+export interface MovieSearchResult {
+  id: number;
+  title: string;
+  originalTitle?: string;
+  overview: string;
+  poster: string | null;
+  backdrop: string | null;
+  type: "movie" | "tv";
+  year: string;
+  releaseDate?: string;
+  rating: number;
+  voteCount: number;
+  popularity?: number;
+}
+
+export interface MovieSeasonEpisode {
+  id: number;
+  episodeNumber: number;
+  seasonNumber: number;
+  name: string;
+  overview: string;
+  still: string | null;
+  airDate: string;
+  rating: number;
+}
+
+export interface MovieDetails extends MovieSearchResult {
+  genres: string[];
+  tagline?: string;
+  runtime?: number;
+  status?: string;
+  imdbId?: string | null;
+  numberOfSeasons?: number;
+  numberOfEpisodes?: number;
+  seasons?: Array<{
+    id: number;
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    poster: string | null;
+    airDate: string;
+  }>;
+}
+
+export function parseMovieUrl(url: string): MovieMediaInfo | null {
+  if (!url || !url.startsWith("movie://")) return null;
+  try {
+    const raw = url.replace("movie://", "");
+    const [idPart, queryPart] = raw.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    return {
+      tmdbId: idPart,
+      type: (params.get("type") as "movie" | "tv") || "movie",
+      title: decodeURIComponent(params.get("title") || "Movie"),
+      season: params.get("season") ? Number(params.get("season")) : 1,
+      episode: params.get("episode") ? Number(params.get("episode")) : 1,
+      server: (params.get("server") as MovieServer) || "vidlink",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createMovieProtocolUrl(info: MovieMediaInfo): string {
+  const server = info.server || "vidlink";
+  const season = info.season || 1;
+  const episode = info.episode || 1;
+  const params = new URLSearchParams();
+  params.set("type", info.type);
+  params.set("title", info.title);
+  if (info.type === "tv") {
+    params.set("season", String(season));
+    params.set("episode", String(episode));
+  }
+  params.set("server", server);
+  return `movie://${info.tmdbId}?${params.toString()}`;
+}
+
+export function buildMovieEmbedUrl(
+  info: MovieMediaInfo | null,
+  startAt?: number,
+): string {
+  if (!info || !info.tmdbId) return "";
+  const server = info.server || "vidlink";
+  const { tmdbId, type, season = 1, episode = 1 } = info;
+  const startSec = startAt && startAt > 2 ? Math.floor(startAt) : undefined;
+  const startParam = startSec ? `&startAt=${startSec}` : "";
+
+  if (server === "vidlink") {
+    // VidLink Pro (Fast HD, responsive embed, multi-subtitles, timestamp sync support)
+    if (type === "tv") {
+      return `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?autoplay=true${startParam}`;
+    }
+    return `https://vidlink.pro/movie/${tmdbId}?autoplay=true${startParam}`;
+  }
+
+  if (server === "vidsrc_pm") {
+    // VidSrc PM
+    const tParam = startSec ? `?t=${startSec}` : "";
+    if (type === "tv") {
+      return `https://vidsrc.pm/embed/tv/${tmdbId}/${season}/${episode}${tParam}`;
+    }
+    return `https://vidsrc.pm/embed/movie/${tmdbId}${tParam}`;
+  }
+
+  if (server === "twoembed") {
+    // 2Embed Multi
+    const tHash = startSec ? `#t=${startSec}` : "";
+    if (type === "tv") {
+      return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}${tHash}`;
+    }
+    return `https://www.2embed.cc/embed/${tmdbId}${tHash}`;
+  }
+
+  if (server === "apiplayer") {
+    // APIPlayer.ru
+    const tParam = startSec ? `&t=${startSec}` : "";
+    if (type === "tv") {
+      return `https://apiplayer.ru/embed/tv/${tmdbId}/${season}/${episode}?autoplay=1&muted=0${tParam}`;
+    }
+    return `https://apiplayer.ru/embed/movie/${tmdbId}?autoplay=1&muted=0${tParam}`;
+  }
+
+  return `https://vidlink.pro/movie/${tmdbId}?autoplay=true${startParam}`;
+}
+
 /**
  * Unwraps nested proxy stream URLs (such as proxy.valhallastream.com/m3u8?url=... or cors proxies)
  * into their underlying direct playable media stream URLs.
@@ -165,8 +331,9 @@ export function resolveMediaUrl(rawUrl: string): string {
     trimmed = trimmed.replace(/&amp;/g, "&");
   }
 
-  // If already magnet, youtube, or local relative stream, return as is
+  // If already movie protocol, magnet, youtube, or local relative stream, return as is
   if (
+    trimmed.startsWith("movie://") ||
     trimmed.startsWith("magnet:") ||
     trimmed.startsWith("/stream?") ||
     trimmed.startsWith("/stream-proxy?") ||
