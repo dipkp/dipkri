@@ -1,0 +1,72 @@
+--- a/server/torrent.ts
++++ b/server/torrent.ts
+@@ -609,12 +609,17 @@
+     });
+   }
+ 
++  const targetFile = resolveTargetVideoFile(torrent, req);
+   return res.json({
+     downloaded: torrent.downloaded,
+     total: torrent.length,
+     speed: torrent.downloadSpeed,
+     connections: torrent.numPeers,
+     progress: torrent.progress,
++    // Per-file numbers: a season pack can sit at 0.1% overall while the one
++    // episode being watched is already buffered 40%.
++    fileProgress: (targetFile as any)?.progress ?? torrent.progress,
++    fileLength: targetFile?.length ?? torrent.length,
+   });
+ }
+ 
+--- a/src/components/App/App.tsx
++++ b/src/components/App/App.tsx
+@@ -166,6 +166,7 @@
+   total: number;
+   speed: number;
+   connections: number;
++  fileProgress: number;
+   fileSelection: {
+     name: string;
+     url: string;
+@@ -284,6 +285,7 @@
+     total: 0,
+     speed: 0,
+     connections: 0,
++    fileProgress: 0,
+     fileSelection: [],
+     overlayMsg: "",
+     isErrorAuth: false,
+@@ -1187,6 +1189,8 @@
+                   total: data.total,
+                   speed: data.speed,
+                   connections: data.connections,
++                  fileProgress:
++                    typeof data.fileProgress === "number" ? data.fileProgress : 0,
+                 });
+               } catch {
+                 // ignore
+@@ -3161,10 +3165,7 @@
+                     <div className={styles.bufferingTitle}>Buffering pieces…</div>
+                     <div className={styles.bufferingMeta}>
+                       {this.state.total
+-                        ? `${Math.min(
+-                            (this.state.downloaded / this.state.total) * 100,
+-                            100,
+-                          ).toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
++                        ? `${this.getDownloadPercent().toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
+                         : "Connecting to peers…"}
+                     </div>
+                     <div className={styles.bufferingHint}>
+@@ -3437,11 +3438,7 @@
+           <div className={styles.torrentStatsBadge}>
+             <span style={{ fontSize: 13 }}>🧲</span>
+             {[
+-              this.state.total
+-                ? Math.min(
+-                    (this.state.downloaded / this.state.total) * 100,
+-                    100,
+-                  ).toFixed(1) + "%"
++              `${this.getDownloadPercent().toFixed(1)}%`
+                 : isMobileLayout
+                 ? "Connecting..."
+                 : "Connecting to peers...",

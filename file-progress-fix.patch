@@ -1,0 +1,34 @@
+--- a/src/components/App/App.tsx
++++ b/src/components/App/App.tsx
+@@ -443,6 +443,16 @@
+         }
+       }
+     } catch {}
++    return 0;
++  };
++
++  getDownloadPercent = () => {
++    if (this.state.fileProgress > 0) {
++      return Math.min(this.state.fileProgress * 100, 100);
++    }
++    if (this.state.total > 0) {
++      return Math.min((this.state.downloaded / this.state.total) * 100, 100);
++    }
+     return 0;
+   };
+ 
+@@ -3438,10 +3448,11 @@
+           <div className={styles.torrentStatsBadge}>
+             <span style={{ fontSize: 13 }}>🧲</span>
+             {[
+-              `${this.getDownloadPercent().toFixed(1)}%`
++              this.state.total || this.state.fileProgress > 0
++                ? `${this.getDownloadPercent().toFixed(1)}%`
+                 : isMobileLayout
+-                ? "Connecting..."
+-                : "Connecting to peers...",
++                  ? "Connecting..."
++                  : "Connecting to peers...",
+               Boolean(this.state.total) && formatSpeed(this.state.speed),
+               Boolean(this.state.total) &&
+                 (isMobileLayout ? `${this.state.connections}p` : `${this.state.connections} peers`),

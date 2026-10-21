@@ -166,6 +166,7 @@ interface AppState {
   total: number;
   speed: number;
   connections: number;
+  fileProgress: number;
   fileSelection: {
     name: string;
     url: string;
@@ -284,6 +285,7 @@ export class App extends React.Component<AppProps, AppState> {
     total: 0,
     speed: 0,
     connections: 0,
+    fileProgress: 0,
     fileSelection: [],
     overlayMsg: "",
     isErrorAuth: false,
@@ -441,6 +443,16 @@ export class App extends React.Component<AppProps, AppState> {
         }
       }
     } catch {}
+    return 0;
+  };
+
+  getDownloadPercent = () => {
+    if (this.state.fileProgress > 0) {
+      return Math.min(this.state.fileProgress * 100, 100);
+    }
+    if (this.state.total > 0) {
+      return Math.min((this.state.downloaded / this.state.total) * 100, 100);
+    }
     return 0;
   };
 
@@ -1187,6 +1199,8 @@ export class App extends React.Component<AppProps, AppState> {
                   total: data.total,
                   speed: data.speed,
                   connections: data.connections,
+                  fileProgress:
+                    typeof data.fileProgress === "number" ? data.fileProgress : 0,
                 });
               } catch {
                 // ignore
@@ -3161,10 +3175,7 @@ export class App extends React.Component<AppProps, AppState> {
                     <div className={styles.bufferingTitle}>Buffering pieces…</div>
                     <div className={styles.bufferingMeta}>
                       {this.state.total
-                        ? `${Math.min(
-                            (this.state.downloaded / this.state.total) * 100,
-                            100,
-                          ).toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
+                        ? `${this.getDownloadPercent().toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
                         : "Connecting to peers…"}
                     </div>
                     <div className={styles.bufferingHint}>
@@ -3437,14 +3448,11 @@ export class App extends React.Component<AppProps, AppState> {
           <div className={styles.torrentStatsBadge}>
             <span style={{ fontSize: 13 }}>🧲</span>
             {[
-              this.state.total
-                ? Math.min(
-                    (this.state.downloaded / this.state.total) * 100,
-                    100,
-                  ).toFixed(1) + "%"
+              this.state.total || this.state.fileProgress > 0
+                ? `${this.getDownloadPercent().toFixed(1)}%`
                 : isMobileLayout
-                ? "Connecting..."
-                : "Connecting to peers...",
+                  ? "Connecting..."
+                  : "Connecting to peers...",
               Boolean(this.state.total) && formatSpeed(this.state.speed),
               Boolean(this.state.total) &&
                 (isMobileLayout ? `${this.state.connections}p` : `${this.state.connections} peers`),

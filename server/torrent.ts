@@ -609,12 +609,17 @@ export async function handleTorrentProgress(req: any, res: any) {
     });
   }
 
+  const targetFile = resolveTargetVideoFile(torrent, req);
   return res.json({
     downloaded: torrent.downloaded,
     total: torrent.length,
     speed: torrent.downloadSpeed,
     connections: torrent.numPeers,
     progress: torrent.progress,
+    // Per-file numbers: a season pack can sit at 0.1% overall while the one
+    // episode being watched is already buffered 40%.
+    fileProgress: (targetFile as any)?.progress ?? torrent.progress,
+    fileLength: targetFile?.length ?? torrent.length,
   });
 }
 

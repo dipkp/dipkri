@@ -62,7 +62,18 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const prewarmStream = (magnet: string) => {
     if (!magnet || prewarmedRef.current.has(magnet)) return;
     prewarmedRef.current.add(magnet);
+    const url = `/stream?torrent=${encodeURIComponent(magnet)}`;
+    // Metadata
     fetch(`/data?torrent=${encodeURIComponent(magnet)}`).catch(() => {});
+    // Head: first megabyte for the container + first frames.
+    fetch(url, { headers: { Range: "bytes=0-1048575" } })
+      .then((r) => r.arrayBuffer())
+      .catch(() => {});
+    // Tail: MP4 keeps its moov atom at the end, so the browser asks for it
+    // before it can even know the duration. Warm it too.
+    fetch(url, { headers: { Range: "bytes=-1048576" } })
+      .then((r) => r.arrayBuffer())
+      .catch(() => {});
   };
 
   useEffect(() => {
