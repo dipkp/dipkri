@@ -651,6 +651,9 @@ export const Controls = (props: ControlsProps) => {
   }, [props.chat]);
 
   const getEnd = () => props.duration;
+  // Duration stays 0/NaN until the media metadata arrives (or forever if the
+  // source failed). Show an honest placeholder instead of a fake 00:00.
+  const hasDuration = Number.isFinite(props.duration) && props.duration > 0;
   const getStart = () => 0;
   const getLength = () => Math.max(getEnd() - getStart(), 0.001);
   const getCurrent = () => props.currentTime;
@@ -1245,7 +1248,9 @@ export const Controls = (props: ControlsProps) => {
         {/* Row 1: Interactive Scrubber Timeline */}
         <div className={styles.timelineRow}>
           <span className={styles.timeText}>
-            {formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined) || "00:00"}
+            {hasDuration
+              ? formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined) || "00:00"
+              : "--:--"}
           </span>
 
           <div
@@ -1359,8 +1364,11 @@ export const Controls = (props: ControlsProps) => {
           </div>
 
           {!isLiveStream && (
-            <span className={styles.timeText}>
-              {formatTimestamp(getEnd()) || "00:00"}
+            <span
+              className={styles.timeText}
+              title={hasDuration ? undefined : "Waiting for media metadata"}
+            >
+              {hasDuration ? formatTimestamp(getEnd()) || "00:00" : "--:--"}
             </span>
           )}
 
