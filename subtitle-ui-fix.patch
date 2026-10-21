@@ -1,0 +1,22 @@
+--- a/src/components/Modal/SubtitleModal.tsx
++++ b/src/components/Modal/SubtitleModal.tsx
+@@ -207,7 +207,7 @@
+       // Dedupe + prefer releases that name the requested episode.
+       const seen = new Set<string>();
+       const unique = list.filter((r) => {
+-        const key = String(r.id || r.attributes?.files?.[0]?.file_id || r.release);
++        const key = String(r.id || r.attributes?.files?.[0]?.file_id || r.title || r.name);
+         if (seen.has(key)) return false;
+         seen.add(key);
+         return true;
+@@ -219,8 +219,8 @@
+         "i",
+       );
+       unique.sort((a, b) => {
+-        const aName = a.attributes?.release || a.release || "";
+-        const bName = b.attributes?.release || b.release || "";
++        const aName = a.attributes?.release || a.title || a.name || "";
++        const bName = b.attributes?.release || b.title || b.name || "";
+         const aMatch = epPattern.test(aName) ? 1 : 0;
+         const bMatch = epPattern.test(bName) ? 1 : 0;
+         if (aMatch !== bMatch) return bMatch - aMatch;

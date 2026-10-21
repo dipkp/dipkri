@@ -273,6 +273,9 @@ app.get("/searchSubtitles", async (req, res) => {
         ? String(req.query.query).trim()
         : "";
     const url = req.query.url ? String(req.query.url).trim() : "";
+    const seasonNum = Number(req.query.season) || 0;
+    const episodeNum = Number(req.query.episode) || 0;
+    const hasEpisode = seasonNum > 0 && episodeNum > 0;
     const reqLang = req.query.lang ? String(req.query.lang).trim() : "en";
     const subLangs = reqLang === "all" ? "en,hi,es" : reqLang === "hi" ? "hi,en" : reqLang;
 
@@ -319,7 +322,12 @@ app.get("/searchSubtitles", async (req, res) => {
           let hash = computeOpenSubtitlesHash(start, end, size);
           subUrl = `https://api.opensubtitles.com/api/v1/subtitles?moviehash=${hash}&languages=${encodeURIComponent(subLangs)}`;
         } else if (title) {
-          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=${encodeURIComponent(subLangs)}`;
+          subUrl =
+            `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}` +
+            `&languages=${encodeURIComponent(subLangs)}` +
+            (hasEpisode
+              ? `&season_number=${seasonNum}&episode_number=${episodeNum}`
+              : "");
         }
         if (subUrl) {
           const response = await axios.get(subUrl, {
@@ -380,17 +388,20 @@ app.get("/searchSubtitles", async (req, res) => {
           cleanTitle = cleanTitle.slice(0, yearMatch.index + yearMatch[0].length).trim();
         }
 
-        const movieSearch = await axios.get(
-          `https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(cleanTitle)}.json`,
-          { timeout: 5000 }
-        );
-        imdbId = movieSearch.data?.metas?.[0]?.imdb_id || movieSearch.data?.metas?.[0]?.id || "";
-        if (!imdbId) {
-          const seriesSearch = await axios.get(
-            `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(cleanTitle)}.json`,
-            { timeout: 5000 }
-          );
-          imdbId = seriesSearch.data?.metas?.[0]?.imdb_id || seriesSearch.data?.metas?.[0]?.id || "";
+        // Episode requests must resolve a *series* id; searching movies first
+        // returns the film with the same name and every subtitle lookup misses.
+        const catalogOrder = hasEpisode ? ["series", "movie"] : ["movie", "series"];
+        for (const kind of catalogOrder) {
+          if (imdbId) break;
+          try {
+            const found = await axios.get(
+              `https://v3-cinemeta.strem.io/catalog/${kind}/top/search=${encodeURIComponent(cleanTitle)}.json`,
+              { timeout: 5000 }
+            );
+            imdbId = found.data?.metas?.[0]?.imdb_id || found.data?.metas?.[0]?.id || "";
+          } catch (err: any) {
+            console.warn(`Cinemeta ${kind} lookup error:`, err.message);
+          }
         }
       } catch (err: any) {
         console.warn("Cinemeta lookup error:", err.message);
@@ -398,10 +409,10 @@ app.get("/searchSubtitles", async (req, res) => {
 
       if (imdbId) {
         try {
-          const subsResp = await axios.get(
-            `https://opensubtitles-v3.strem.io/subtitles/movie/${imdbId}.json`,
-            { timeout: 7000 }
-          );
+          const subsUrl = hasEpisode
+            ? `https://opensubtitles-v3.strem.io/subtitles/series/${imdbId}:${seasonNum}:${episodeNum}.json`
+            : `https://opensubtitles-v3.strem.io/subtitles/movie/${imdbId}.json`;
+          const subsResp = await axios.get(subsUrl, { timeout: 7000 });
           const list = subsResp.data?.subtitles || [];
           if (Array.isArray(list) && list.length > 0) {
             const sortedList = [...list].sort((a: any, b: any) => {

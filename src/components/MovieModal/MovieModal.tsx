@@ -45,6 +45,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const [directStreams, setDirectStreams] = useState<MovieDirectStream[]>([]);
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [selectedStreamIndex, setSelectedStreamIndex] = useState(0);
+  const [audioFilter, setAudioFilter] = useState<"sub" | "dub" | "dual">("sub");
 
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -599,6 +600,45 @@ export const MovieModal: React.FC<MovieModalProps> = ({
               {/* DIRECT NATIVE PLAYER MODE */}
               {playbackMode === "direct" && (
                 <div className={styles.serverSection}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      margin: "4px 0 8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {(["sub", "dub", "dual"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAudioFilter(mode)}
+                        style={{
+                          padding: "5px 12px",
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          border:
+                            audioFilter === mode
+                              ? "1px solid #6366f1"
+                              : "1px solid rgba(255,255,255,0.12)",
+                          background:
+                            audioFilter === mode
+                              ? "rgba(99,102,241,0.25)"
+                              : "rgba(255,255,255,0.04)",
+                          color: audioFilter === mode ? "#fff" : "#94a3b8",
+                        }}
+                      >
+                        {mode === "sub" ? "Subbed" : mode === "dub" ? "Dubbed" : "Dual Audio"}
+                      </button>
+                    ))}
+                    <span style={{ fontSize: 11, color: "#64748b" }}>
+                      filters releases by audio tag
+                    </span>
+                  </div>
+
                   <h4 className={styles.sectionHeading}>
                     <span>
                       ⚡ Available HD Streams ({directStreams.length})
@@ -614,7 +654,16 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   ) : directStreams.length > 0 ? (
                     <>
                       <div className={styles.streamListGrid}>
-                        {directStreams.map((s, idx) => {
+                        {directStreams
+                          .map((s, idx) => ({ s, idx }))
+                          .filter(({ s }) => {
+                            if (audioFilter === "sub") return true;
+                            const t = (s.cleanTitle || "").toLowerCase();
+                            const dual = /dual[\s._-]*audio|multi[\s._-]*audio/.test(t);
+                            const dub = /\bdub(bed)?\b|english[\s._-]*audio/.test(t);
+                            return audioFilter === "dual" ? dual : dub || dual;
+                          })
+                          .map(({ s, idx }) => {
                           const isSelected = selectedStreamIndex === idx;
                           return (
                             <div
