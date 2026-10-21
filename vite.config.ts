@@ -21,5 +21,13 @@ export default {
           }
         : null,
     allowedHosts: true,
+    proxy: {
+      // Dev UI runs on :5173, backend on :8080. Without this, relative
+      // /api/movies/* calls hit Vite's SPA fallback and return HTML.
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
 };
