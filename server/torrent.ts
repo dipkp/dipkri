@@ -31,56 +31,6 @@ interface AudioCacheState {
 }
 const audioTranscodeMap = new Map<string, AudioCacheState>();
 
-// ---------------------------------------------------------------------------
-// Media bandwidth guard.
-// Render free tiers cap egress (often 5 GB/month). Every video byte we serve is
-// counted here so one film can't silently exhaust the plan; past the budget we
-// fail fast with a clear 503 instead of a surprise lockout.
-// ---------------------------------------------------------------------------
-let mediaBytesServed = 0;
-// 0 = unlimited (default). Set MEDIA_BANDWIDTH_BUDGET_MB to enforce a cap.
-const MEDIA_BUDGET_BYTES =
-  Math.max(0, Number(process.env.MEDIA_BANDWIDTH_BUDGET_MB) || 0) * 1024 * 1024;
-
-export function getMediaBandwidthUsage() {
-  return {
-    usedMB: Math.round(mediaBytesServed / 1048576),
-    budgetMB: Math.round(MEDIA_BUDGET_BYTES / 1048576),
-    remainingMB: Math.max(
-      0,
-      Math.round((MEDIA_BUDGET_BYTES - mediaBytesServed) / 1048576),
-    ),
-  };
-}
-
-function reserveMediaBytes(res: any, bytes: number): boolean {
-  if (!Number.isFinite(bytes) || bytes <= 0) return true;
-  if (MEDIA_BUDGET_BYTES <= 0) {
-    mediaBytesServed += bytes;
-    return true;
-  }
-  if (mediaBytesServed + bytes > MEDIA_BUDGET_BYTES) {
-    const usage = getMediaBandwidthUsage();
-    console.warn(
-      `[Bandwidth] Refused ${Math.round(bytes / 1048576)} MB — budget exhausted (${usage.usedMB}/${usage.budgetMB} MB)`,
-    );
-    res.status(503).json({
-      error:
-        "This server's monthly media bandwidth budget is exhausted. Play direct or wait for the quota reset.",
-      ...usage,
-    });
-    return false;
-  }
-  const prevPct = (mediaBytesServed / MEDIA_BUDGET_BYTES) * 100;
-  mediaBytesServed += bytes;
-  const pct = (mediaBytesServed / MEDIA_BUDGET_BYTES) * 100;
-  if (prevPct < 80 && pct >= 80) {
-    console.warn(
-      `[Bandwidth] ${pct.toFixed(0)}% of media budget used (${getMediaBandwidthUsage().usedMB} MB)`,
-    );
-  }
-  return true;
-}
 
 // Singleton WebTorrent client for server-side torrent streaming
 let torrentClient: WebTorrent.Instance | null = null;
@@ -723,7 +673,6 @@ export async function handleTorrentStream(req: any, res: any) {
       end = Math.min(end, fileSize - 1);
       const chunkSize = end - start + 1;
 
-      if (!reserveMediaBytes(res, chunkSize)) return;
 
       res.writeHead(206, {
         "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -754,8 +703,6 @@ export async function handleTorrentStream(req: any, res: any) {
 
       stream.pipe(res);
     } else {
-      if (!reserveMediaBytes(res, fileSize)) return;
-
       res.writeHead(200, {
         "Content-Length": fileSize,
         "Content-Type": contentType,

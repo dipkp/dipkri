@@ -122,9 +122,6 @@ HOST=0.0.0.0
 # TMDB catalog (trending / search / details)
 TMDB_API_KEY=YOUR_TMDB_KEY
 
-# Media egress budget in MB — set near your host's monthly allowance
-MEDIA_BANDWIDTH_BUDGET_MB=15000
-
 # Optional integrations (leave blank if unused)
 OPENSUBTITLES_KEY=
 REDIS_URL=
@@ -275,8 +272,8 @@ sudo systemctl restart watchparty
 
 ## 14. Notes
 
-- **Bandwidth:** pick `MEDIA_BANDWIDTH_BUDGET_MB` close to your host's monthly allowance; the server
-  returns a clear `503` once the budget is hit instead of silently blowing the plan.
+- **Bandwidth:** the app enforces no media cap. If your host meters egress, watch its dashboard —
+  a 1080p film is ~1.8 GB per viewer.
 - **Legal:** hosting copyrighted streams you don't have rights to violates every host's ToS and
   exposes you to DMCA takedowns and account termination. Run this on content you own, licence, or
   that is public domain / CC (e.g. Blender open movies, Internet Archive).
