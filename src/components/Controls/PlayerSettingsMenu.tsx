@@ -158,6 +158,8 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
   const [openSubSearch, setOpenSubSearch] = useState("");
   const [openSubResults, setOpenSubResults] = useState<any[]>([]);
   const [searchingOpenSub, setSearchingOpenSub] = useState(false);
+  const [openSubSeason, setOpenSubSeason] = useState(1);
+  const [openSubEpisode, setOpenSubEpisode] = useState(1);
   const [downloadingSubId, setDownloadingSubId] = useState<string | null>(null);
 
   // Speed label helper
@@ -252,14 +254,38 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
     try {
       let url = "";
       if (q) {
-        url = `${serverPath}/searchSubtitles?query=${encodeURIComponent(q)}`;
+        const params = new URLSearchParams({ query: q });
+        if (openSubSeason > 0 && openSubEpisode > 0) {
+          params.set("season", String(openSubSeason));
+          params.set("episode", String(openSubEpisode));
+        }
+        url = `${serverPath}/searchSubtitles?${params.toString()}`;
       } else if (roomMedia) {
         url = `${serverPath}/searchSubtitles?url=${encodeURIComponent(roomMedia)}`;
       }
       if (url) {
         const res = await fetch(url);
         const data = await res.json();
-        setOpenSubResults(Array.isArray(data) ? data : []);
+        const list: any[] = Array.isArray(data) ? data : [];
+        const seen = new Set<string>();
+        const unique = list.filter((r) => {
+          const key = String(
+            r.id || r.file_id || r.url || r.attributes?.files?.[0]?.file_id || "",
+          );
+          if (key && seen.has(key)) return false;
+          if (key) seen.add(key);
+          return true;
+        });
+        const epPattern = new RegExp(
+          `(s0?${openSubSeason}[\s._-]*e0?${openSubEpisode}\b|\b${openSubSeason}x0?${openSubEpisode}\b|episode[\s._-]*0?${openSubEpisode}\b)`,
+          "i",
+        );
+        unique.sort((a, b) => {
+          const an = a.name || a.title || a.attributes?.release || "";
+          const bn = b.name || b.title || b.attributes?.release || "";
+          return Number(epPattern.test(bn)) - Number(epPattern.test(an));
+        });
+        setOpenSubResults(unique);
       }
     } catch (e) {
       console.warn("OpenSubtitle search failed:", e);
@@ -958,6 +984,28 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
               if (e.key === "Enter") performOpenSubSearch();
             }}
           />
+          <input
+            type="number"
+            className={styles.searchInput}
+            style={{ width: 44, flex: "0 0 44px", textAlign: "center", padding: "0 4px" }}
+            placeholder="S"
+            title="Season"
+            value={openSubSeason}
+            onChange={(e) =>
+              setOpenSubSeason(Math.max(0, Number(e.target.value) || 0))
+            }
+          />
+          <input
+            type="number"
+            className={styles.searchInput}
+            style={{ width: 44, flex: "0 0 44px", textAlign: "center", padding: "0 4px" }}
+            placeholder="E"
+            title="Episode"
+            value={openSubEpisode}
+            onChange={(e) =>
+              setOpenSubEpisode(Math.max(0, Number(e.target.value) || 0))
+            }
+          />
           <button
             type="button"
             className={styles.searchBtn}
@@ -1010,13 +1058,16 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
                   <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 4 }}>
                     <span
                       style={{
-                        whiteSpace: "nowrap",
+                        whiteSpace: "normal",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        wordBreak: "break-word",
                         fontSize: "13px",
                         fontWeight: 600,
                         color: "#f8fafc",
-                        lineHeight: 1.2,
+                        lineHeight: 1.25,
                       }}
                     >
                       {subRelease}
