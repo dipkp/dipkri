@@ -167,6 +167,7 @@ interface AppState {
   speed: number;
   connections: number;
   fileProgress: number;
+  videoDecodeIssue: boolean;
   fileSelection: {
     name: string;
     url: string;
@@ -286,6 +287,7 @@ export class App extends React.Component<AppProps, AppState> {
     speed: 0,
     connections: 0,
     fileProgress: 0,
+    videoDecodeIssue: false,
     fileSelection: [],
     overlayMsg: "",
     isErrorAuth: false,
@@ -1202,6 +1204,20 @@ export class App extends React.Component<AppProps, AppState> {
                   fileProgress:
                     typeof data.fileProgress === "number" ? data.fileProgress : 0,
                 });
+
+                // A stream can have full metadata (duration, audio, subtitles)
+                // and still render black when the browser cannot decode its
+                // video codec (typically HEVC/x265 or 10-bit).
+                const mediaEl = this.HTMLInterface.getVideoEl();
+                if (mediaEl) {
+                  const stuck =
+                    mediaEl.duration > 0 &&
+                    mediaEl.currentTime > 1 &&
+                    mediaEl.videoWidth === 0;
+                  if (stuck !== this.state.videoDecodeIssue) {
+                    this.setState({ videoDecodeIssue: stuck });
+                  }
+                }
               } catch {
                 // ignore
               }
@@ -3193,6 +3209,18 @@ export class App extends React.Component<AppProps, AppState> {
                       )}
                   </div>
                 )}
+              {this.state.videoDecodeIssue && !this.state.roomPaused && (
+                <div className={styles.bufferingOverlay}>
+                  <div className={styles.bufferingTitle}>Video can't be decoded</div>
+                  <div className={styles.bufferingMeta}>
+                    Audio and subtitles work, but this codec (likely HEVC/x265 or
+                    10-bit) has no browser decoder.
+                  </div>
+                  <div className={styles.bufferingHint} style={{ color: "#f87171" }}>
+                    Pick a stream whose badge says x264 — those play everywhere.
+                  </div>
+                </div>
+              )}
               {!this.state.loading && !this.state.roomMedia && (
                 <Alert
                   color="yellow"
