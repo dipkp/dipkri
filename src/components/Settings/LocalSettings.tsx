@@ -6,7 +6,7 @@ import React from "react";
 //     <Modal.Content>
 //       <Form>
 //         <TextArea rows={10} id="settings_textarea">
-//           {window.localStorage.getItem('watchparty-setting') ||
+//           {window.localStorage.getItem('dipkri-setting') ||
 //             JSON.stringify(getDefaultSettings(), null, 2)}
 //         </TextArea>
 //       </Form>
@@ -40,7 +40,7 @@ export function getDefaultSettings(): Settings {
 }
 
 export function getCurrentSettings(): Settings {
-  const setting = window.localStorage.getItem("watchparty-setting");
+  const setting = window.localStorage.getItem("dipkri-setting");
   try {
     let settings = validateSettingsString(setting);
     if (!settings) {
@@ -71,5 +71,5 @@ export function validateSettingsString(
 }
 
 export function updateSettings(newSetting: string) {
-  window.localStorage.setItem("watchparty-setting", newSetting);
+  window.localStorage.setItem("dipkri-setting", newSetting);
 }

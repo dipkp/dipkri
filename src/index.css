@@ -1,5 +1,5 @@
 /* ==========================================================================
-   WatchParty Global Design System & Dark Glassmorphism Theme
+   dipkri Global Design System & Dark Glassmorphism Theme
    ========================================================================== */
 
 :root {
@@ -352,14 +352,14 @@ a:hover {
 }
 
 /* Media Search / Link ComboBox: Desktop & Mobile Responsive Styling */
-.watchparty-media-combobox .mantine-Autocomplete-input,
-.watchparty-media-combobox .mantine-Input-input {
+.dipkri-media-combobox .mantine-Autocomplete-input,
+.dipkri-media-combobox .mantine-Input-input {
   padding-right: var(--combobox-padding-right, 14px) !important;
   padding-inline-end: var(--combobox-padding-right, 14px) !important;
 }
 
 /* Desktop Action Buttons: 100% solid background so no scrolled text bleeds through */
-.watchparty-combobox-desktop-actions {
+.dipkri-combobox-desktop-actions {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -371,7 +371,7 @@ a:hover {
   z-index: 5;
 }
 
-.watchparty-combobox-pill-queue {
+.dipkri-combobox-pill-queue {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -388,7 +388,7 @@ a:hover {
   box-shadow: 0 2px 8px rgba(2, 132, 199, 0.45);
 }
 
-.watchparty-combobox-pill-play {
+.dipkri-combobox-pill-play {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -405,23 +405,23 @@ a:hover {
   box-shadow: 0 2px 8px rgba(22, 163, 74, 0.45);
 }
 
-.watchparty-combobox-mobile-clear {
+.dipkri-combobox-mobile-clear {
   display: none;
 }
 
-.watchparty-combobox-mobile-actions {
+.dipkri-combobox-mobile-actions {
   display: none;
 }
 
 /* Media ComboBox: Responsive Mobile Styles */
 @media (max-width: 600px) {
   /* Hide cramped desktop buttons inside input on mobile */
-  .watchparty-combobox-desktop-actions {
+  .dipkri-combobox-desktop-actions {
     display: none !important;
   }
 
   /* Show lightweight clear button */
-  .watchparty-combobox-mobile-clear {
+  .dipkri-combobox-mobile-clear {
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
@@ -436,39 +436,39 @@ a:hover {
     margin-right: 8px;
     transition: background 150ms ease, color 150ms ease;
   }
-  .watchparty-combobox-mobile-clear:active {
+  .dipkri-combobox-mobile-clear:active {
     background: rgba(255, 255, 255, 0.25);
     color: #ffffff;
   }
 
   /* Reset right section width and input padding on mobile so text uses full width */
-  .watchparty-media-combobox .mantine-Input-section[data-position="right"],
-  .watchparty-media-combobox [data-position="right"] {
+  .dipkri-media-combobox .mantine-Input-section[data-position="right"],
+  .dipkri-media-combobox [data-position="right"] {
     width: 38px !important;
   }
 
-  .watchparty-media-combobox:has(.watchparty-combobox-mobile-clear) .mantine-Autocomplete-input,
-  .watchparty-media-combobox:has(.watchparty-combobox-mobile-clear) .mantine-Input-input {
+  .dipkri-media-combobox:has(.dipkri-combobox-mobile-clear) .mantine-Autocomplete-input,
+  .dipkri-media-combobox:has(.dipkri-combobox-mobile-clear) .mantine-Input-input {
     padding-right: 38px !important;
     padding-inline-end: 38px !important;
   }
 
-  .watchparty-media-combobox:not(:has(.watchparty-combobox-mobile-clear)) .mantine-Autocomplete-input,
-  .watchparty-media-combobox:not(:has(.watchparty-combobox-mobile-clear)) .mantine-Input-input {
+  .dipkri-media-combobox:not(:has(.dipkri-combobox-mobile-clear)) .mantine-Autocomplete-input,
+  .dipkri-media-combobox:not(:has(.dipkri-combobox-mobile-clear)) .mantine-Input-input {
     padding-right: 14px !important;
     padding-inline-end: 14px !important;
   }
 
   /* Show spacious, thumb-friendly mobile action buttons below the input */
-  .watchparty-combobox-mobile-actions {
+  .dipkri-combobox-mobile-actions {
     display: flex !important;
     gap: 8px;
     margin-top: 8px;
     width: 100%;
   }
 
-  .watchparty-combobox-mobile-btn-queue,
-  .watchparty-combobox-mobile-btn-play {
+  .dipkri-combobox-mobile-btn-queue,
+  .dipkri-combobox-mobile-btn-play {
     flex: 1;
     height: 38px;
     border-radius: 9px;
@@ -482,14 +482,14 @@ a:hover {
     -webkit-tap-highlight-color: transparent;
   }
 
-  .watchparty-combobox-mobile-btn-queue {
+  .dipkri-combobox-mobile-btn-queue {
     background: linear-gradient(135deg, #0284c7, #38bdf8);
     color: #ffffff;
     border: 1px solid rgba(56, 189, 248, 0.7);
     box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
   }
 
-  .watchparty-combobox-mobile-btn-play {
+  .dipkri-combobox-mobile-btn-play {
     background: linear-gradient(135deg, #16a34a, #22c55e);
     color: #ffffff;
     border: 1px solid rgba(34, 197, 94, 0.7);

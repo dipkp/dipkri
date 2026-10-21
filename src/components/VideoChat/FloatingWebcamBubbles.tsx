@@ -300,13 +300,13 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
     const handleStreamUpdate = () => {
       setStreamVersion((v) => v + 1);
     };
-    window.addEventListener("watchparty-stream-update", handleStreamUpdate);
+    window.addEventListener("dipkri-stream-update", handleStreamUpdate);
     const interval = setInterval(() => {
       setStreamVersion((v) => v + 1);
     }, 1500);
 
     return () => {
-      window.removeEventListener("watchparty-stream-update", handleStreamUpdate);
+      window.removeEventListener("dipkri-stream-update", handleStreamUpdate);
       clearInterval(interval);
     };
   }, []);
@@ -398,7 +398,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
 
   // Direct WebRTC Track Operations (Guaranteed to work without double-toggling)
   const handleToggleAudio = () => {
-    const ourStream = window.watchparty?.ourStream;
+    const ourStream = window.dipkri?.ourStream;
     let newMuted = !selfAudioMuted;
     if (onToggleAudio) {
       try {
@@ -412,7 +412,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
       newMuted = !track.enabled;
     }
     setTimeout(() => {
-      const track = window.watchparty?.ourStream?.getAudioTracks()[0];
+      const track = window.dipkri?.ourStream?.getAudioTracks()[0];
       const actualMuted = track ? !track.enabled : newMuted;
       setSelfAudioMuted(actualMuted);
       socket?.emit("CMD:userMute", { isMuted: actualMuted });
@@ -420,7 +420,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   };
 
   const handleToggleVideo = () => {
-    const ourStream = window.watchparty?.ourStream;
+    const ourStream = window.dipkri?.ourStream;
     let newMuted = !selfVideoMuted;
     if (onToggleVideo) {
       try {
@@ -434,18 +434,18 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
       newMuted = !track.enabled;
     }
     setTimeout(() => {
-      const track = window.watchparty?.ourStream?.getVideoTracks()[0];
+      const track = window.dipkri?.ourStream?.getVideoTracks()[0];
       const actualMuted = track ? !track.enabled : newMuted;
       setSelfVideoMuted(actualMuted);
     }, 40);
   };
 
   const handleLeaveVideo = () => {
-    const ourStream = window.watchparty?.ourStream;
-    const videoPCs = window.watchparty?.videoPCs;
+    const ourStream = window.dipkri?.ourStream;
+    const videoPCs = window.dipkri?.videoPCs;
     if (ourStream) {
       ourStream.getTracks().forEach((track) => track.stop());
-      window.watchparty.ourStream = undefined;
+      window.dipkri.ourStream = undefined;
     }
     if (videoPCs) {
       Object.keys(videoPCs).forEach((k) => {
@@ -498,28 +498,28 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
 
   // Get stream for user with multiple resilient fallbacks
   const getUserStream = (userId: string): MediaStream | null => {
-    if (typeof window === "undefined" || !window.watchparty) return null;
+    if (typeof window === "undefined" || !window.dipkri) return null;
     if (userId === selfId) {
-      return window.watchparty.ourStream || null;
+      return window.dipkri.ourStream || null;
     }
     // 1. Persistent remote streams dictionary (always survives tab switches and orientation changes)
-    if (window.watchparty.remoteStreams?.[userId]) {
-      return window.watchparty.remoteStreams[userId];
+    if (window.dipkri.remoteStreams?.[userId]) {
+      return window.dipkri.remoteStreams[userId];
     }
     // 2. Video reference srcObject
-    const ref = window.watchparty.videoRefs?.[userId];
+    const ref = window.dipkri.videoRefs?.[userId];
     if (ref && ref.srcObject instanceof MediaStream) {
       return ref.srcObject;
     }
     // 3. Active RTCPeerConnection receivers
-    const pc = window.watchparty.videoPCs?.[userId] as any;
+    const pc = window.dipkri.videoPCs?.[userId] as any;
     if (pc) {
       if (typeof pc.getReceivers === "function") {
         const tracks = pc.getReceivers().map((r: any) => r.track).filter(Boolean);
         if (tracks.length > 0) {
           const stream = new MediaStream(tracks);
-          if (!window.watchparty.remoteStreams) window.watchparty.remoteStreams = {};
-          window.watchparty.remoteStreams[userId] = stream;
+          if (!window.dipkri.remoteStreams) window.dipkri.remoteStreams = {};
+          window.dipkri.remoteStreams[userId] = stream;
           return stream;
         }
       }
@@ -631,7 +631,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
                     isSelf
                       ? selfVideoMuted ||
                         !Boolean(
-                          window.watchparty?.ourStream?.getVideoTracks()[0]?.enabled,
+                          window.dipkri?.ourStream?.getVideoTracks()[0]?.enabled,
                         )
                       : !user.isVideoChat ||
                         !Boolean(

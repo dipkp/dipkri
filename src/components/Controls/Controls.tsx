@@ -197,7 +197,7 @@ export const Controls = (props: ControlsProps) => {
   const [webcamState, setWebcamState] = useState(() => getWebcamSettings());
 
   const videoUsersCount = (props.participants || []).filter((p) => p.isVideoChat).length;
-  const hasOurStream = Boolean(typeof window !== "undefined" && window.watchparty?.ourStream);
+  const hasOurStream = Boolean(typeof window !== "undefined" && window.dipkri?.ourStream);
 
   useEffect(() => {
     const handleWebcamChange = (e: any) => {
@@ -340,15 +340,15 @@ export const Controls = (props: ControlsProps) => {
     const handleAudioTracksUpdate = () => {
       setAudioTracksRevision((v) => v + 1);
     };
-    window.addEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
-    window.addEventListener("watchparty-subtitles-updated", handleAudioTracksUpdate);
+    window.addEventListener("dipkri-audio-tracks-updated", handleAudioTracksUpdate);
+    window.addEventListener("dipkri-subtitles-updated", handleAudioTracksUpdate);
     const video = document.getElementById("leftVideo") as HTMLVideoElement | null;
     if (video) {
       video.addEventListener("loadedmetadata", handleAudioTracksUpdate);
     }
     return () => {
-      window.removeEventListener("watchparty-audio-tracks-updated", handleAudioTracksUpdate);
-      window.removeEventListener("watchparty-subtitles-updated", handleAudioTracksUpdate);
+      window.removeEventListener("dipkri-audio-tracks-updated", handleAudioTracksUpdate);
+      window.removeEventListener("dipkri-subtitles-updated", handleAudioTracksUpdate);
       if (video) {
         video.removeEventListener("loadedmetadata", handleAudioTracksUpdate);
       }
@@ -943,7 +943,7 @@ export const Controls = (props: ControlsProps) => {
       {isFullBleedVideo && !isScreenLocked && isControlsVisible && !props.isYouTube && (
         <div className={styles.videoTitleOverlay} onClick={(e) => e.stopPropagation()}>
           <div className={styles.videoTitleMain}>
-            {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle || "WatchParty"}
+            {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle || "dipkri"}
           </div>
           {cleanMovieTitle(currentMediaTitle).meta && (
             <div className={styles.videoTitleSub}>
@@ -1654,7 +1654,7 @@ export const Controls = (props: ControlsProps) => {
                   if (embeddedTrack && (embeddedTrack as any).url) {
                     props.socket?.emit("CMD:subtitle", (embeddedTrack as any).url);
                     window.dispatchEvent(
-                      new CustomEvent("watchparty-load-embedded-subtitle", {
+                      new CustomEvent("dipkri-load-embedded-subtitle", {
                         detail: { url: (embeddedTrack as any).url, label: embeddedTrack.label },
                       })
                     );

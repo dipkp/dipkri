@@ -313,13 +313,13 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     };
 
     window.addEventListener(PLAYER_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-    window.addEventListener("watchparty-load-embedded-subtitle", handleLoadDirectSub);
+    window.addEventListener("dipkri-load-embedded-subtitle", handleLoadDirectSub);
     return () => {
       window.removeEventListener(
         PLAYER_SETTINGS_CHANGED_EVENT,
         handleSettingsChange
       );
-      window.removeEventListener("watchparty-load-embedded-subtitle", handleLoadDirectSub);
+      window.removeEventListener("dipkri-load-embedded-subtitle", handleLoadDirectSub);
     };
   }, [roomSubtitle, isSubtitled, showNotice]);
 

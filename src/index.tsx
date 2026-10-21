@@ -57,7 +57,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.warn("Caught in WatchParty ErrorBoundary:", error, errorInfo);
+    console.warn("Caught in dipkri ErrorBoundary:", error, errorInfo);
   }
 
   render() {
@@ -81,7 +81,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             Something went wrong
           </h2>
           <p style={{ color: "#9CA3AF", maxWidth: "420px", fontSize: "14px", marginBottom: "20px" }}>
-            WatchParty recovered from a display error. Tap below to resume watching.
+            dipkri recovered from a display error. Tap below to resume watching.
           </p>
           <button
             type="button"
@@ -109,7 +109,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 }
 
-class WatchParty extends React.Component {
+class Dipkri extends React.Component {
   public state = DEFAULT_STATE;
   async componentDidMount() {
     if (firebaseConfig) {
@@ -215,10 +215,27 @@ class WatchParty extends React.Component {
   }
 }
 const container = document.getElementById("root");
+// One-time migration: carry settings stored under the old key prefix so users
+// keep their name, layout and player settings after the rename.
+try {
+  const stale: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key && key.startsWith("watchparty-")) stale.push(key);
+  }
+  for (const key of stale) {
+    const nextKey = "dipkri-" + key.slice("watchparty-".length);
+    if (window.localStorage.getItem(nextKey) === null) {
+      const value = window.localStorage.getItem(key);
+      if (value !== null) window.localStorage.setItem(nextKey, value);
+    }
+  }
+} catch {}
+
 const root = createRoot(container!);
 root.render(
   <ErrorBoundary>
-    <WatchParty />
+    <Dipkri />
   </ErrorBoundary>,
 );
 

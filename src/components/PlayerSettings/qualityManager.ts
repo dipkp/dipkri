@@ -41,9 +41,9 @@ class QualityManager {
     }
 
     // 2. HLS.js adaptive stream
-    if (typeof window !== "undefined" && window.watchparty?.hls) {
+    if (typeof window !== "undefined" && window.dipkri?.hls) {
       try {
-        const hls = window.watchparty.hls;
+        const hls = window.dipkri.hls;
         if (quality === "auto") {
           hls.currentLevel = -1; // Auto level
         } else {
@@ -70,9 +70,9 @@ class QualityManager {
     }
 
     // 3. Dash.js adaptive stream
-    if (typeof window !== "undefined" && window.watchparty?.dash) {
+    if (typeof window !== "undefined" && window.dipkri?.dash) {
       try {
-        const dash = window.watchparty.dash as any;
+        const dash = window.dipkri.dash as any;
         if (quality === "auto") {
           dash.updateSettings?.({
             streaming: { abr: { autoSwitchBitrate: { video: true } } },

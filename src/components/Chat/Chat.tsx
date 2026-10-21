@@ -966,7 +966,7 @@ const ChatMessageItem = ({
               isChatMessage
               disabled={!Boolean(owner && owner === user?.uid)}
               trigger={
-                <span title={isSub ? "WatchParty Plus subscriber" : ""}>
+                <span title={isSub ? "dipkri Plus subscriber" : ""}>
                   {authorName}
                 </span>
               }

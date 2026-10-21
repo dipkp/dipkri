@@ -539,7 +539,7 @@ class AudioEnhancerManager {
     }
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+      window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
     }
   }
 
@@ -567,7 +567,7 @@ class AudioEnhancerManager {
           this.detectedSubtitleTracks = data.subtitleTracks;
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("watchparty-subtitles-updated", { detail: data.subtitleTracks })
+              new CustomEvent("dipkri-subtitles-updated", { detail: data.subtitleTracks })
             );
           }
         }
@@ -600,7 +600,7 @@ class AudioEnhancerManager {
           }
 
           if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+            window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
           }
         }
       }
@@ -747,8 +747,8 @@ class AudioEnhancerManager {
     }
     if (
       typeof window !== "undefined" &&
-      window.watchparty?.hls?.audioTracks &&
-      window.watchparty.hls.audioTracks.length > 1
+      window.dipkri?.hls?.audioTracks &&
+      window.dipkri.hls.audioTracks.length > 1
     ) {
       return true;
     }
@@ -797,11 +797,11 @@ class AudioEnhancerManager {
     // 2. HLS.js audio tracks
     if (
       typeof window !== "undefined" &&
-      window.watchparty?.hls?.audioTracks &&
-      window.watchparty.hls.audioTracks.length > 0
+      window.dipkri?.hls?.audioTracks &&
+      window.dipkri.hls.audioTracks.length > 0
     ) {
-      const hlsTracks = window.watchparty.hls.audioTracks;
-      const currentTrack = window.watchparty.hls.audioTrack;
+      const hlsTracks = window.dipkri.hls.audioTracks;
+      const currentTrack = window.dipkri.hls.audioTrack;
       hlsTracks.forEach((t, idx) => {
         tracks.push({
           id: idx,
@@ -858,12 +858,12 @@ class AudioEnhancerManager {
     }
 
     // 2. HLS.js audio track
-    if (typeof window !== "undefined" && window.watchparty?.hls) {
+    if (typeof window !== "undefined" && window.dipkri?.hls) {
       if (
-        window.watchparty.hls.audioTracks &&
-        window.watchparty.hls.audioTracks.length > 0
+        window.dipkri.hls.audioTracks &&
+        window.dipkri.hls.audioTracks.length > 0
       ) {
-        window.watchparty.hls.audioTrack = index;
+        window.dipkri.hls.audioTrack = index;
         nativeHandled = true;
       }
     }
@@ -882,7 +882,7 @@ class AudioEnhancerManager {
     }
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+      window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
     }
   }
 
@@ -923,7 +923,7 @@ class AudioEnhancerManager {
       this.auxAudio.preload = "auto";
 
       this.auxAudio.onerror = (e) => {
-        console.warn("[WatchParty AudioTrack] Aux audio error", e);
+        console.warn("[dipkri AudioTrack] Aux audio error", e);
         if (el && this.selectedTrackIndex === 0 && !this.requiresTranscoding) el.muted = false;
       };
 

@@ -111,7 +111,7 @@ declare global {
   interface Window {
     onYouTubeIframeAPIReady: any;
     YT: YT.JsApi;
-    watchparty: {
+    dipkri: {
       ourStream: MediaStream | undefined;
       videoRefs: HTMLVideoElementDict;
       videoPCs: PCDict;
@@ -123,7 +123,7 @@ declare global {
   }
 }
 
-window.watchparty = {
+window.dipkri = {
   ourStream: undefined,
   videoRefs: {},
   videoPCs: {},
@@ -270,7 +270,7 @@ export class App extends React.Component<AppProps, AppState> {
     tsMap: {},
     nameMap: {},
     pictureMap: {},
-    myName: window.localStorage.getItem("watchparty-username") ?? "",
+    myName: window.localStorage.getItem("dipkri-username") ?? "",
     myPicture: "",
     loading: true,
     scrollTimestamp: 0,
@@ -313,13 +313,13 @@ export class App extends React.Component<AppProps, AppState> {
       ? true
       : Boolean(
           Number(
-            window.localStorage.getItem("watchparty-showchatcolumn") ?? "1",
+            window.localStorage.getItem("dipkri-showchatcolumn") ?? "1",
           ),
         ),
     showPeopleColumn: false,
     // Boolean(
     //       Number(
-    //         window.localStorage.getItem('watchparty-showpeoplecolumn') ?? '0',
+    //         window.localStorage.getItem('dipkri-showpeoplecolumn') ?? '0',
     //       ),
     //     ),
     owner: undefined,
@@ -334,7 +334,7 @@ export class App extends React.Component<AppProps, AppState> {
     isLiveStream: false,
     settingsModalOpen: false,
     convertProgress: undefined,
-    convertEnabled: window.localStorage.getItem("watchparty-convert") === "1",
+    convertEnabled: window.localStorage.getItem("dipkri-convert") === "1",
     incomingReaction: null,
     audioBoost: getPlayerSettings().audioBoost || 100,
     copiedLink: false,
@@ -639,9 +639,9 @@ export class App extends React.Component<AppProps, AppState> {
       },
     });
     this.socket = socket;
-    (window as any).watchparty = (window as any).watchparty || {};
-    (window as any).watchparty.socket = socket;
-    (window as any).watchparty.app = this;
+    (window as any).dipkri = (window as any).dipkri || {};
+    (window as any).dipkri.socket = socket;
+    (window as any).dipkri.app = this;
     socket.on("connect", async () => {
       this.setState({
         state: "connected",
@@ -656,14 +656,14 @@ export class App extends React.Component<AppProps, AppState> {
         this.context.user?.email?.split("@")[0];
       const customName =
         typeof window !== "undefined"
-          ? window.localStorage.getItem("watchparty-custom-name")
+          ? window.localStorage.getItem("dipkri-custom-name")
           : null;
       const initialName =
         customName || googleName || this.state.myName || (await generateName());
       this.updateName(initialName);
       this.loadSignInData(this.context.user);
       // Re-join video chat if we were in it before the reconnection
-      if (window.watchparty.ourStream) {
+      if (window.dipkri.ourStream) {
         socket.emit("CMD:joinVideo");
       }
     });
@@ -1012,17 +1012,17 @@ export class App extends React.Component<AppProps, AppState> {
           }
 
           // Clean up any lingering Hls/Dash instances from previous stream
-          if (window.watchparty?.hls) {
+          if (window.dipkri?.hls) {
             try {
-              window.watchparty.hls.destroy();
+              window.dipkri.hls.destroy();
             } catch {}
-            window.watchparty.hls = undefined;
+            window.dipkri.hls = undefined;
           }
-          if (window.watchparty?.dash) {
+          if (window.dipkri?.dash) {
             try {
-              window.watchparty.dash.destroy();
+              window.dipkri.dash.destroy();
             } catch {}
-            window.watchparty.dash = undefined;
+            window.dipkri.dash = undefined;
           }
 
           if (isMagnet(src) || src.includes("/stream?torrent=")) {
@@ -1033,15 +1033,15 @@ export class App extends React.Component<AppProps, AppState> {
             await this.Player().setSrcAndTime(streamUrl, time);
           } else if (isDash(src)) {
             const Dash = await import("dashjs");
-            window.watchparty.dash = Dash.MediaPlayer().create();
-            window.watchparty.dash.on("streamInitialized", (_e: any) => {
+            window.dipkri.dash = Dash.MediaPlayer().create();
+            window.dipkri.dash.on("streamInitialized", (_e: any) => {
               const isLiveStream = this.Player().getDuration() >= Infinity;
               console.log("DASH stream initialized: isLive %s", isLiveStream);
               this.setState({
                 isLiveStream,
               });
             });
-            window.watchparty.dash.initialize(leftVideo, src);
+            window.dipkri.dash.initialize(leftVideo, src);
           } else if (isHls(src) && window.MediaSource) {
             // Prefer using hls.js if MediaSource Extensions are supported
             const Hls = (await import("hls.js")).default;
@@ -1055,7 +1055,7 @@ export class App extends React.Component<AppProps, AppState> {
                 enableWorker: true,
                 lowLatencyMode: true,
               });
-              window.watchparty.hls = hls;
+              window.dipkri.hls = hls;
 
               hls.on(Hls.Events.ERROR, (_e: any, hlsData: any) => {
                 if (hlsData.fatal) {
@@ -1071,7 +1071,7 @@ export class App extends React.Component<AppProps, AppState> {
                     default:
                       console.warn("[HLS] Fatal error, destroying instance:", hlsData);
                       hls.destroy();
-                      window.watchparty.hls = undefined;
+                      window.dipkri.hls = undefined;
                       if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
                         leftVideo.src = src;
                       } else {
@@ -1105,7 +1105,7 @@ export class App extends React.Component<AppProps, AppState> {
               });
 
               hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-                window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+                window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
               });
 
               hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_: any, data: any) => {
@@ -1507,7 +1507,7 @@ export class App extends React.Component<AppProps, AppState> {
       const googleName = user.displayName || user.email?.split("@")[0];
       const customName =
         typeof window !== "undefined"
-          ? window.localStorage.getItem("watchparty-custom-name")
+          ? window.localStorage.getItem("dipkri-custom-name")
           : null;
       const activeName = customName || googleName;
       if (activeName) {
@@ -2783,7 +2783,7 @@ export class App extends React.Component<AppProps, AppState> {
 
   setConvertEnabled = (convertEnabled: boolean) => {
     window.localStorage.setItem(
-      "watchparty-convert",
+      "dipkri-convert",
       convertEnabled ? "1" : "0",
     );
     this.setState({ convertEnabled });
@@ -2809,7 +2809,7 @@ export class App extends React.Component<AppProps, AppState> {
   updateName = (name: string) => {
     this.setState({ myName: name });
     this.socket.emit("CMD:name", name);
-    window.localStorage.setItem("watchparty-username", name);
+    window.localStorage.setItem("dipkri-username", name);
   };
 
   updatePicture = (url: string) => {
@@ -4261,7 +4261,7 @@ export class App extends React.Component<AppProps, AppState> {
                             unreadCount: newVal ? 0 : this.state.unreadCount,
                           });
                           window.localStorage.setItem(
-                            "watchparty-showchatcolumn",
+                            "dipkri-showchatcolumn",
                             Number(newVal).toString(),
                           );
                         }}

@@ -42,9 +42,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
   componentDidMount() {
     this.socket.on("signal", this.handleSignal);
     if (typeof window !== "undefined") {
-      window.addEventListener("watchparty-stream-update", this.handleStreamUpdate);
+      window.addEventListener("dipkri-stream-update", this.handleStreamUpdate);
     }
-    if (window.watchparty.ourStream) {
+    if (window.dipkri.ourStream) {
       this.updateWebRTC();
     }
   }
@@ -54,27 +54,27 @@ export class VideoChat extends React.Component<VideoChatProps> {
   componentWillUnmount() {
     this.socket.off("signal", this.handleSignal);
     if (typeof window !== "undefined") {
-      window.removeEventListener("watchparty-stream-update", this.handleStreamUpdate);
+      window.removeEventListener("dipkri-stream-update", this.handleStreamUpdate);
     }
     // Release camera/mic and every peer connection; otherwise the device stays
     // captured after the panel closes.
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     if (ourStream) {
       ourStream.getTracks().forEach((track) => track.stop());
-      window.watchparty.ourStream = undefined;
+      window.dipkri.ourStream = undefined;
       try {
         this.socket.emit("CMD:leaveVideo");
       } catch {}
     }
-    Object.keys(window.watchparty.videoPCs).forEach((key) => {
+    Object.keys(window.dipkri.videoPCs).forEach((key) => {
       try {
-        window.watchparty.videoPCs[key].close();
+        window.dipkri.videoPCs[key].close();
       } catch {}
-      delete window.watchparty.videoPCs[key];
+      delete window.dipkri.videoPCs[key];
     });
-    if (window.watchparty.remoteStreams) {
-      Object.keys(window.watchparty.remoteStreams).forEach((key) => {
-        delete window.watchparty.remoteStreams![key];
+    if (window.dipkri.remoteStreams) {
+      Object.keys(window.dipkri.remoteStreams).forEach((key) => {
+        delete window.dipkri.remoteStreams![key];
       });
     }
   }
@@ -99,13 +99,13 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const selfId = getOrCreateClientId();
     if (!msg || !from || from === selfId) return;
 
-    let pc: RTCPeerConnection | undefined = window.watchparty.videoPCs[from];
+    let pc: RTCPeerConnection | undefined = window.dipkri.videoPCs[from];
     if (!pc || pc.connectionState === "closed" || pc.connectionState === "failed") {
       if (pc) {
         try {
           pc.close();
         } catch {}
-        delete window.watchparty.videoPCs[from];
+        delete window.dipkri.videoPCs[from];
       }
       pc = this.createPeerConnection(from);
     }
@@ -128,12 +128,12 @@ export class VideoChat extends React.Component<VideoChatProps> {
     } else if (msg.sdp && msg.sdp.type === "offer") {
       try {
         // Ensure our local tracks are attached so the answer includes our outgoing video/audio
-        if (window.watchparty.ourStream) {
+        if (window.dipkri.ourStream) {
           const senders = pc.getSenders();
-          window.watchparty.ourStream.getTracks().forEach((track) => {
+          window.dipkri.ourStream.getTracks().forEach((track) => {
             if (!senders.some((s) => s.track === track)) {
               try {
-                pc!.addTrack(track, window.watchparty.ourStream!);
+                pc!.addTrack(track, window.dipkri.ourStream!);
               } catch (e) {}
             }
           });
@@ -193,7 +193,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   setupWebRTC = async () => {
-    if (window.watchparty.ourStream) {
+    if (window.dipkri.ourStream) {
       // Already in the call — a second join would leak the first capture.
       return;
     }
@@ -234,14 +234,14 @@ export class VideoChat extends React.Component<VideoChatProps> {
       return;
     }
 
-    window.watchparty.ourStream = stream;
+    window.dipkri.ourStream = stream;
     this.socket.emit("CMD:joinVideo");
     this.emitUserMute();
 
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream },
         }),
       );
@@ -251,17 +251,17 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   stopWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
     if (ourStream) {
       ourStream.getTracks().forEach((track) => track.stop());
     }
-    window.watchparty.ourStream = undefined;
-    if (window.watchparty.remoteStreams) {
-      Object.keys(window.watchparty.remoteStreams).forEach((key) => {
-        const el = window.watchparty.videoRefs[key];
+    window.dipkri.ourStream = undefined;
+    if (window.dipkri.remoteStreams) {
+      Object.keys(window.dipkri.remoteStreams).forEach((key) => {
+        const el = window.dipkri.videoRefs[key];
         if (el) el.srcObject = null;
-        delete window.watchparty.remoteStreams![key];
+        delete window.dipkri.remoteStreams![key];
       });
     }
     this.retryAttempts.clear();
@@ -276,7 +276,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream: null },
         }),
       );
@@ -285,7 +285,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   toggleVideoWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     if (ourStream && ourStream.getVideoTracks()[0]) {
       const track = ourStream.getVideoTracks()[0];
       track.enabled = !track.enabled;
@@ -293,7 +293,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream: ourStream },
         }),
       );
@@ -302,12 +302,12 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   getVideoWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     return Boolean(ourStream && ourStream.getVideoTracks()[0]?.enabled);
   };
 
   toggleAudioWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     if (ourStream && ourStream.getAudioTracks()[0]) {
       const track = ourStream.getAudioTracks()[0];
       track.enabled = !track.enabled;
@@ -317,7 +317,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   getAudioWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     return Boolean(
       ourStream &&
       ourStream.getAudioTracks()[0] &&
@@ -328,9 +328,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
   createPeerConnection = (id: string): RTCPeerConnection | undefined => {
     const selfId = getOrCreateClientId();
     if (id === selfId) return undefined;
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
+    const videoRefs = window.dipkri.videoRefs;
 
     const pc = new RTCPeerConnection({ iceServers: iceServers() });
     videoPCs[id] = pc;
@@ -352,13 +352,13 @@ export class VideoChat extends React.Component<VideoChatProps> {
     };
 
     pc.ontrack = (event: RTCTrackEvent) => {
-      if (!window.watchparty.remoteStreams) {
-        window.watchparty.remoteStreams = {};
+      if (!window.dipkri.remoteStreams) {
+        window.dipkri.remoteStreams = {};
       }
-      let stream = window.watchparty.remoteStreams[id];
+      let stream = window.dipkri.remoteStreams[id];
       if (!stream) {
         stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream();
-        window.watchparty.remoteStreams[id] = stream;
+        window.dipkri.remoteStreams[id] = stream;
       }
       if (!stream.getTracks().includes(event.track)) {
         stream.addTrack(event.track);
@@ -373,7 +373,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("watchparty-stream-update", {
+          new CustomEvent("dipkri-stream-update", {
             detail: { id, stream },
           }),
         );
@@ -412,9 +412,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   updateWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
+    const videoRefs = window.dipkri.videoRefs;
     if (!ourStream) {
       return;
     }
@@ -429,8 +429,8 @@ export class VideoChat extends React.Component<VideoChatProps> {
           value.close();
         } catch {}
         delete videoPCs[key];
-        if (window.watchparty.remoteStreams) {
-          delete window.watchparty.remoteStreams[key];
+        if (window.dipkri.remoteStreams) {
+          delete window.dipkri.remoteStreams[key];
         }
       }
     });
@@ -481,8 +481,8 @@ export class VideoChat extends React.Component<VideoChatProps> {
   render() {
     const { participants, pictureMap, nameMap, tsMap, socket, owner } =
       this.props;
-    const ourStream = window.watchparty.ourStream;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoRefs = window.dipkri.videoRefs;
     const selfId = getOrCreateClientId();
     return (
       <div
@@ -662,9 +662,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 ? Boolean(ourStream && this.getVideoWebRTC())
                 : Boolean(
                     isUserInVideo &&
-                    window.watchparty?.remoteStreams?.[p.id]?.getVideoTracks()?.length &&
-                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].enabled &&
-                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].readyState === "live",
+                    window.dipkri?.remoteStreams?.[p.id]?.getVideoTracks()?.length &&
+                    window.dipkri.remoteStreams[p.id].getVideoTracks()[0].enabled &&
+                    window.dipkri.remoteStreams[p.id].getVideoTracks()[0].readyState === "live",
                   )) ? (
                 <video
                   ref={(el) => {
@@ -672,7 +672,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                       videoRefs[p.id] = el;
                       const targetStream = isSelf
                         ? ourStream
-                        : window.watchparty?.remoteStreams?.[p.id];
+                        : window.dipkri?.remoteStreams?.[p.id];
                       if (targetStream && el.srcObject !== targetStream) {
                         el.srcObject = targetStream;
                         el.play().catch(() => {});

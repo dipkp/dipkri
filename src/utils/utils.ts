@@ -450,8 +450,8 @@ export function shuffle(array: any[]) {
 }
 
 export const iceServers = (): RTCIceServer[] => {
-  if (typeof window !== "undefined" && (window as any).watchparty_iceServers) {
-    return (window as any).watchparty_iceServers;
+  if (typeof window !== "undefined" && (window as any).dipkri_iceServers) {
+    return (window as any).dipkri_iceServers;
   }
   return [
     { urls: "stun:stun.l.google.com:19302" },
@@ -561,23 +561,23 @@ export async function openFileSelector(accept?: string) {
 }
 
 export function getOrCreateClientId() {
-  let clientId = window.localStorage.getItem("watchparty-clientid");
+  let clientId = window.localStorage.getItem("dipkri-clientid");
   if (!clientId) {
     // Generate a new clientID and save it
     // This requires https, so fallback to JS implementation if needed
     clientId = createUuid();
-    window.localStorage.setItem("watchparty-clientid", clientId);
+    window.localStorage.setItem("dipkri-clientid", clientId);
   }
   return clientId;
 }
 
 export function getOrCreateSessionId() {
-  let sessionId = window.localStorage.getItem("watchparty-sessionid");
+  let sessionId = window.localStorage.getItem("dipkri-sessionid");
   if (!sessionId) {
     // Generate a new sessionID and save it
     // This requires https, so fallback to JS implementation if needed
     sessionId = createUuid();
-    window.localStorage.setItem("watchparty-sessionid", sessionId);
+    window.localStorage.setItem("dipkri-sessionid", sessionId);
   }
   return sessionId;
 }
@@ -588,7 +588,7 @@ export function addAndSavePassword(roomId: string, password: string) {
     [roomId]: password,
   };
   window.localStorage.setItem(
-    "watchparty-passwords",
+    "dipkri-passwords",
     JSON.stringify(newPasswords),
   );
 }
@@ -596,7 +596,7 @@ export function addAndSavePassword(roomId: string, password: string) {
 export function getSavedPasswords(): Record<string, string> {
   try {
     const savedPasswordsString =
-      window.localStorage.getItem("watchparty-passwords") ?? "{}";
+      window.localStorage.getItem("dipkri-passwords") ?? "{}";
     const savedPasswords = JSON.parse(savedPasswordsString);
     return savedPasswords;
   } catch (e) {

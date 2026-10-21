@@ -11,13 +11,13 @@ export const RemoteAudioRenderer: React.FC<{
     const handleStreamUpdate = () => {
       setStreamVersion((v) => v + 1);
     };
-    window.addEventListener("watchparty-stream-update", handleStreamUpdate);
+    window.addEventListener("dipkri-stream-update", handleStreamUpdate);
     const interval = setInterval(() => {
       setStreamVersion((v) => v + 1);
     }, 2000);
 
     return () => {
-      window.removeEventListener("watchparty-stream-update", handleStreamUpdate);
+      window.removeEventListener("dipkri-stream-update", handleStreamUpdate);
       clearInterval(interval);
     };
   }, []);
@@ -41,7 +41,7 @@ export const RemoteAudioRenderer: React.FC<{
       aria-hidden="true"
     >
       {remoteVideoUsers.map((user) => {
-        const stream = window.watchparty?.remoteStreams?.[user.id];
+        const stream = window.dipkri?.remoteStreams?.[user.id];
         return (
           <audio
             key={`remote-audio-${user.id}`}
