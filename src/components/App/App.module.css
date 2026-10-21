@@ -38,6 +38,41 @@
   }
 }
 
+.bufferingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(9, 10, 15, 0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.bufferingTitle {
+  color: #f0f0f5;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.bufferingMeta {
+  color: #38bdf8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bufferingHint {
+  color: #94a3b8;
+  font-size: 12px;
+  max-width: 320px;
+}
+
 .torrentStatsBadge {
   position: absolute;
   /* sits below the emoji reaction bar so both stay readable */

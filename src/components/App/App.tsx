@@ -3139,6 +3139,28 @@ export class App extends React.Component<AppProps, AppState> {
                   )}
                 </div>
               )}
+              {this.state.roomMedia &&
+                (isMagnet(this.state.roomMedia) ||
+                  this.state.roomMedia.includes("torrent=")) &&
+                !this.state.isLiveStream &&
+                !this.state.roomPaused &&
+                this.Player().getDuration() === 0 && (
+                  <div className={styles.bufferingOverlay}>
+                    <Loader size="md" color="indigo" />
+                    <div className={styles.bufferingTitle}>Buffering pieces…</div>
+                    <div className={styles.bufferingMeta}>
+                      {this.state.total
+                        ? `${Math.min(
+                            (this.state.downloaded / this.state.total) * 100,
+                            100,
+                          ).toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
+                        : "Connecting to peers…"}
+                    </div>
+                    <div className={styles.bufferingHint}>
+                      Slow torrent? Pick a stream with more seeders.
+                    </div>
+                  </div>
+                )}
               {!this.state.loading && !this.state.roomMedia && (
                 <Alert
                   color="yellow"

@@ -672,6 +672,9 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             const dub = /\bdub(bed)?\b|english[\s._-]*audio/.test(t);
                             return audioFilter === "dual" ? dual : dub || dual;
                           })
+                          // Best-seeded first: a 167 B/s stream should never be
+                          // the default choice.
+                          .sort((a, b) => (b.s.seeders || 0) - (a.s.seeders || 0))
                           .map(({ s, idx }) => {
                           const isSelected = selectedStreamIndex === idx;
                           return (
