@@ -1,0 +1,121 @@
+--- a/src/components/MovieModal/MovieModal.tsx
++++ b/src/components/MovieModal/MovieModal.tsx
+@@ -701,118 +701,6 @@
+                 </div>
+               )}
+ 
+-              {/* WEB EMBED MIRROR MODE */}
+-              {playbackMode === "web_mirror" && (
+-                <div className={styles.serverSection}>
+-                  <h4 className={styles.sectionHeading}>
+-                    <span>🌐 Select Web Embed Server</span>
+-                  </h4>
+-                  <div className={styles.serverList}>
+-                    {SERVER_OPTIONS.map((srv) => (
+-                      <button
+-                        key={srv.id}
+-                        type="button"
+-                        className={`${styles.serverButton} ${selectedServer === srv.id ? styles.serverButtonActive : ""}`}
+-                        onClick={() => setSelectedServer(srv.id)}
+-                      >
+-                        <span className={styles.serverName}>{srv.name}</span>
+-                        <span className={styles.serverBadge}>{srv.tag}</span>
+-                      </button>
+-                    ))}
+-                  </div>
+-                </div>
+-              )}
+-
+-              {/* Virtual Browser: perfect sync for embeds that cannot be controlled */}
+-              {playbackMode === "web_mirror" && (
+-                <div
+-                  style={{
+-                    marginTop: 12,
+-                    padding: 12,
+-                    border: "1px solid rgba(99,102,241,0.35)",
+-                    borderRadius: 12,
+-                    background: "rgba(99,102,241,0.08)",
+-                  }}
+-                >
+-                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+-                    🖥️ Virtual Browser — perfect sync for this embed
+-                  </div>
+-                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>
+-                    The embed runs inside one shared browser, so everyone sees the same playhead.
+-                    No iframe drift, no autoplay mute.
+-                  </div>
+-                  <button
+-                    type="button"
+-                    className={styles.previewBtn}
+-                    onClick={() => {
+-                      const url = buildMovieEmbedUrl({
+-                        tmdbId: String(selectedMedia.id),
+-                        type: selectedMedia.type,
+-                        title: selectedMedia.title,
+-                        season: selectedSeason,
+-                        episode: selectedEpisode,
+-                        server: selectedServer,
+-                      });
+-                      try {
+-                        navigator.clipboard?.writeText(url);
+-                      } catch {}
+-                      onOpenVBrowser?.(url);
+-                    }}
+-                  >
+-                    Launch VBrowser (copies URL)
+-                  </button>
+-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+-                    When it starts: click inside the virtual browser, press Ctrl+V, then Enter.
+-                  </div>
+-                </div>
+-              )}
+-
+-              {/* Web Mirror Movie Primary Actions */}
+-              {playbackMode === "web_mirror" && selectedMedia.type === "movie" && (
+-                <div className={styles.actionRow} style={{ marginTop: 12 }}>
+-                  <button
+-                    type="button"
+-                    className={styles.playRoomBtn}
+-                    onClick={() => handlePlayMedia()}
+-                  >
+-                    ▶ Play in Room
+-                  </button>
+-                  <button
+-                    type="button"
+-                    className={styles.queueBtn}
+-                    onClick={() => handleQueueMedia()}
+-                  >
+-                    + Add to Queue
+-                  </button>
+-                  <button
+-                    type="button"
+-                    className={styles.previewBtn}
+-                    onClick={() => setIsPreviewing(!isPreviewing)}
+-                  >
+-                    {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
+-                  </button>
+-                </div>
+-              )}
+-
+-              {/* In-Modal Stream Preview if enabled */}
+-              {isPreviewing && playbackMode === "web_mirror" && (
+-                <div className={styles.previewFrameWrapper}>
+-                  <iframe
+-                    title="Movie Preview"
+-                    src={buildMovieEmbedUrl({
+-                      tmdbId: String(selectedMedia.id),
+-                      type: selectedMedia.type,
+-                      title: selectedMedia.title,
+-                      season: selectedSeason,
+-                      episode: 1,
+-                      server: selectedServer,
+-                    })}
+-                    className={styles.previewFrame}
+-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+-                    allowFullScreen
+-                  />
+-                </div>
+-              )}
+             </div>
+           ) : items.length === 0 ? (
+             <div className={styles.emptyState}>
