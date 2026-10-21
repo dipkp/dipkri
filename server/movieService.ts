@@ -57,7 +57,11 @@ function formatTmdbItem(item: any, explicitType?: "movie" | "tv") {
  */
 movieRouter.get("/trending", async (req: Request, res: Response) => {
   const page = Number(req.query.page) || 1;
-  const cacheKey = `trending:${page}`;
+  const rawType =
+    typeof req.query.type === "string" ? req.query.type.toLowerCase() : "all";
+  const type: "all" | "movie" | "tv" =
+    rawType === "movie" || rawType === "tv" ? rawType : "all";
+  const cacheKey = `trending:${type}:${page}`;
   const cached = getCached(cacheKey);
   if (cached) {
     res.json(cached);
@@ -66,7 +70,7 @@ movieRouter.get("/trending", async (req: Request, res: Response) => {
 
   try {
     const apiKey = config.TMDB_API_KEY;
-    const url = `${TMDB_BASE_URL}/trending/all/day?api_key=${apiKey}&page=${page}`;
+    const url = `${TMDB_BASE_URL}/trending/${type}/day?api_key=${apiKey}&page=${page}`;
     const response = await axios.get(url, { timeout: 8000 });
     const rawResults = response.data?.results || [];
 

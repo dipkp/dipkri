@@ -73,10 +73,12 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     }
   }, [isOpen, selectedMedia]);
 
-  const fetchTrending = async () => {
+  const fetchTrending = async (type: "trending" | "movie" | "tv" = "trending") => {
     setLoading(true);
     try {
-      const res = await fetch("/api/movies/trending");
+      const res = await fetch(
+        `/api/movies/trending?type=${type === "trending" ? "all" : type}`,
+      );
       if (res.ok) {
         const data = await res.json();
         setItems(data.results || []);
@@ -127,11 +129,15 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     setFilterType(type);
     if (type === "trending") {
       setSearchQuery("");
-      fetchTrending();
+      fetchTrending("trending");
+      return;
+    }
+    if (searchQuery.trim()) {
+      executeSearch(searchQuery.trim(), type);
     } else {
-      if (searchQuery.trim()) {
-        executeSearch(searchQuery.trim(), type);
-      }
+      // No active search: load that category's trending list instead of leaving
+      // the previous tab's results on screen.
+      fetchTrending(type);
     }
   };
 
