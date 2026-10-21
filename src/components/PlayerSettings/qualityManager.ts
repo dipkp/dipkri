@@ -20,9 +20,9 @@ class QualityManager {
    */
   public applyQuality(quality: string, isYouTube?: boolean) {
     // 1. YouTube IFrame API
-    if (isYouTube && typeof window !== "undefined" && (window as any).watchPartyYTPlayer) {
+    if (isYouTube && typeof window !== "undefined" && (window as any).dipkriYTPlayer) {
       try {
-        const yt = (window as any).watchPartyYTPlayer;
+        const yt = (window as any).dipkriYTPlayer;
         const ytQualityMap: Record<string, string> = {
           auto: "auto",
           "1080p": "hd1080",
