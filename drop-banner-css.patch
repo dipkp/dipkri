@@ -1,0 +1,27 @@
+--- a/src/components/MovieModal/MovieModal.module.css
++++ b/src/components/MovieModal/MovieModal.module.css
+@@ -868,24 +868,6 @@
+   box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+ }
+ 
+-.audioGuaranteeBanner {
+-  background: rgba(16, 185, 129, 0.1);
+-  border: 1px solid rgba(16, 185, 129, 0.3);
+-  border-radius: 10px;
+-  padding: 10px 14px;
+-  display: flex;
+-  align-items: center;
+-  gap: 10px;
+-  margin-bottom: 12px;
+-  font-size: 12px;
+-  color: #6ee7b7;
+-}
+-
+-.audioGuaranteeIcon {
+-  font-size: 18px;
+-  flex-shrink: 0;
+-}
+-
+ /* Direct Stream Cards */
+ .streamListGrid {
+   display: grid;

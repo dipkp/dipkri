@@ -599,14 +599,6 @@ export const MovieModal: React.FC<MovieModalProps> = ({
               {/* DIRECT NATIVE PLAYER MODE */}
               {playbackMode === "direct" && (
                 <div className={styles.serverSection}>
-                  <div className={styles.audioGuaranteeBanner}>
-                    <span className={styles.audioGuaranteeIcon}>🔊</span>
-                    <span>
-                      <strong>100% Working Audio & Sync:</strong> Plays via WatchParty native HTML5 engine.
-                      Full volume controls, up to 200% AudioBoost, skip buttons, and instant timeline seeking!
-                    </span>
-                  </div>
-
                   <h4 className={styles.sectionHeading}>
                     <span>
                       ⚡ Available HD Streams ({directStreams.length})
