@@ -1,0 +1,33 @@
+--- a/src/components/App/App.tsx
++++ b/src/components/App/App.tsx
+@@ -459,11 +459,19 @@
+   };
+ 
+   handleFirstInteraction = () => {
+-    if (this.state.roomMedia && this.Player().isMuted()) {
+-      this.localSetMute(false);
+-    }
++    // Clicks before any media exists (home screen, modals) must not consume the
++    // unlocking gesture — otherwise the film starts muted with no way back.
++    if (!this.state.roomMedia) return;
++    try {
++      audioEnhancer.getAudioContext()?.resume();
++    } catch {}
+     if (!this.state.isAutoPlayable) {
++      if (this.Player().isMuted()) {
++        this.localSetMute(false);
++      }
+       this.setState({ isAutoPlayable: true });
++      // Unlocked once: stop listening so a manual mute is never overridden.
++      document.removeEventListener("pointerdown", this.handleFirstInteraction, true);
+     }
+   };
+ 
+@@ -538,7 +546,6 @@
+     // unmute once on the first interaction anywhere on the page.
+     document.addEventListener("pointerdown", this.handleFirstInteraction, {
+       capture: true,
+-      once: true,
+     });
+     window.addEventListener("message", this.handleMovieMessage);
+ 

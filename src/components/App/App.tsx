@@ -459,12 +459,20 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   handleFirstInteraction = () => {
-    if (this.state.roomMedia && this.Player().isMuted()) {
+    // Clicks before any media exists (home screen, modals) must not consume the
+    // unlocking gesture — otherwise the film starts muted with no way back.
+    if (!this.state.roomMedia) return;
+    try {
+      audioEnhancer.getAudioContext()?.resume();
+    } catch {}
+    // Unmute regardless of what testAutoplay() reported: some browsers mute the
+    // element even when the probe succeeds, which looks exactly like "no audio".
+    if (this.Player().isMuted()) {
       this.localSetMute(false);
     }
-    if (!this.state.isAutoPlayable) {
-      this.setState({ isAutoPlayable: true });
-    }
+    this.setState({ isAutoPlayable: true });
+    // Unlocked once: stop listening so a manual mute is never overridden.
+    document.removeEventListener("pointerdown", this.handleFirstInteraction, true);
   };
 
   handleVisibilityChange = () => {
@@ -538,7 +546,6 @@ export class App extends React.Component<AppProps, AppState> {
     // unmute once on the first interaction anywhere on the page.
     document.addEventListener("pointerdown", this.handleFirstInteraction, {
       capture: true,
-      once: true,
     });
     window.addEventListener("message", this.handleMovieMessage);
 
