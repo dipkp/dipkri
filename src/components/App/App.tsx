@@ -1540,6 +1540,15 @@ export class App extends React.Component<AppProps, AppState> {
               this.socket.emit("CMD:askHost");
             }
           },
+          onError: (e: any) => {
+            const code = e?.data;
+            if (code === 101 || code === 150) {
+              this.setState({
+                overlayMsg:
+                  "This YouTube video blocks embedding. Open it on YouTube, or paste a different link.",
+              });
+            }
+          },
           onStateChange: (e) => {
             if (
               this.usingYoutube() &&
@@ -3161,6 +3170,16 @@ export class App extends React.Component<AppProps, AppState> {
                     <div className={styles.bufferingHint}>
                       Slow torrent? Pick a stream with more seeders.
                     </div>
+                    {this.state.total > 0 &&
+                      this.state.downloaded === 0 &&
+                      this.state.connections === 0 && (
+                        <div
+                          className={styles.bufferingHint}
+                          style={{ color: "#f87171", fontWeight: 700 }}
+                        >
+                          No seeders responding — pick another stream.
+                        </div>
+                      )}
                   </div>
                 )}
               {!this.state.loading && !this.state.roomMedia && (

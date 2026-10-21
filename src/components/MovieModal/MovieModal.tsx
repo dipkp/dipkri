@@ -171,7 +171,14 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         setDirectStreams(streams);
         if (streams.length > 0) {
           // Pre-select 1080p stream with highest seeders, or first stream
-          const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
+          // Prefer a codec the browser can decode; HEVC usually renders black.
+          const playable = streams.filter(
+            (s) => (s.codec || "").toUpperCase() !== "HEVC",
+          );
+          const pool = playable.length > 0 ? playable : streams;
+          const preferred =
+            pool.find((s) => s.quality === "1080P" && s.seeders > 10) || pool[0];
+          const bestIdx = streams.indexOf(preferred);
           setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
           setPlaybackMode("direct");
         } else {
@@ -718,6 +725,22 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                                 <span className={s.seeders > 50 ? styles.streamSeedersGood : styles.streamSeedersOk}>
                                   👤 {s.seeders} seeders
                                 </span>
+                                {(s.codec || "").toUpperCase() === "HEVC" && (
+                                  <span
+                                    style={{ color: "#f87171", fontWeight: 700 }}
+                                    title="Chrome/Edge cannot decode HEVC — expect a black screen"
+                                  >
+                                    ⚠ HEVC not playable
+                                  </span>
+                                )}
+                                {/\b(ddp|dd\+|ac3|eac3|dts)\b/i.test(s.cleanTitle || "") && (
+                                  <span
+                                    style={{ color: "#fbbf24", fontWeight: 700 }}
+                                    title="DTS/AC3 audio cannot be decoded by browsers — video may play silent"
+                                  >
+                                    ⚠ audio may be silent
+                                  </span>
+                                )}
                               </div>
                               <span className={styles.streamReleaseTitle} title={s.cleanTitle}>
                                 {s.cleanTitle}
