@@ -918,7 +918,7 @@ class AudioEnhancerManager {
 
     if (!this.auxAudio) {
       this.auxAudio = document.createElement("audio");
-      this.auxAudio.id = "watchpartyAuxAudio";
+      this.auxAudio.id = "dipkriAuxAudio";
       this.auxAudio.style.display = "none";
       this.auxAudio.preload = "auto";
 
@@ -1114,5 +1114,5 @@ class AudioEnhancerManager {
 
 export const audioEnhancer = new AudioEnhancerManager();
 if (typeof window !== "undefined") {
-  (window as any).watchpartyAudioEnhancer = audioEnhancer;
+  (window as any).dipkriAudioEnhancer = audioEnhancer;
 }
