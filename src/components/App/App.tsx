@@ -2467,6 +2467,31 @@ export class App extends React.Component<AppProps, AppState> {
     this.setState({ isMovieModalOpen: true });
   };
 
+  pasteLinkFromClipboard = async () => {
+    // Reads the clipboard; if it holds a playable link, start it immediately.
+    // Otherwise focus the media input so the user can paste manually.
+    const focusSearch = () => {
+      const input = document.querySelector<HTMLInputElement>(
+        'input[placeholder*="Enter video file URL"]',
+      );
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    };
+    try {
+      const text = (await navigator.clipboard.readText())?.trim();
+      if (
+        text &&
+        (isHttp(text) || isMagnet(text) || text.startsWith("movie://"))
+      ) {
+        this.roomSetMedia(text);
+        return;
+      }
+    } catch {}
+    focusSearch();
+  };
+
   closeMovieModal = () => {
     this.setState({ isMovieModalOpen: false });
   };
@@ -3112,9 +3137,32 @@ export class App extends React.Component<AppProps, AppState> {
                   color="yellow"
                   title="You're not watching anything!"
                 >
-                  {isMobileLayout
-                    ? "Tap Media tab below to select a video."
-                    : "Pick something to watch above."}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <span>
+                      {isMobileLayout
+                        ? "Pick a movie, paste a link, or share a file."
+                        : "Pick something to watch — or paste any link above."}
+                    </span>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button
+                        size="compact-sm"
+                        color="indigo"
+                        leftSection={<WPIconPlay size={14} />}
+                        onClick={() => this.openMovieModal()}
+                      >
+                        Select Movie
+                      </Button>
+                      <Button
+                        size="compact-sm"
+                        variant="light"
+                        color="indigo"
+                        leftSection={<WPIconFile size={14} />}
+                        onClick={this.pasteLinkFromClipboard}
+                      >
+                        Paste Link
+                      </Button>
+                    </div>
+                  </div>
                 </Alert>
               )}
               {!this.state.loading &&
