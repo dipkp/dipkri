@@ -676,3 +676,15 @@ body {
     font-size: 16px;
   }
 }
+
+/* Mobile: kill the 300ms tap delay and stop iOS text inflation */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+button,
+[role="button"],
+a {
+  touch-action: manipulation;
+}
