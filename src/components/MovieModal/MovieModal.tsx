@@ -16,6 +16,7 @@ interface MovieModalProps {
   onClose: () => void;
   onPlay: (movieUrl: string) => void;
   onQueue: (movieUrl: string) => void;
+  onOpenVBrowser?: (url: string) => void;
 }
 
 const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
@@ -30,6 +31,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   onClose,
   onPlay,
   onQueue,
+  onOpenVBrowser,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"trending" | "movie" | "tv">("trending");
@@ -752,6 +754,50 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                         <span className={styles.serverBadge}>{srv.tag}</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Virtual Browser: perfect sync for embeds that cannot be controlled */}
+              {playbackMode === "web_mirror" && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    border: "1px solid rgba(99,102,241,0.35)",
+                    borderRadius: 12,
+                    background: "rgba(99,102,241,0.08)",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+                    🖥️ Virtual Browser — perfect sync for this embed
+                  </div>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>
+                    The embed runs inside one shared browser, so everyone sees the same playhead.
+                    No iframe drift, no autoplay mute.
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.previewBtn}
+                    onClick={() => {
+                      const url = buildMovieEmbedUrl({
+                        tmdbId: String(selectedMedia.id),
+                        type: selectedMedia.type,
+                        title: selectedMedia.title,
+                        season: selectedSeason,
+                        episode: selectedEpisode,
+                        server: selectedServer,
+                      });
+                      try {
+                        navigator.clipboard?.writeText(url);
+                      } catch {}
+                      onOpenVBrowser?.(url);
+                    }}
+                  >
+                    Launch VBrowser (copies URL)
+                  </button>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+                    When it starts: click inside the virtual browser, press Ctrl+V, then Enter.
                   </div>
                 </div>
               )}
