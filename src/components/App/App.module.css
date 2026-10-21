@@ -184,6 +184,7 @@
 
 .fullHeightColumn {
   height: calc(100vh - 72px);
+  height: calc(100dvh - 72px);
   background-color: var(--bg-primary, #090A0F);
   transition:
     width 0.5s cubic-bezier(0.4, 0, 0.2, 1),
@@ -200,6 +201,7 @@
 
 .fullHeightColumnFullscreen {
   height: 100vh;
+  height: 100dvh;
   background-color: #000000;
   transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -569,19 +569,19 @@
     display: none !important;
   }
   .actionsRow {
-    gap: 4px;
-    padding: 0 4px;
+    gap: 6px;
+    padding: 0 6px;
   }
   .actionsLeft {
-    gap: 4px;
+    gap: 6px;
   }
   .actionsRight {
-    gap: 4px;
+    gap: 6px;
   }
   .action {
-    min-width: 28px !important;
-    min-height: 28px !important;
-    padding: 3px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 6px !important;
     background: transparent !important;
     border: none !important;
     outline: none !important;
