@@ -51,7 +51,6 @@ import { SettingsModal } from "../Settings/SettingsModal";
 import { ErrorModal } from "../Modal/ErrorModal";
 import { PasswordModal } from "../Modal/PasswordModal";
 import { ScreenShareModal } from "../Modal/ScreenShareModal";
-import { VBrowserModal } from "../Modal/VBrowserModal";
 import { FileShareModal } from "../Modal/FileShareModal";
 import {
   ClientTranscoder,
@@ -3468,12 +3467,6 @@ export class App extends React.Component<AppProps, AppState> {
             resetMultiSelect={this.resetMultiSelect}
           />
         )}
-        {this.state.isVBrowserModalOpen && (
-          <VBrowserModal
-            closeModal={() => this.setState({ isVBrowserModalOpen: false })}
-            startVBrowser={this.startVBrowser}
-          />
-        )}
         {this.state.isScreenShareModalOpen && (
           <ScreenShareModal
             closeModal={() => this.setState({ isScreenShareModalOpen: false })}
@@ -3503,15 +3496,6 @@ export class App extends React.Component<AppProps, AppState> {
           onClose={this.closeMovieModal}
           onPlay={this.roomSetMedia}
           onQueue={this.roomPlaylistAdd}
-          onOpenVBrowser={(url: string) => {
-            try {
-              navigator.clipboard?.writeText(url);
-            } catch {}
-            this.setState({
-              isMovieModalOpen: false,
-              isVBrowserModalOpen: true,
-            });
-          }}
         />
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>

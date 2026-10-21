@@ -165,14 +165,12 @@ export const MovieModal: React.FC<MovieModalProps> = ({
           setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
           setPlaybackMode("direct");
         } else {
-          // Fallback to web mirror if no direct streams found
-          setPlaybackMode("web_mirror");
+          // No direct streams for this title
         }
       }
     } catch (e) {
       console.warn("Failed to fetch direct streams:", e);
       setDirectStreams([]);
-      setPlaybackMode("web_mirror");
     } finally {
       setLoadingStreams(false);
     }
@@ -258,7 +256,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
           return;
         }
       }
-      alert("No direct high-speed streams available right now for this title. You can switch to Web Embed Mirror.");
+      alert("No direct streams available right now for this title.");
       return;
     }
 
@@ -336,13 +334,13 @@ export const MovieModal: React.FC<MovieModalProps> = ({
             onClose();
             return;
           } else {
-            alert(`No direct streams found for Season ${seasonNum} Episode ${episodeNum}. You can switch to Web Embed Mirror.`);
+            alert(`No direct streams found for Season ${seasonNum} Episode ${episodeNum}.`);
             return;
           }
         }
       } catch (e) {
         console.warn("Direct episode stream error:", e);
-        alert("Failed to load direct stream. Please try again or switch to Web Embed Mirror.");
+        alert("Failed to load direct stream. Please try again.");
         return;
       } finally {
         setLoadingStreams(false);
@@ -598,24 +596,6 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               )}
 
-              {/* Player Mode Switcher Tabs */}
-              <div className={styles.playerModeTabs}>
-                <button
-                  type="button"
-                  className={`${styles.playerModeTab} ${playbackMode === "direct" ? styles.playerModeTabActive : ""}`}
-                  onClick={() => setPlaybackMode("direct")}
-                >
-                  <span>⚡ Native Direct Player (Full Audio & 100% Sync)</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.playerModeTab} ${playbackMode === "web_mirror" ? styles.playerModeTabActive : ""}`}
-                  onClick={() => setPlaybackMode("web_mirror")}
-                >
-                  <span>🌐 Web Embed Mirrors</span>
-                </button>
-              </div>
-
               {/* DIRECT NATIVE PLAYER MODE */}
               {playbackMode === "direct" && (
                 <div className={styles.serverSection}>
@@ -716,21 +696,6 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                     <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                       No direct peer streams currently active for this specific release.
                       <br />
-                      <button
-                        type="button"
-                        style={{
-                          marginTop: 8,
-                          background: "rgba(99, 102, 241, 0.2)",
-                          border: "1px solid #6366f1",
-                          color: "#fff",
-                          padding: "6px 14px",
-                          borderRadius: 8,
-                          cursor: "pointer",
-                        }}
-                        onClick={() => setPlaybackMode("web_mirror")}
-                      >
-                        Switch to Web Embed Mirror
-                      </button>
                     </div>
                   )}
                 </div>
