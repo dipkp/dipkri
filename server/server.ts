@@ -677,16 +677,7 @@ app.get("/metadata", async (req, res) => {
   let isSubscriber = await getIsSubscriberByUid(decoded?.uid);
   // Has the user ever been a subscriber?
   // const customer = await getCustomerByUid(decoded.uid);
-  let isFreePoolFull = false;
-  try {
-    isFreePoolFull = (
-      await axios.get(
-        "http://localhost:" + config.VMWORKER_PORT + "/isFreePoolFull",
-      )
-    ).data.isFull;
-  } catch (e: any) {
-    console.warn("[WARNING]: free pool check failed: %s", e.code);
-  }
+  const isFreePoolFull = false;
   const beta =
     decoded?.email != null &&
     Boolean(config.BETA_USER_EMAILS.split(",").includes(decoded?.email));

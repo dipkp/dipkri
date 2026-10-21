@@ -295,8 +295,19 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
         ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
         : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
 
-    const response = await axios.get(stremioEndpoint, { timeout: 9000 });
-    const rawStreams = response.data?.streams || [];
+    // Torrentio is often slow on a cold lookup. Retry once instead of handing
+    // the modal an empty list that looks like "no streams".
+    let response: any;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await axios.get(stremioEndpoint, { timeout: 20000 });
+        break;
+      } catch (err: any) {
+        if (attempt === 1) throw err;
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    const rawStreams = response?.data?.streams || [];
 
     const formatted = rawStreams.map((s: any, idx: number) => {
       const titleStr = s.title || "";

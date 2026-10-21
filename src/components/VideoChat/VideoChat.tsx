@@ -49,10 +49,33 @@ export class VideoChat extends React.Component<VideoChatProps> {
     }
   }
 
+  retryAttempts = new Map<string, number>();
+
   componentWillUnmount() {
     this.socket.off("signal", this.handleSignal);
     if (typeof window !== "undefined") {
       window.removeEventListener("watchparty-stream-update", this.handleStreamUpdate);
+    }
+    // Release camera/mic and every peer connection; otherwise the device stays
+    // captured after the panel closes.
+    const ourStream = window.watchparty.ourStream;
+    if (ourStream) {
+      ourStream.getTracks().forEach((track) => track.stop());
+      window.watchparty.ourStream = undefined;
+      try {
+        this.socket.emit("CMD:leaveVideo");
+      } catch {}
+    }
+    Object.keys(window.watchparty.videoPCs).forEach((key) => {
+      try {
+        window.watchparty.videoPCs[key].close();
+      } catch {}
+      delete window.watchparty.videoPCs[key];
+    });
+    if (window.watchparty.remoteStreams) {
+      Object.keys(window.watchparty.remoteStreams).forEach((key) => {
+        delete window.watchparty.remoteStreams![key];
+      });
     }
   }
 
@@ -170,6 +193,10 @@ export class VideoChat extends React.Component<VideoChatProps> {
   };
 
   setupWebRTC = async () => {
+    if (window.watchparty.ourStream) {
+      // Already in the call — a second join would leak the first capture.
+      return;
+    }
     let stream: MediaStream | undefined;
     try {
       stream = await navigator?.mediaDevices?.getUserMedia({
@@ -201,7 +228,10 @@ export class VideoChat extends React.Component<VideoChatProps> {
     }
 
     if (!stream) {
-      stream = new MediaStream();
+      window.alert(
+        "Camera and microphone are blocked. Allow access in the browser's site settings, then press Join again.",
+      );
+      return;
     }
 
     window.watchparty.ourStream = stream;
@@ -227,6 +257,14 @@ export class VideoChat extends React.Component<VideoChatProps> {
       ourStream.getTracks().forEach((track) => track.stop());
     }
     window.watchparty.ourStream = undefined;
+    if (window.watchparty.remoteStreams) {
+      Object.keys(window.watchparty.remoteStreams).forEach((key) => {
+        const el = window.watchparty.videoRefs[key];
+        if (el) el.srcObject = null;
+        delete window.watchparty.remoteStreams![key];
+      });
+    }
+    this.retryAttempts.clear();
     Object.keys(videoPCs).forEach((key) => {
       try {
         videoPCs[key].close();
@@ -343,14 +381,31 @@ export class VideoChat extends React.Component<VideoChatProps> {
       this.forceUpdate();
     };
 
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed") {
-        try {
-          pc.close();
-        } catch {}
-        delete videoPCs[id];
-        setTimeout(() => this.updateWebRTC(), 600);
+    // Adding a track after the first negotiation (e.g. camera enabled after an
+    // audio-only join) needs a fresh offer; without this the peer never sees video.
+    pc.onnegotiationneeded = async () => {
+      try {
+        if (!pc.currentRemoteDescription) return; // initial offer is sent by updateWebRTC
+        if (pc.signalingState !== "stable") return;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.sendSignal(id, { sdp: pc.localDescription });
+      } catch (err) {
+        console.warn("VideoChat renegotiation failed for", id, err);
       }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState !== "failed") return;
+      try {
+        pc.close();
+      } catch {}
+      delete videoPCs[id];
+      const attempt = (this.retryAttempts.get(id) || 0) + 1;
+      this.retryAttempts.set(id, attempt);
+      if (attempt > 4) return; // give up quietly rather than looping forever
+      const delay = Math.min(2000 * attempt, 15000);
+      setTimeout(() => this.updateWebRTC(), delay);
     };
 
     return pc;

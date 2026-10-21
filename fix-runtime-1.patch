@@ -1,0 +1,44 @@
+--- a/server/server.ts
++++ b/server/server.ts
+@@ -677,16 +677,7 @@
+   let isSubscriber = await getIsSubscriberByUid(decoded?.uid);
+   // Has the user ever been a subscriber?
+   // const customer = await getCustomerByUid(decoded.uid);
+-  let isFreePoolFull = false;
+-  try {
+-    isFreePoolFull = (
+-      await axios.get(
+-        "http://localhost:" + config.VMWORKER_PORT + "/isFreePoolFull",
+-      )
+-    ).data.isFull;
+-  } catch (e: any) {
+-    console.warn("[WARNING]: free pool check failed: %s", e.code);
+-  }
++  const isFreePoolFull = false;
+   const beta =
+     decoded?.email != null &&
+     Boolean(config.BETA_USER_EMAILS.split(",").includes(decoded?.email));
+--- a/server/movieService.ts
++++ b/server/movieService.ts
+@@ -295,8 +295,19 @@
+         ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
+         : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
+ 
+-    const response = await axios.get(stremioEndpoint, { timeout: 9000 });
+-    const rawStreams = response.data?.streams || [];
++    // Torrentio is often slow on a cold lookup. Retry once instead of handing
++    // the modal an empty list that looks like "no streams".
++    let response: any;
++    for (let attempt = 0; attempt < 2; attempt++) {
++      try {
++        response = await axios.get(stremioEndpoint, { timeout: 20000 });
++        break;
++      } catch (err: any) {
++        if (attempt === 1) throw err;
++        await new Promise((r) => setTimeout(r, 600));
++      }
++    }
++    const rawStreams = response?.data?.streams || [];
+ 
+     const formatted = rawStreams.map((s: any, idx: number) => {
+       const titleStr = s.title || "";
