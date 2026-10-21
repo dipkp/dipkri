@@ -318,12 +318,6 @@ export class Room {
         this.setUserMute(socket, data),
       );
       socket.on("CMD:leaveScreenShare", () => this.leaveScreenSharing(socket));
-      socket.on("CMD:startVBrowser", (data: unknown) => {
-        validateLock() && this.startVBrowser(socket, data);
-      });
-      socket.on("CMD:stopVBrowser", () => {
-        validateLock() && this.stopVBrowser();
-      });
       socket.on("CMD:changeController", (data: unknown) => {
         validateLock() && this.changeController(String(data));
       });

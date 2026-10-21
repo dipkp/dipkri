@@ -3273,9 +3273,7 @@ export class App extends React.Component<AppProps, AppState> {
             )}
           </div>
         )}
-        {this.playingVBrowser() &&
-        this.getVBrowserPass() &&
-        this.getVBrowserHost() ? (
+        {false ? (
           <VBrowser
             username={clientId}
             password={this.getVBrowserPass()}

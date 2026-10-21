@@ -1,0 +1,209 @@
+--- a/server/config.ts
++++ b/server/config.ts
+@@ -17,11 +17,8 @@
+   FIREBASE_ADMIN_SDK_CONFIG: "", // Optional, for features requiring sign-in/authentication
+   FIREBASE_DATABASE_URL: "", // Optional (unused)
+   STRIPE_SECRET_KEY: "", // Optional, for subscriptions
+-  VBROWSER_SESSION_SECONDS: 10800, // Number of seconds to allow vbrowsers to run for
+-  VBROWSER_SESSION_SECONDS_LARGE: 86400, // Number of seconds to allow large vbrowsers to run for
+   VM_POOL_RAMP_DOWN_HOURS: "", // Comma separated start/end UTC hours of the ramp down period
+   VM_POOL_RAMP_UP_HOURS: "", // Comma separated start/end UTC hours of the ramp up period
+-  VBROWSER_TAG: "", // Optional, tag to put on VBrowser VM instances
+   DO_TOKEN: "", // Optional, for DigitalOcean VMs
+   DO_GATEWAY: "", // Gateway handling SSL termination
+   DO_IMAGE: "", // ID of DigitalOcean snapshot image to use for vbrowser
+@@ -31,13 +28,6 @@
+   HETZNER_SSH_KEYS: "", // IDs of Hetzner SSH keys to access vbrowsers
+   HETZNER_IMAGE: "", // ID of Hetzner snapshot image to use for vbrowser
+   VM_MANAGER_CONFIG: "", // Comma-separated list of the pools of VMs to run (provider:size:region:minSize:limitSize:hostname), e.g. Docker:large:US:0:1:localhost,Docker:standard:US:0:1:localhost
+-  SCW_SECRET_KEY: "", // Optional, for Scaleway VMs
+-  SCW_ORGANIZATION_ID: "", // Optional, for Scaleway VMs
+-  SCW_GATEWAY: "", // Gateway handling SSL termination
+-  SCW_IMAGE: "", // ID of Scaleway snapshot image to use for vbrowser
+-  DOCKER_VM_HOST: "localhost", // Optional, for Docker VMs
+-  DOCKER_VM_HOST_SSH_USER: "root", // Optional, username for Docker host
+-  DOCKER_VM_HOST_SSH_KEY_BASE64: "", // Optional, private SSH key for Docker host, or default to ~/.ssh/id_rsa content
+   SSL_KEY_FILE: "", // Optional, Filename of SSL key (to use https)
+   SSL_CRT_FILE: "", // Optional, Filename of SSL cert (to use https)
+   PORT: 8080, // Port to use for server
+@@ -53,7 +43,6 @@
+   SHARD: undefined, // Shard ID of the web server (configure in ecosystem.config.js)
+   FREE_ROOM_LIMIT: 1, // The maximum number of rooms a free user can have
+   SUBSCRIBER_ROOM_LIMIT: 20, // The maximum number of rooms a subscriber can have
+-  VMWORKER_PORT: 3100, // Port to use for the vmWorker HTTP server
+   VM_ASSIGNMENT_TIMEOUT: 75, // Number of seconds to wait for a VM before failing
+   DISCORD_BOT_TOKEN: "", // Token for the Discord bot that generates WatchParty links
+   DISCORD_ADMIN_BOT_TOKEN: "", // Optional, for Discord bot to set subscriber roles
+@@ -61,7 +50,6 @@
+   DISCORD_ADMIN_BOT_SUB_ROLE_ID: "722202622345609246", // Optional, ID of subscriber role
+   MEDIASOUP_SERVER: "", // Optional, URL of the MediaSoup server to broadcast to for larger screen/file shares
+   TWITCH_PROXY_PATH: "", // Optional, URL of the server that can proxy twitch HLS stream playlists and segments
+-  VBROWSER_ADMIN_KEY: "", // Optional, the key to hit admin endpoints on the vbrowser
+   OPENSUBTITLES_KEY: "", // Optional, key to OpenSubtitles API
+   TMDB_API_KEY: "4e44d9029b1270a757cddc766a1bcb63", // TMDB API key for Movie and TV series discovery
+ };
+--- a/server/server.ts
++++ b/server/server.ts
+@@ -19,7 +19,6 @@
+ import { deleteUser, validateUserToken } from "./utils/firebase.ts";
+ import path from "node:path";
+ import { getStartOfDay } from "./utils/time.ts";
+-import { getSessionLimitSeconds } from "./vm/utils.ts";
+ import { postgres, insertObject, upsertObject } from "./utils/postgres.ts";
+ import axios, { isAxiosError } from "axios";
+ import crypto from "node:crypto";
+@@ -124,7 +123,6 @@
+ setInterval(() => runSafely(saveRooms, "saveRooms"), 1000);
+ if (process.env.NODE_ENV === "development") {
+   try {
+-    import("./vmWorker.ts");
+     // import('./syncSubs.ts');
+     // import('./timeSeries.ts');
+   } catch (e) {
+@@ -469,14 +467,6 @@
+   }
+ });
+ 
+-app.get("/health/:metric", async (req, res) => {
+-  const vmManagerStats = (
+-    await axios.get("http://localhost:" + config.VMWORKER_PORT + "/stats")
+-  ).data;
+-  const result = vmManagerStats[req.params.metric]?.availableVBrowsers?.length;
+-  res.status(result ? 200 : 500).json(result);
+-});
+-
+ app.get("/timeSeries", async (req, res) => {
+   if (req.query.key && req.query.key === config.STATS_KEY && redis) {
+     const timeSeriesData = await redis.lrange("timeSeries", 0, -1);
+--- a/src/utils/utils.ts
++++ b/src/utils/utils.ts
+@@ -146,10 +146,6 @@
+ 
+ export const isFileShare = (input: string) => {
+   return input.startsWith("fileshare://");
+-};
+-
+-export const isVBrowser = (input: string) => {
+-  return input.startsWith("vbrowser://");
+ };
+ 
+ export const isMovie = (input: string) => {
+--- a/global.d.ts
++++ b/global.d.ts
+@@ -6,7 +6,7 @@
+ type AnyDict = Record<string, any>;
+ type PCDict = Record<string, RTCPeerConnection>;
+ type HTMLVideoElementDict = Record<string, HTMLVideoElement>;
+-type MediaType = "vbrowser" | "screenshare" | "video" | "youtube";
++type MediaType = "screenshare" | "video" | "youtube";
+ 
+ interface User {
+   id: string;
+@@ -84,7 +84,6 @@
+   videoTS: number;
+   subtitle: string;
+   paused: boolean;
+-  isVBrowserLarge: boolean;
+   controller?: string;
+   playbackRate: number;
+   loop: boolean;
+--- a/src/components/MovieModal/MovieModal.tsx
++++ b/src/components/MovieModal/MovieModal.tsx
+@@ -16,7 +16,6 @@
+   onClose: () => void;
+   onPlay: (movieUrl: string) => void;
+   onQueue: (movieUrl: string) => void;
+-  onOpenVBrowser?: (url: string) => void;
+ }
+ 
+ const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
+@@ -31,7 +30,6 @@
+   onClose,
+   onPlay,
+   onQueue,
+-  onOpenVBrowser,
+ }) => {
+   const [searchQuery, setSearchQuery] = useState("");
+   const [filterType, setFilterType] = useState<"trending" | "movie" | "tv">("trending");
+--- a/server/utils/getStats.ts
++++ b/server/utils/getStats.ts
+@@ -1,4 +1,3 @@
+-import type { AssignedVM } from "../vm/base.ts";
+ import { postgres } from "./postgres.ts";
+ import os from "node:os";
+ import { getRedisCountDay, getRedisCountDayDistinct, redis } from "./redis.ts";
+@@ -25,8 +24,6 @@
+ 
+   // Count these from postgres data
+   let currentHttp = 0;
+-  let currentVBrowser = 0;
+-  let currentVBrowserLarge = 0;
+   let currentScreenShare = 0;
+   let currentFileShare = 0;
+   const currentRoomSizes: Record<string, number> = {};
+@@ -44,12 +41,11 @@
+     password: string;
+     video: string;
+     videoTS: number;
+-    vBrowser: AssignedVM;
+     creator: string;
+     lock: string;
+   }>(
+     `SELECT "roomId", "creationTime", "lastUpdateTime", vanity, "isSubRoom", "roomTitle", "roomDescription", "mediaPath", owner, password,
+-    data->'video' as video, data->'videoTS' as "videoTS", data->'vBrowser' as "vBrowser", data->'creator' as creator, data->'lock' as lock
++    data->'video' as video, data->'videoTS' as "videoTS", data->'creator' as creator, data->'lock' as lock
+     FROM room
+     WHERE "lastUpdateTime" > NOW() - INTERVAL '7 day'
+     AND length(data->>'video') > 0
+@@ -57,13 +53,6 @@
+   );
+   const currentRoomData = await Promise.all(
+     (result?.rows ?? []).map(async (dbRoom) => {
+-      const vBrowser = dbRoom.vBrowser;
+-      if (vBrowser) {
+-        currentVBrowser += 1;
+-      }
+-      if (vBrowser?.large) {
+-        currentVBrowserLarge += 1;
+-      }
+       const rosterLength = Number(
+         await redis?.get(`roomCounts:${dbRoom.roomId}`),
+       );
+@@ -89,8 +78,6 @@
+         roomTitle: dbRoom.roomTitle || undefined,
+         roomDescription: dbRoom.roomDescription || undefined,
+         mediaPath: dbRoom.mediaPath || undefined,
+-        vBrowser,
+-        vBrowserElapsed: vBrowser?.assignTime && now - vBrowser?.assignTime,
+         lock: dbRoom.lock || undefined,
+         creator: dbRoom.creator || undefined,
+         rosterLength,
+@@ -223,20 +210,12 @@
+     ),
+   );
+ 
+-  // Fetch VM stats from vmworker
+-  const resp = await fetch(
+-    "http://localhost:" + config.VMWORKER_PORT + "/stats",
+-  );
+-  const vmManagerStats = await resp.json();
+-
+   return {
+     ...shardMetrics,
+     currentRoomSizes,
+     counts: {
+       currentUsers,
+       currentVideoChat,
+-      currentVBrowser,
+-      currentVBrowserLarge,
+       currentHttp,
+       currentScreenShare,
+       currentFileShare,
+@@ -280,7 +259,6 @@
+       vBrowserUIDsCard,
+     },
+     // Stats object from vmWorker (render as JSON)
+-    vmManagerStats,
+     // Array of room data (render as JSON)
+     currentRoomData,
+     // Arrays of last values (render as one column table)

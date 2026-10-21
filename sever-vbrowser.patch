@@ -1,0 +1,28 @@
+--- a/server/room.ts
++++ b/server/room.ts
+@@ -318,12 +318,6 @@
+         this.setUserMute(socket, data),
+       );
+       socket.on("CMD:leaveScreenShare", () => this.leaveScreenSharing(socket));
+-      socket.on("CMD:startVBrowser", (data: unknown) => {
+-        validateLock() && this.startVBrowser(socket, data);
+-      });
+-      socket.on("CMD:stopVBrowser", () => {
+-        validateLock() && this.stopVBrowser();
+-      });
+       socket.on("CMD:changeController", (data: unknown) => {
+         validateLock() && this.changeController(String(data));
+       });
+--- a/src/components/App/App.tsx
++++ b/src/components/App/App.tsx
+@@ -3273,9 +3273,7 @@
+             )}
+           </div>
+         )}
+-        {this.playingVBrowser() &&
+-        this.getVBrowserPass() &&
+-        this.getVBrowserHost() ? (
++        {false ? (
+           <VBrowser
+             username={clientId}
+             password={this.getVBrowserPass()}
