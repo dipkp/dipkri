@@ -458,6 +458,15 @@ export class App extends React.Component<AppProps, AppState> {
     }
   };
 
+  handleFirstInteraction = () => {
+    if (this.state.roomMedia && this.Player().isMuted()) {
+      this.localSetMute(false);
+    }
+    if (!this.state.isAutoPlayable) {
+      this.setState({ isAutoPlayable: true });
+    }
+  };
+
   handleVisibilityChange = () => {
     if (document.visibilityState === "hidden") {
       this.handleBeforeUnload();
@@ -525,6 +534,12 @@ export class App extends React.Component<AppProps, AppState> {
     window.addEventListener("beforeunload", this.handleBeforeUnload);
     window.addEventListener("pagehide", this.handleBeforeUnload);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    // Browsers block audio until a user gesture. Instead of a blocking overlay,
+    // unmute once on the first interaction anywhere on the page.
+    document.addEventListener("pointerdown", this.handleFirstInteraction, {
+      capture: true,
+      once: true,
+    });
     window.addEventListener("message", this.handleMovieMessage);
 
     const canAutoplay = await testAutoplay();
@@ -3054,47 +3069,6 @@ export class App extends React.Component<AppProps, AppState> {
             : undefined
         }
       >
-        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && !this.usingMovie() && this.Player().isMuted() && (
-          <div
-            className={styles.unmuteOverlay}
-            onClick={() => {
-              this.setState({ isAutoPlayable: true });
-              this.localSetMute(false);
-              this.localSetVolume(1);
-              this.Player().playVideo().catch(() => {});
-            }}
-            onTouchEnd={() => {
-              this.setState({ isAutoPlayable: true });
-              this.localSetMute(false);
-              this.localSetVolume(1);
-              this.Player().playVideo().catch(() => {});
-            }}
-          >
-            <div className={styles.unmuteCardWrapper}>
-              <div className={styles.unmutePulseRing} />
-              <div className={styles.unmutePulseRing2} />
-              <div className={styles.unmuteButtonPill}>
-                <div className={styles.unmuteIconBox}>
-                  <WPIconVolumeOff size={isMobileLayout ? 20 : 24} />
-                </div>
-                <div className={styles.unmuteContent}>
-                  <div className={styles.unmuteTitle}>
-                    <span>{isMobileLayout ? "Tap to Unmute" : "Click to Unmute"}</span>
-                    <div className={styles.unmuteSoundWaves}>
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                    </div>
-                  </div>
-                  <div className={styles.unmuteSubtext}>
-                    Click anywhere to enable audio
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {(this.state.loading ||
           !this.state.roomMedia ||
           this.state.nonPlayableMedia) &&
