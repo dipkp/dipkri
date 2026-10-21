@@ -1,0 +1,13 @@
+--- a/src/components/App/App.tsx
++++ b/src/components/App/App.tsx
+@@ -3139,7 +3139,9 @@
+                   )}
+                 </div>
+               )}
+-              {this.state.roomMedia &&
++              {!this.state.loading &&
++                !this.state.nonPlayableMedia &&
++                this.state.roomMedia &&
+                 (isMagnet(this.state.roomMedia) ||
+                   this.state.roomMedia.includes("torrent=")) &&
+                 !this.state.isLiveStream &&

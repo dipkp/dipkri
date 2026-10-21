@@ -3139,7 +3139,9 @@ export class App extends React.Component<AppProps, AppState> {
                   )}
                 </div>
               )}
-              {this.state.roomMedia &&
+              {!this.state.loading &&
+                !this.state.nonPlayableMedia &&
+                this.state.roomMedia &&
                 (isMagnet(this.state.roomMedia) ||
                   this.state.roomMedia.includes("torrent=")) &&
                 !this.state.isLiveStream &&

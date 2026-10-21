@@ -1451,6 +1451,19 @@
   }
 }
 
-
-
-
+/* Very narrow phones: shrink targets slightly so the row never clips */
+@media only screen and (max-width: 380px) {
+  .actionsRow {
+    gap: 3px;
+    padding: 0 2px;
+  }
+  .actionsLeft,
+  .actionsRight {
+    gap: 3px;
+  }
+  .action {
+    min-width: 34px !important;
+    min-height: 34px !important;
+    padding: 4px !important;
+  }
+}
