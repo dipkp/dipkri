@@ -40,8 +40,9 @@
 
 .torrentStatsBadge {
   position: absolute;
-  top: 14px;
-  right: 18px;
+  /* sits below the emoji reaction bar so both stay readable */
+  top: 58px;
+  right: 14px;
   z-index: 94;
   background: rgba(9, 10, 15, 0.85);
   backdrop-filter: blur(12px);

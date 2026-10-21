@@ -55,6 +55,15 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
 
   const searchDebounceRef = useRef<any>(null);
+  const prewarmedRef = useRef<Set<string>>(new Set());
+
+  // Start fetching torrent metadata the moment a stream is highlighted, so the
+  // player does not spend its first minute waiting for peers.
+  const prewarmStream = (magnet: string) => {
+    if (!magnet || prewarmedRef.current.has(magnet)) return;
+    prewarmedRef.current.add(magnet);
+    fetch(`/data?torrent=${encodeURIComponent(magnet)}`).catch(() => {});
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -669,7 +678,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <div
                               key={s.id}
                               className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
-                              onClick={() => setSelectedStreamIndex(idx)}
+                              onClick={() => { setSelectedStreamIndex(idx); prewarmStream(s.magnet); }}
                               onDoubleClick={() => handlePlaySelectedStream(idx)}
                             >
                               <div className={styles.streamQualityRow}>
