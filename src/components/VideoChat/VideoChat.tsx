@@ -20,6 +20,7 @@ import {
   WPIconVideoOff,
   WPIconClose,
 } from "../Icons/CustomIcons";
+import { warmSpeakerLookup, resetSpeakerCache } from "./SpeakerHelper";
 
 interface VideoChatProps {
   socket: Socket;
@@ -197,6 +198,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
       // Already in the call — a second join would leak the first capture.
       return;
     }
+    // Pre-warm loudspeaker device lookup on user gesture (Join Video tap)
+    warmSpeakerLookup();
+
     let stream: MediaStream | undefined;
     try {
       stream = await navigator?.mediaDevices?.getUserMedia({
@@ -257,6 +261,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
       ourStream.getTracks().forEach((track) => track.stop());
     }
     window.dipkri.ourStream = undefined;
+    // Clear cached speaker deviceId so a future rejoin re-enumerates devices
+    // (the OS may have changed routing while the call was active).
+    resetSpeakerCache();
     if (window.dipkri.remoteStreams) {
       Object.keys(window.dipkri.remoteStreams).forEach((key) => {
         const el = window.dipkri.videoRefs[key];

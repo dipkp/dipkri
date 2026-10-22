@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getOrCreateClientId } from "../../utils/utils";
+import { ensureLoudspeaker } from "./SpeakerHelper";
 
 export const RemoteAudioRenderer: React.FC<{
   participants: User[];
@@ -48,7 +49,11 @@ export const RemoteAudioRenderer: React.FC<{
             ref={(el) => {
               if (el && stream && el.srcObject !== stream) {
                 el.srcObject = stream;
-                el.play().catch(() => {
+                el.play().then(() => {
+                  // Route remote voice through the loudspeaker on Android Chrome
+                  // where WebRTC shifts audio to earpiece mode.
+                  ensureLoudspeaker(el).catch(() => {});
+                }).catch(() => {
                   const unlock = () => {
                     el.play().catch(() => {});
                     document.removeEventListener("click", unlock);

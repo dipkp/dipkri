@@ -111,15 +111,7 @@ declare global {
   interface Window {
     onYouTubeIframeAPIReady: any;
     YT: YT.JsApi;
-    dipkri: {
-      ourStream: MediaStream | undefined;
-      videoRefs: HTMLVideoElementDict;
-      videoPCs: PCDict;
-      remoteStreams?: { [key: string]: MediaStream };
-      webtorrent?: WebTorrent.Instance;
-      hls?: Hls;
-      dash?: MediaPlayerClass;
-    };
+    dipkri: DipkriWindow;
   }
 }
 
@@ -2643,6 +2635,15 @@ export class App extends React.Component<AppProps, AppState> {
               await this.Player().playVideo();
             } catch {}
           }
+        }
+        // On Android Chrome, WebRTC shifts audio to earpiece — force back to
+        // the loudspeaker as soon as the user has already interacted with the
+        // page (required for setSinkId to succeed).
+        const video = this.HTMLInterface.getVideoEl();
+        if (video) {
+          import("../VideoChat/SpeakerHelper").then(({ ensureLoudspeaker }) =>
+            ensureLoudspeaker(video).catch(() => {}),
+          );
         }
       },
     );
