@@ -802,7 +802,7 @@ class AudioEnhancerManager {
     ) {
       const hlsTracks = window.dipkri.hls.audioTracks;
       const currentTrack = window.dipkri.hls.audioTrack;
-      hlsTracks.forEach((t, idx) => {
+      hlsTracks.forEach((t: any, idx: number) => {
         tracks.push({
           id: idx,
           label: formatAudioLanguageLabel(t.name, t.lang, idx),

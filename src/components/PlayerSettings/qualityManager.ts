@@ -51,7 +51,7 @@ class QualityManager {
           const levels = hls.levels || [];
           let bestIdx = -1;
           let minDiff = Infinity;
-          levels.forEach((lvl, idx) => {
+          levels.forEach((lvl: any, idx: number) => {
             const h = lvl.height || 0;
             const diff = Math.abs(h - targetH);
             if (diff < minDiff) {

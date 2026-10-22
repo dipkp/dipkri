@@ -1,0 +1,68 @@
+--- a/server/movieService.ts
++++ b/server/movieService.ts
+@@ -386,7 +386,13 @@
+     res.json(result);
+   } catch (error: any) {
+     console.error("[MovieService] Streams fetch error:", error?.message || error);
+-    res.json({ streams: [], error: "No direct streams available for this title" });
+-  }
+-});
+-
++    // Return the resolved IMDb id too: hosts like Oracle are often blocked by
++    // the indexer, and the browser (different IP) can fetch it directly.
++    res.json({
++      streams: [],
++      imdbId: imdbId || null,
++      error: "No direct streams available for this title",
++    });
++  }
++});
++
+--- a/src/components/MovieModal/MovieModal.tsx
++++ b/src/components/MovieModal/MovieModal.tsx
+@@ -169,6 +169,7 @@
+ 
+     try {
+       let streams: MovieDirectStream[] = [];
++      let resolvedImdbId = media.imdbId;
+ 
+       // Try the existing backend first.
+       try {
+@@ -190,17 +191,33 @@
+         if (res.ok) {
+           const data = await res.json();
+           streams = data.streams || [];
++          if (!resolvedImdbId && data.imdbId) resolvedImdbId = data.imdbId;
+         }
+       } catch (error) {
+         console.warn("Backend stream lookup failed:", error);
+       }
+ 
+-      // Browser fallback if the backend returns no streams.
+-      if (streams.length === 0 && media.imdbId) {
++      // Datacenter IPs (Oracle, Render) are commonly blocked by the indexer while
++      // the viewer's own IP is not — so fall back to a direct browser fetch.
++      if (streams.length === 0 && !resolvedImdbId) {
++        try {
++          const kind = media.type === "tv" ? "series" : "movie";
++          const metaRes = await fetch(
++            `https://v3-cinemeta.strem.io/catalog/${kind}/top/search=${encodeURIComponent(media.title)}.json`,
++          );
++          const metaJson = await metaRes.json();
++          resolvedImdbId =
++            metaJson?.metas?.[0]?.imdb_id || metaJson?.metas?.[0]?.id || null;
++        } catch (err) {
++          console.warn("Browser IMDb lookup failed:", err);
++        }
++      }
++
++      if (streams.length === 0 && resolvedImdbId) {
+         const endpoint =
+           media.type === "tv"
+-            ? `https://torrentio.strem.fun/stream/series/${media.imdbId}:${season}:${episode}.json`
+-            : `https://torrentio.strem.fun/stream/movie/${media.imdbId}.json`;
++            ? `https://torrentio.strem.fun/stream/series/${resolvedImdbId}:${season}:${episode}.json`
++            : `https://torrentio.strem.fun/stream/movie/${resolvedImdbId}.json`;
+ 
+         const res = await fetch(endpoint);
+ 

@@ -96,7 +96,7 @@ export const ensureLoudspeaker = async (
  */
 export const warmSpeakerLookup = (): void => {
   if (_cachedId !== null || _resolving) return;
-  _resolving = (async () => {
+  _resolving = (async (): Promise<string> => {
     let devices: MediaDeviceInfo[];
     try {
       devices = await navigator.mediaDevices.enumerateDevices();
@@ -112,5 +112,6 @@ export const warmSpeakerLookup = (): void => {
     } else {
       _cachedId = "";
     }
+    return _cachedId;
   })();
 };
