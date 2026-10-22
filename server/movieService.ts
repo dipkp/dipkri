@@ -386,7 +386,13 @@ movieRouter.get("/streams", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error: any) {
     console.error("[MovieService] Streams fetch error:", error?.message || error);
-    res.json({ streams: [], error: "No direct streams available for this title" });
+    // Return the resolved IMDb id so the browser can retry the indexer from its
+    // own IP (datacenter hosts such as Oracle are blocked by Cloudflare).
+    res.json({
+      streams: [],
+      imdbId: imdbId || null,
+      error: "No direct streams available for this title",
+    });
   }
 });
 

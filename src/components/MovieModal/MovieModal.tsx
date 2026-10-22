@@ -169,6 +169,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
     try {
       let streams: MovieDirectStream[] = [];
+      let imdbForFallback = media.imdbId;
 
       // Try the existing backend first.
       try {
@@ -190,17 +191,18 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         if (res.ok) {
           const data = await res.json();
           streams = data.streams || [];
+          if (!imdbForFallback && data.imdbId) imdbForFallback = data.imdbId;
         }
       } catch (error) {
         console.warn("Backend stream lookup failed:", error);
       }
 
       // Browser fallback if the backend returns no streams.
-      if (streams.length === 0 && media.imdbId) {
+      if (streams.length === 0 && imdbForFallback) {
         const endpoint =
           media.type === "tv"
-            ? `https://torrentio.strem.fun/stream/series/${media.imdbId}:${season}:${episode}.json`
-            : `https://torrentio.strem.fun/stream/movie/${media.imdbId}.json`;
+            ? `https://torrentio.strem.fun/stream/series/${imdbForFallback}:${season}:${episode}.json`
+            : `https://torrentio.strem.fun/stream/movie/${imdbForFallback}.json`;
 
         const res = await fetch(endpoint);
 
