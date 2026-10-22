@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import styles from "./MovieModal.module.css";
 import {
   type MovieSearchResult,
@@ -166,38 +166,136 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
     setLoadingStreams(true);
-    try {
-      const imdbParam = media.imdbId ? `&imdbId=${media.imdbId}` : "";
-      const tmdbParam = `&tmdbId=${media.id}`;
-      const typeParam = `&type=${media.type}`;
-      const seasonParam = media.type === "tv" ? `&season=${season}&episode=${episode}` : "";
-      const titleParam = `&title=${encodeURIComponent(media.title)}`;
 
-      const res = await fetch(
-        `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const streams: MovieDirectStream[] = data.streams || [];
-        setDirectStreams(streams);
-        if (streams.length > 0) {
-          // Pre-select 1080p stream with highest seeders, or first stream
-          // Prefer a codec the browser can decode; HEVC usually renders black.
-          const playable = streams.filter(
-            (s) => (s.codec || "").toUpperCase() !== "HEVC",
-          );
-          const pool = playable.length > 0 ? playable : streams;
-          const preferred =
-            pool.find((s) => s.quality === "1080P" && s.seeders > 10) || pool[0];
-          const bestIdx = streams.indexOf(preferred);
-          setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
-          setPlaybackMode("direct");
-        } else {
-          // No direct streams for this title
+    try {
+      let streams: MovieDirectStream[] = [];
+
+      // Try the existing backend first.
+      try {
+        const params = new URLSearchParams({
+          tmdbId: String(media.id),
+          type: media.type,
+          title: media.title,
+        });
+
+        if (media.imdbId) params.set("imdbId", media.imdbId);
+
+        if (media.type === "tv") {
+          params.set("season", String(season));
+          params.set("episode", String(episode));
         }
+
+        const res = await fetch(`/api/movies/streams?${params}`);
+
+        if (res.ok) {
+          const data = await res.json();
+          streams = data.streams || [];
+        }
+      } catch (error) {
+        console.warn("Backend stream lookup failed:", error);
       }
-    } catch (e) {
-      console.warn("Failed to fetch direct streams:", e);
+
+      // Browser fallback if the backend returns no streams.
+      if (streams.length === 0 && media.imdbId) {
+        const endpoint =
+          media.type === "tv"
+            ? `https://torrentio.strem.fun/stream/series/${media.imdbId}:${season}:${episode}.json`
+            : `https://torrentio.strem.fun/stream/movie/${media.imdbId}.json`;
+
+        const res = await fetch(endpoint);
+
+        if (!res.ok) {
+          throw new Error(`Torrentio HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        streams = (data.streams || [])
+          .map((s: any, idx: number): MovieDirectStream | null => {
+            if (!s.infoHash) return null;
+
+            const combined = `${s.name || ""} ${s.title || ""}`;
+            const seederMatch = (s.title || "").match(/👤\s*(\d+)/);
+            const sizeMatch = (s.title || "").match(/💾\s*([\d.]+\s*[GM]B)/i);
+            const qualityMatch = combined.match(/(2160p|4k|1080p|720p|480p)/i);
+
+            const quality = qualityMatch
+              ? qualityMatch[1].toUpperCase()
+              : "HD";
+            const seeders = seederMatch ? Number(seederMatch[1]) : 0;
+            const size = sizeMatch ? sizeMatch[1] : "";
+
+            let codec = "";
+            if (/x265|hevc/i.test(combined)) codec = "HEVC";
+            else if (/x264|h264|avc/i.test(combined)) codec = "x264";
+
+            const lines = (s.title || "")
+              .split("\n")
+              .map((line: string) => line.trim())
+              .filter(Boolean);
+
+            const cleanTitle =
+              s.behaviorHints?.filename ||
+              lines.find((line: string) =>
+                !line.includes("👤") && !line.includes("💾")
+              ) ||
+              media.title;
+
+            const magnetParams = new URLSearchParams({
+              xt: `urn:btih:${s.infoHash}`,
+              dn: `${media.title} ${quality}`,
+              isMovie: "1",
+            });
+
+            if (media.type === "tv") {
+              magnetParams.set("season", String(season));
+              magnetParams.set("episode", String(episode));
+            }
+
+            if (s.fileIdx != null) {
+              magnetParams.set("fileIndex", String(s.fileIdx));
+            }
+
+            (s.sources || [])
+              .filter((src: string) => typeof src === "string" && src.startsWith("tracker:"))
+              .forEach((src: string) => magnetParams.append("tr", src.slice(8)));
+
+            return {
+              id: idx,
+              label: `${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders ? ` (${seeders} seeders)` : ""}`,
+              quality,
+              codec,
+              seeders,
+              size,
+              cleanTitle,
+              infoHash: s.infoHash,
+              fileIdx: s.fileIdx,
+              magnet: `magnet:?${magnetParams.toString()}`,
+            };
+          })
+          .filter((s: MovieDirectStream | null): s is MovieDirectStream => s !== null);
+
+        console.info("Browser Torrentio streams:", streams.length);
+      }
+
+      setDirectStreams(streams);
+
+      if (streams.length > 0) {
+        const playable = streams.filter(
+          (s) => (s.codec || "").toUpperCase() !== "HEVC",
+        );
+        const pool = playable.length > 0 ? playable : streams;
+        const preferred =
+          pool.find((s) => s.quality === "1080P" && s.seeders > 10) || pool[0];
+
+        const bestIdx = streams.indexOf(preferred);
+        setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
+        setPlaybackMode("direct");
+      } else {
+        console.warn("No direct streams found:", media.title);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch direct streams:", error);
       setDirectStreams([]);
     } finally {
       setLoadingStreams(false);
@@ -837,3 +935,4 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     </div>
   );
 };
+
