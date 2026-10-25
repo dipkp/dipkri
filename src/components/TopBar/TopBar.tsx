@@ -22,19 +22,40 @@ export async function createRoom(
 ) {
   const uid = user?.uid;
   const token = await user?.getIdToken();
-  const response = await fetch(serverPath + "/createRoom", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      uid,
-      token,
-      video,
-    }),
-  });
-  const data = await response.json();
-  const { name } = data;
+
+  let response: Response;
+  try {
+    response = await fetch(serverPath + "/createRoom", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uid,
+        token,
+        video,
+      }),
+    });
+  } catch {
+    throw new Error("Network error — could not reach the server.");
+  }
+
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {}
+
+  // Without this guard a failed create still navigated to "/watchundefined",
+  // which looks exactly like "the room was never created".
+  if (!response.ok || !data || typeof data.name !== "string" || !data.name) {
+    const reason =
+      (data && (data.error || data.message)) ||
+      `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`;
+    throw new Error(`Room creation failed: ${reason}`);
+  }
+
+  const name: string = data.name;
   const cleanName = (name || "").replace(/^\//, "");
   if (cleanName) {
     try {
@@ -54,7 +75,14 @@ export const NewRoomButton = (props: {
 }) => {
   const context = useContext(MetadataContext);
   const onClick = useCallback(async () => {
-    await createRoom(context.user, props.openNewTab);
+    try {
+      await createRoom(context.user, props.openNewTab);
+    } catch (e: any) {
+      console.error("New room failed:", e);
+      alert(
+        e?.message || "Could not create a room right now. Please try again.",
+      );
+    }
   }, [context.user, props.openNewTab]);
   return (
     <button
