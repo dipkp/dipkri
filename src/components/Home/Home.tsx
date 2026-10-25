@@ -158,7 +158,7 @@ export const Home = () => {
       await createRoom(context.user, false);
     } catch (e: any) {
       console.error("Failed to create room:", e);
-      alert(
+      setError(
         e?.message || "Could not create a room right now. Please try again.",
       );
       setIsCreating(false);
