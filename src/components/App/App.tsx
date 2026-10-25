@@ -3228,11 +3228,6 @@ export class App extends React.Component<AppProps, AppState> {
                   title="You're not watching anything!"
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <span>
-                      {isMobileLayout
-                        ? "Pick a movie, paste a link, or share a file."
-                        : "Pick something to watch — or paste any link above."}
-                    </span>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Button
                         size="compact-sm"
@@ -3946,7 +3941,7 @@ export class App extends React.Component<AppProps, AppState> {
                     </div>
                     {playlist.length === 0 ? (
                       <div className={styles.emptyQueueNotice}>
-                        No videos in queue. Enter a link above to add items!
+                        Queue is empty
                       </div>
                     ) : (
                       <div className={styles.queueList}>

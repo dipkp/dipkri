@@ -50,6 +50,8 @@ export interface SubtitleTrackItem {
 
 export interface PlayerSettingsMenuProps {
   onClose: () => void;
+
+  onOpenMovieLibrary?: () => void;
   isBottomSheet?: boolean;
   // Play Speed
   playbackRate: number;
@@ -102,6 +104,8 @@ export interface PlayerSettingsMenuProps {
 
 export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
   onClose,
+
+  onOpenMovieLibrary,
   isBottomSheet = false,
   playbackRate,
   onSetPlaybackRate,
@@ -1289,6 +1293,21 @@ export const PlayerSettingsMenu: React.FC<PlayerSettingsMenuProps> = ({
         </button>
       </div>
       <div className={styles.menuList}>
+        <div
+          className={styles.menuRow}
+          onClick={() => {
+            onOpenMovieLibrary?.();
+            onClose();
+          }}
+        >
+          <div className={styles.rowLeft}>
+            <div className={styles.rowIcon}>
+              <span style={{ fontSize: 18 }}>🍿</span>
+            </div>
+            <span className={styles.rowLabel}>Movies & Web Series</span>
+          </div>
+        </div>
+
         {/* Item 0: Streaming Server (Movie Mode) */}
         {isMovie && (
           <div

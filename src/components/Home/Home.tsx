@@ -256,7 +256,7 @@ export const Home = () => {
         ) : (
           <div className={styles.googleBanner}>
             <div className={styles.googleBannerTitle}>
-              Sign in to sync your rooms
+              Sign in
             </div>
             <button
               type="button"

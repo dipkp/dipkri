@@ -1612,6 +1612,8 @@ export const Controls = (props: ControlsProps) => {
             onTouchEnd={(e) => e.stopPropagation()}
           >
             <PlayerSettingsMenu
+
+              onOpenMovieLibrary={props.onOpenMovieModal}
               isBottomSheet={isPortraitMobile}
               onClose={() => {
                 setIsPlayerSettingsOpen(false);
