@@ -98,6 +98,8 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   // Quality filter: "auto" keeps the current best pick, otherwise the user pins
   // a resolution and we auto-select that tier's best-seeded stream.
   const [qualityFilter, setQualityFilter] = useState<string>("auto");
+  const [detailsError, setDetailsError] = useState("");
+  const lastSelectedRef = useRef<MovieSearchResult | null>(null);
 
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -477,6 +479,8 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const selectMediaItem = async (item: MovieSearchResult) => {
     setLoadingDetails(true);
+    setDetailsError("");
+    lastSelectedRef.current = item;
     setSelectedMedia(null);
     setIsPreviewing(false);
     setDirectStreams([]);
@@ -484,13 +488,18 @@ export const MovieModal: React.FC<MovieModalProps> = ({
       let details: MovieDetails | null = null;
 
       try {
-        const res = await fetch(
-          `/api/movies/details?id=${item.id}&type=${item.type}`,
-        );
-        if (res.ok) {
-          details = await res.json();
-        } else {
-          throw new Error(`details HTTP ${res.status}`);
+        // One retry: the VM<->TMDB link resets often, and a second attempt
+        // costs nothing next to showing an empty screen.
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          const res = await fetch(
+            `/api/movies/details?id=${item.id}&type=${item.type}`,
+          );
+          if (res.ok) {
+            details = await res.json();
+            break;
+          }
+          if (attempt === 2) throw new Error(`details HTTP ${res.status}`);
+          await new Promise((resolve) => setTimeout(resolve, 400));
         }
       } catch (serverError) {
         console.warn("Details via server failed, trying browser TMDB:", serverError);
@@ -499,7 +508,12 @@ export const MovieModal: React.FC<MovieModalProps> = ({
         }
       }
 
-      if (!details) return;
+      if (!details) {
+        setDetailsError(
+          `Couldn't load "${item.title}". Tap Retry — if it keeps failing, the server can't reach TMDB right now.`,
+        );
+        return;
+      }
 
       setSelectedMedia(details);
       if (details.type === "tv" && details.seasons && details.seasons.length > 0) {
@@ -1151,6 +1165,42 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               )}
 
+            </div>
+          ) : detailsError ? (
+            <div
+              style={{
+                margin: "0 16px 12px",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.45)",
+                background: "rgba(248,113,113,0.12)",
+                color: "#fecaca",
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ flex: "1 1 220px" }}>{detailsError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const again = lastSelectedRef.current;
+                  if (again) selectMediaItem(again);
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Retry
+              </button>
             </div>
           ) : items.length === 0 ? (
             <div className={styles.emptyState}>
