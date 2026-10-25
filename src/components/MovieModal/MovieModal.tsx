@@ -46,6 +46,9 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [selectedStreamIndex, setSelectedStreamIndex] = useState(0);
   const [audioFilter, setAudioFilter] = useState<"sub" | "dub" | "dual">("sub");
+  // Quality filter: "auto" keeps the current best pick, otherwise the user pins
+  // a resolution and we auto-select that tier's best-seeded stream.
+  const [qualityFilter, setQualityFilter] = useState<string>("auto");
 
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -74,6 +77,50 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     fetch(url, { headers: { Range: "bytes=-1048576" } })
       .then((r) => r.arrayBuffer())
       .catch(() => {});
+  };
+
+  // 2160p / 4K / 1080p / 720p / 480p all collapse into one comparable label.
+  const qualityTier = (q?: string): string => {
+    const t = (q || "").toUpperCase();
+    if (t.includes("2160") || t.includes("4K")) return "4K";
+    if (t.includes("1080")) return "1080p";
+    if (t.includes("720")) return "720p";
+    if (t.includes("480")) return "480p";
+    return "HD";
+  };
+
+  const QUALITY_TIERS = ["4K", "1080p", "720p", "480p", "HD"] as const;
+
+  const availableQualities = QUALITY_TIERS.map((tier) => ({
+    tier,
+    count: directStreams.filter((s) => qualityTier(s.quality) === tier).length,
+  })).filter((q) => q.count > 0);
+
+  const passesFilters = (s: MovieDirectStream) => {
+    if (qualityFilter !== "auto" && qualityTier(s.quality) !== qualityFilter) {
+      return false;
+    }
+    if (audioFilter === "sub") return true;
+    const t = (s.cleanTitle || "").toLowerCase();
+    const dual = /dual[\s._-]*audio|multi[\s._-]*audio/.test(t);
+    const dub = /\bdub(bed)?\b|english[\s._-]*audio/.test(t);
+    return audioFilter === "dual" ? dual : dub || dual;
+  };
+
+  const visibleStreamCount = directStreams.filter(passesFilters).length;
+
+  // Pin a resolution and highlight that tier's best-seeded stream right away,
+  // so pressing Play uses exactly what the user just picked.
+  const applyQualityFilter = (tier: string) => {
+    setQualityFilter(tier);
+    if (tier === "auto") return;
+    const candidates = directStreams
+      .map((s, idx) => ({ s, idx }))
+      .filter(({ s }) => qualityTier(s.quality) === tier)
+      .sort((a, b) => (b.s.seeders || 0) - (a.s.seeders || 0));
+    if (candidates.length === 0) return;
+    setSelectedStreamIndex(candidates[0].idx);
+    prewarmStream(candidates[0].s.magnet);
   };
 
   useEffect(() => {
@@ -166,6 +213,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
     setLoadingStreams(true);
+    setQualityFilter("auto");
 
     try {
       let streams: MovieDirectStream[] = [];
@@ -727,6 +775,57 @@ export const MovieModal: React.FC<MovieModalProps> = ({
               {/* DIRECT NATIVE PLAYER MODE */}
               {playbackMode === "direct" && (
                 <div className={styles.serverSection}>
+                  {availableQualities.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        margin: "4px 0 8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {[
+                        { tier: "auto", count: directStreams.length },
+                        ...availableQualities,
+                      ].map(({ tier, count }) => {
+                        const active = qualityFilter === tier;
+                        return (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => applyQualityFilter(tier)}
+                            style={{
+                              minHeight: 32,
+                              minWidth: 44,
+                              padding: "4px 12px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              border: active
+                                ? "1px solid #06b6d4"
+                                : "1px solid rgba(255,255,255,0.12)",
+                              background: active
+                                ? "rgba(6,182,212,0.25)"
+                                : "rgba(255,255,255,0.04)",
+                              color: active ? "#fff" : "#94a3b8",
+                            }}
+                            title={
+                              tier === "auto"
+                                ? "Let dipkri pick the best stream"
+                                : `Show only ${tier} streams`
+                            }
+                          >
+                            {tier === "auto" ? "Auto" : tier} ({count})
+                          </button>
+                        );
+                      })}
+                      <span style={{ fontSize: 11, color: "#64748b" }}>
+                        quality
+                      </span>
+                    </div>
+                  )}
                   <div
                     style={{
                       display: "flex",
@@ -768,7 +867,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
                   <h4 className={styles.sectionHeading}>
                     <span>
-                      ⚡ Available HD Streams ({directStreams.length})
+                      ⚡ Available HD Streams ({visibleStreamCount})
                       {selectedMedia.type === "tv" ? ` — Season ${selectedSeason} Episode ${selectedEpisode}` : ""}
                     </span>
                   </h4>
@@ -783,13 +882,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       <div className={styles.streamListGrid}>
                         {directStreams
                           .map((s, idx) => ({ s, idx }))
-                          .filter(({ s }) => {
-                            if (audioFilter === "sub") return true;
-                            const t = (s.cleanTitle || "").toLowerCase();
-                            const dual = /dual[\s._-]*audio|multi[\s._-]*audio/.test(t);
-                            const dub = /\bdub(bed)?\b|english[\s._-]*audio/.test(t);
-                            return audioFilter === "dual" ? dual : dub || dual;
-                          })
+                          .filter(({ s }) => passesFilters(s))
                           // Best-seeded first: a 167 B/s stream should never be
                           // the default choice.
                           .sort((a, b) => (b.s.seeders || 0) - (a.s.seeders || 0))
@@ -799,8 +892,17 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                             <div
                               key={s.id}
                               className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`${s.quality} stream, ${s.seeders} seeders`}
                               onClick={() => { setSelectedStreamIndex(idx); prewarmStream(s.magnet); }}
                               onDoubleClick={() => handlePlaySelectedStream(idx)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSelectedStreamIndex(idx);
+                                }
+                              }}
                             >
                               <div className={styles.streamQualityRow}>
                                 <span className={styles.streamQualityBadge}>
@@ -861,6 +963,19 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                         })}
                       </div>
 
+                      {visibleStreamCount === 0 && (
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "#94a3b8",
+                            margin: "10px 0 0",
+                          }}
+                        >
+                          No streams match this quality/audio filter. Pick
+                          another quality or switch back to Auto.
+                        </p>
+                      )}
+
                       {/* Primary Action Row for Selected Direct Stream */}
                       <div className={styles.actionRow} style={{ marginTop: 12 }}>
                         <button
@@ -902,7 +1017,16 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 <div
                   key={`${item.type}-${item.id}`}
                   className={styles.mediaCard}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${item.title} (${item.year || item.type})`}
                   onClick={() => selectMediaItem(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectMediaItem(item);
+                    }
+                  }}
                 >
                   <div className={styles.posterWrapper}>
                     {item.poster ? (
