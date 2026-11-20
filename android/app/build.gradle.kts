@@ -34,4 +34,9 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.webkit:webkit:1.11.0")
+
+    val libtorrent = "2.1.0-35"
+    implementation("org.libtorrent4j:libtorrent4j:$libtorrent")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm64:$libtorrent")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm:$libtorrent")
 }

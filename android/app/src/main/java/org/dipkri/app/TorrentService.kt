@@ -20,7 +20,7 @@ import kotlin.concurrent.thread
 class TorrentService : Service() {
 
     private var server: LocalHttpServer? = null
-    private val engine = PlaceholderEngine()
+    private var engine: TorrentEngine = PlaceholderEngine()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -31,6 +31,12 @@ class TorrentService : Service() {
             .joinToString("") { "%02x".format(it) }
 
         startForeground(NOTIFICATION_ID, buildNotification())
+
+        // If libtorrent cannot start on this ABI the app keeps working: ready
+        // stays false and the web build streams from the server instead.
+        val torrentDir = java.io.File(cacheDir, "torrents").apply { mkdirs() }
+        val real = LibtorrentEngine(this, torrentDir)
+        engine = if (real.start()) real else PlaceholderEngine()
         server = LocalHttpServer(
             port = LocalHttpServer.DEFAULT_PORT,
             token = token,
@@ -60,6 +66,7 @@ class TorrentService : Service() {
     private fun clearCache() {
         val dir = java.io.File(cacheDir, "torrents")
         if (dir.exists()) dir.deleteRecursively()
+        dir.mkdirs()
     }
 
     private fun buildNotification(): Notification {
