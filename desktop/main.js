@@ -74,38 +74,62 @@ function startSidecar() {
       ...process.env,
       DIPKRI_SIDECAR_PORT: String(REQUESTED_PORT),
       DIPKRI_TOKEN: SIDECAR_TOKEN,
+      DIPKRI_APP_URL: APP_URL,
     },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
 
   pipeChild(sidecar.stdout, process.stdout);
   pipeChild(sidecar.stderr, process.stderr);
-  sidecar.on("error", (err) => console.warn("[desktop] sidecar channel error:", err.message));
+  sidecar.on("error", (err) => {
+    console.warn("[desktop] sidecar error:", err.message);
+    handleSidecarGone(); // spawn failures emit 'error' without 'exit'
+  });
+
+  // Keep the child alive while we are alive; if the shell is force-killed the
+  // pings stop and the sidecar cleans up after itself.
+  const heartbeat = setInterval(() => {
+    if (!sidecar || !sidecar.connected) return;
+    try {
+      sidecar.send({ type: "ping" });
+    } catch (e) {}
+  }, 15000);
+  heartbeat.unref();
 
   sidecar.on("message", (msg) => {
     if (msg && msg.type === "ready" && Number.isInteger(msg.port)) {
       sidecarPort = msg.port;
       sidecarReady = true;
+      goneHandled = false;
       logLine(process.stdout, `[desktop] sidecar ready on ${sidecarUrl()}\n`);
       sendToWindow("dipkri:sidecar-port", sidecarPort);
     }
   });
 
   sidecar.on("exit", (code) => {
-    sidecarReady = false;
     console.warn(`[desktop] sidecar exited (${code})`);
-
-    // Recover from a crash, but do not loop forever on a broken install.
-    if (!quitting && sidecarRestarts < 3) {
-      sidecarRestarts += 1;
-      setTimeout(() => {
-        if (!quitting) {
-          console.warn(`[desktop] restarting sidecar (${sidecarRestarts}/3)`);
-          startSidecar();
-        }
-      }, 1500 * sidecarRestarts);
-    }
+    handleSidecarGone();
   });
+}
+
+// A child can fail either via 'error' (spawn failure) or 'exit'. Both paths
+// land here exactly once, so readiness is reset and one retry is scheduled.
+let goneHandled = false;
+
+function handleSidecarGone() {
+  sidecarReady = false;
+  if (goneHandled) return;
+  goneHandled = true;
+
+  if (quitting || sidecarRestarts >= 3) return;
+  sidecarRestarts += 1;
+  setTimeout(() => {
+    goneHandled = false;
+    if (!quitting) {
+      console.warn(`[desktop] restarting sidecar (${sidecarRestarts}/3)`);
+      startSidecar();
+    }
+  }, 1500 * sidecarRestarts);
 }
 
 function createWindow() {
@@ -150,7 +174,8 @@ function createWindow() {
   });
 
   // Keep the window on the app origin, including server-side redirects.
-  const guardNavigation = (event, url) => {
+  const guardNavigation = (event, url, _isInPlace, isMainFrame) => {
+    if (isMainFrame === false) return; // subframe redirects are not our call
     if (isAppUrl(url)) return;
     event.preventDefault();
     if (/^https?:/i.test(url)) shell.openExternal(url);
@@ -171,6 +196,7 @@ function createWindow() {
 // preload, so the sender is validated instead of trusting the bridge.
 ipcMain.handle("dipkri:sidecar", (event) => {
   const denied = { url: "", token: "", ready: false };
+  if (!sidecarReady) return denied;
   const frame = event.senderFrame;
   if (!mainWindow || event.sender !== mainWindow.webContents) return denied;
   if (!frame || event.sender.mainFrame !== frame) return denied;
@@ -204,6 +230,8 @@ function stopSidecar() {
         return;
       } catch (e) {}
     }
+
+    if (!sidecarReady) return; // port unknown: just let the timer kill it
 
     // fallback: HTTP room-end, then kill
     const req = http.request(

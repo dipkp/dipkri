@@ -52,7 +52,8 @@ DIPKRI_CACHE_DIR      %TEMP%     parent folder; the sidecar owns "<parent>/dipkr
 DIPKRI_IDLE_MINUTES   30         drop a torrent after N idle minutes
 DIPKRI_MIN_FREE_GB    1          refuse a stream when this device is nearly full
 DIPKRI_META_TIMEOUT_MS 40000     give up when no seeder answers
-DIPKRI_TOKEN          (set by main.js per launch)   required by every endpoint
+DIPKRI_TOKEN          (set by main.js per launch)   required; the sidecar refuses to start without it
+                                                      standalone: DIPKRI_TOKEN=dev-secret npm run sidecar
 DIPKRI_APP_URL        https://dipkri.duckdns.org    page the shell loads
 ```
 
@@ -73,25 +74,39 @@ quit via IPC -> sidecar exit 0, cache dir removed
 ## Phase 2 — wire the UI to the sidecar
 
 ```js
-const api = window.dipkriDesktop;            // undefined on the website
-const { url, token, ready } = await api.getSidecar();
+const api = window.dipkriDesktop;            // undefined in a normal browser
 
-video.src = `${url}/stream?torrent=${encodeURIComponent(magnet)}` +
-            `&fileIndex=${i}&token=${token}`;
+if (!api) {
+  // website: nothing changes, keep streaming from the server
+  video.src = `/torrent/stream?...`;
+} else {
+  // desktop: the endpoint and token only exist once the sidecar is confirmed
+  const { url, token, ready } = await api.getSidecar();
+  if (ready) {
+    video.src = `${url}/stream?torrent=${encodeURIComponent(magnet)}` +
+                `&fileIndex=${i}&token=${token}`;
+  }
 
-await fetch(`${url}/room-end`, {
-  method: "POST",
-  headers: { "x-dipkri-token": token },
-});
+  const res = await fetch(`${url}/room-end`, {
+    method: "POST",
+    headers: { "x-dipkri-token": token },
+  });
+  if (!res.ok) {
+    console.warn("cache cleanup was refused", res.status); // 401/503: files remain
+  }
+}
 ```
 
 - Never hardcode `17891`: the sidecar may have fallen back to another port.
 - `token` must go in the query string for `<video>`, in the header for `fetch`.
+- `getSidecar()` returns `ready: false` (and no token) until the child confirms.
 - Web users keep the current server path; only the desktop build switches.
 
 ## Phase 3 — packaging
 
-- `npm run dist` → Windows NSIS, macOS dmg, Linux AppImage.
+- `npm run dist` builds the configured target for the host platform
+  (Windows → NSIS). Build the others on their own machines, or add
+  `--win --mac --linux` where the toolchain allows it.
 - electron-builder packs `dependencies` (webtorrent) and unpacks `*.node`.
 - Auto-update later (electron-updater).
 
