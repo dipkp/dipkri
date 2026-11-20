@@ -712,7 +712,9 @@ export class Room {
                 const queueEpisodes = episodes.slice(1).map((ep, idx) => {
                   let epName = ep.name
                     .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                    .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
+                    // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+                    .replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "")
+                    // eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
                     .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
                     .replace(/[\._\-]/g, " ")
                     .replace(/\s+/g, " ")
@@ -787,8 +789,10 @@ export class Room {
             const queueEpisodes = episodes.map((ep, idx) => {
               let epName = ep.name
                 .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
-                .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
+                // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+                .replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "")
+                // eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
+                    .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
                 .replace(/[\._\-]/g, " ")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -832,8 +836,10 @@ export class Room {
         }
       }
       magnetName = magnetName.replace(/\.(mkv|mp4|webm|avi|mov|flv|m4v|ts)$/i, "");
-      magnetName = magnetName.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
-      magnetName = magnetName.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+      // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+      magnetName = magnetName.replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "");
+      magnetName = magnetName// eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
+                    .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
       magnetName = magnetName.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
     }
     const item = {
@@ -1481,6 +1487,7 @@ export class Room {
       return;
     }
     // check if is valid hex color representation
+    // eslint-disable-next-line security/detect-unsafe-regex -- bounded {3}/{1,2}, no ReDoS
     if (!/^#([0-9a-f]{3}){1,2}$/i.test(roomTitleColor)) {
       socket.emit("errorMessage", "Invalid color code");
       return;
