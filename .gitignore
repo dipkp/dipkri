@@ -27,3 +27,5 @@ yarn-error.log*
 .eslintcache
 .oh-venv/
 .oh52/
+
+android/local.properties

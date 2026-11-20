@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.addJavascriptInterface(bridge, "dipkriAndroid")
+        TorrentService.start(this)
         webView.loadUrl(APP_URL)
     }
 
@@ -75,7 +76,7 @@ class MainActivity : AppCompatActivity() {
 
     inner class Bridge {
         @JavascriptInterface
-        fun getSidecar(): String = "{\"url\":\"\",\"token\":\"\",\"ready\":false}"
+        fun getSidecar(): String = TorrentService.sidecarJson()
     }
 
     override fun onBackPressed() {

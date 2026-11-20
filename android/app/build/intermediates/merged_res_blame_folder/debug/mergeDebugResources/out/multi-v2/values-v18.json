@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "org.dipkri.app-mergeDebugResources-22:/values-v18/values-v18.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\placi\\.gradle\\caches\\8.14.3\\transforms\\264c5432b80f1aa7af54d5926c34e6db\\transformed\\appcompat-1.7.0\\res\\values-v18\\values-v18.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "48",
+                        "endOffsets": "99"
+                    }
+                }
+            ]
+        }
+    ]
+}
