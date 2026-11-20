@@ -39,7 +39,8 @@
     },
     "asarUnpack": [
       "**/*.node"
-    ]
+    ],
+    "npmRebuild": false
   },
   "dependencies": {
     "webtorrent": "^2.8.5"
@@ -47,5 +48,6 @@
   "overrides": {
     "parse-torrent": "11.0.18",
     "uint8-util": "2.2.5"
-  }
+  },
+  "author": "dipkp"
 }

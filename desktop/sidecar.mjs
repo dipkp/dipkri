@@ -73,6 +73,10 @@ const pending = new Map();
 
 client.on("error", (err) => console.warn("[sidecar] client error:", err && err.message));
 
+// If the app dies first, our stdout pipe is gone; logging must not throw.
+process.stdout.on("error", () => {});
+process.stderr.on("error", () => {});
+
 process.on("uncaughtException", (err) => {
   console.error("[sidecar] uncaught:", err && err.stack ? err.stack : err);
 });

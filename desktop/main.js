@@ -38,6 +38,24 @@ function isAppUrl(url) {
   }
 }
 
+// A packaged GUI app has no console, and a pipe can break when the parent
+// goes away. Either case raises EPIPE, which surfaces as "A JavaScript error
+// occurred in the main process" unless the stream has an error listener.
+process.stdout.on("error", () => {});
+process.stderr.on("error", () => {});
+
+function logLine(stream, text) {
+  try {
+    if (stream && stream.writable) stream.write(text);
+  } catch (e) {}
+}
+
+function pipeChild(stream, target) {
+  if (!stream) return;
+  stream.on("error", () => {});
+  stream.on("data", (chunk) => logLine(target, String(chunk)));
+}
+
 function sidecarUrl() {
   return `http://127.0.0.1:${sidecarPort}`;
 }
@@ -52,14 +70,15 @@ function startSidecar() {
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
 
-  sidecar.stdout.on("data", (d) => process.stdout.write(String(d)));
-  sidecar.stderr.on("data", (d) => process.stderr.write(String(d)));
+  pipeChild(sidecar.stdout, process.stdout);
+  pipeChild(sidecar.stderr, process.stderr);
+  sidecar.on("error", (err) => console.warn("[desktop] sidecar channel error:", err.message));
 
   sidecar.on("message", (msg) => {
     if (msg && msg.type === "ready" && Number.isInteger(msg.port)) {
       sidecarPort = msg.port;
       sidecarReady = true;
-      console.log(`[desktop] sidecar ready on ${sidecarUrl()}`);
+      logLine(process.stdout, `[desktop] sidecar ready on ${sidecarUrl()}\n`);
       if (mainWindow) mainWindow.webContents.send("dipkri:sidecar-port", sidecarPort);
     }
   });
