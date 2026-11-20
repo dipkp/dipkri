@@ -254,14 +254,19 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    // Google blocks OAuth from browsers that identify as Electron, so present
-    // a plain Chrome user agent instead (Chromium version stays the same).
+    // Google blocks OAuth from browsers that identify as Electron (or as any
+    // other app), so present a plain Chrome user agent with the same Chromium.
     try {
-      const ua = session.defaultSession
-        .getUserAgent()
-        .replace(/\sElectron\/[\d.]+/i, "")
-        .replace(/\sdipkri\/[\d.]+/i, "");
-      session.defaultSession.setUserAgent(ua);
+      const raw = session.defaultSession.getUserAgent();
+      const version = (/Chrome\/([\d.]+)/.exec(raw) || [null, "140.0.0.0"])[1];
+      const platform = {
+        win32: "Windows NT 10.0; Win64; x64",
+        darwin: "Macintosh; Intel Mac OS X 10_15_7",
+        linux: "X11; Linux x86_64",
+      }[process.platform] || "X11; Linux x86_64";
+      session.defaultSession.setUserAgent(
+        `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version} Safari/537.36`
+      );
     } catch (e) {}
 
     startSidecar();
