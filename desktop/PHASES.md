@@ -52,6 +52,9 @@ DIPKRI_CACHE_DIR      %TEMP%     parent folder; the sidecar owns "<parent>/dipkr
 DIPKRI_IDLE_MINUTES   30         drop a torrent after N idle minutes
 DIPKRI_MIN_FREE_GB    1          refuse a stream when this device is nearly full
 DIPKRI_META_TIMEOUT_MS 40000     give up when no seeder answers
+DIPKRI_AUTH_DOMAIN    dipkri-watchparty.firebaseapp.com   the one popup host allowed besides Google
+    note: a stream needs (file size + MIN_FREE_GB) free, because the rest of the
+    file is downloaded while it plays
 DIPKRI_TOKEN          (set by main.js per launch)   required; the sidecar refuses to start without it
                                                       standalone: DIPKRI_TOKEN=dev-secret npm run sidecar
 DIPKRI_APP_URL        https://dipkri.duckdns.org    page the shell loads

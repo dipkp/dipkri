@@ -445,6 +445,16 @@ async function handleStream(req, res, url) {
   const size = file.length;
   if (!size) return json(req, res, 404, { ok: false, error: "empty file" });
 
+  // Streaming downloads the rest of this file to disk, so the reserve alone is
+  // not enough: a 20 GB movie must not start with 1.2 GB free.
+  const neededGB = (size - (file.downloaded || 0)) / 1e9 + MIN_FREE_GB;
+  if (freeDiskGB() < neededGB) {
+    return json(req, res, 507, {
+      ok: false,
+      error: "Not enough free disk space on this device for this file",
+    });
+  }
+
   const range = parseRange(req.headers.range, size);
   if (!range) {
     res.writeHead(416, { "Content-Range": `bytes */${size}`, ...corsHeaders(req) });

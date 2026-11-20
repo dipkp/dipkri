@@ -22,6 +22,9 @@ const SIDECAR_TOKEN = crypto.randomBytes(24).toString("hex");
 
 const { isAllowedPopup } = require("./popup-policy");
 
+// Firebase auth domain of the app; the only extra popup host besides Google.
+const AUTH_DOMAIN = process.env.DIPKRI_AUTH_DOMAIN || "dipkri-watchparty.firebaseapp.com";
+
 let mainWindow = null;
 let sidecar = null;
 let sidecarPort = REQUESTED_PORT;
@@ -154,9 +157,17 @@ function createWindow() {
   // Google, so that whole auth chain has to stay inside the app. Everything
   // else opens in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedPopup(url, APP_ORIGIN)) return { action: "allow" };
-    if (/^https?:/i.test(url)) shell.openExternal(url);
-    return { action: "deny" };
+    if (!isAllowedPopup(url, APP_ORIGIN, AUTH_DOMAIN)) {
+      if (/^https?:/i.test(url)) shell.openExternal(url);
+      return { action: "deny" };
+    }
+    // Auth popups get a bridge-free preload: they must not reach the sidecar.
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        webPreferences: { preload: path.join(__dirname, "popup-preload.js") },
+      },
+    };
   });
 
   // Keep the window on the app origin, including server-side redirects.
@@ -176,9 +187,10 @@ function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
     // An open OAuth popup would otherwise keep the app (and the sidecar) alive.
+    // destroy() is deliberate: close() can be blocked by the page's beforeunload.
     for (const win of BrowserWindow.getAllWindows()) {
       try {
-        win.close();
+        win.destroy();
       } catch (e) {}
     }
   });
@@ -204,15 +216,23 @@ function stopSidecar() {
     if (!sidecar || sidecar.killed || sidecar.exitCode !== null) return resolve();
 
     const done = () => resolve();
+    // The child may need destroy (5 s) + cache retries (~2.5 s); killing it
+    // earlier would leave the files behind.
     const timer = setTimeout(() => {
       try {
         sidecar.kill();
       } catch (e) {}
       resolve();
-    }, 2500);
+    }, 12000);
+
+    const onCleanup = (msg) => {
+      if (msg && msg.type === "cleanup") resolve();
+    };
+    sidecar.on("message", onCleanup);
 
     sidecar.once("exit", () => {
       clearTimeout(timer);
+      sidecar.removeListener("message", onCleanup);
       done();
     });
 

@@ -5,20 +5,26 @@
  *
  * Firebase `signInWithPopup` does not open accounts.google.com directly: it
  * opens `<project>.firebaseapp.com/__/auth/handler`, which then navigates to
- * Google. Blocking that host breaks Google sign-in, so the auth domains are
- * allowed together with the app origin and the OAuth providers themselves.
+ * Google. Blocking that host breaks Google sign-in, so exactly one auth domain
+ * is allowed, plus the identity provider pages themselves.
+ *
+ * Deliberately not wildcards: anyone can host a site on *.web.app or
+ * *.firebaseapp.com, and sites.google.com is user content.
  */
 
-const OAUTH_HOSTS = new Set([
-  "accounts.google.com",
-  "accounts.youtube.com",
-  "appleid.apple.com",
-  "auth.openai.com",
-]);
+const IDENTITY_HOSTS = new Set(["accounts.google.com", "appleid.apple.com"]);
 
-const AUTH_DOMAIN_SUFFIXES = [".firebaseapp.com", ".web.app", ".firebase.com"];
+function normaliseHost(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+  } catch (e) {
+    return "";
+  }
+}
 
-function isAllowedPopup(rawUrl, appOrigin) {
+function isAllowedPopup(rawUrl, appOrigin, authDomain) {
   let url;
   try {
     url = new URL(String(rawUrl));
@@ -30,13 +36,10 @@ function isAllowedPopup(rawUrl, appOrigin) {
   if (url.protocol !== "https:") return false;
 
   const host = url.hostname.toLowerCase();
-  if (OAUTH_HOSTS.has(host)) return true;
-  if (AUTH_DOMAIN_SUFFIXES.some((suffix) => host.endsWith(suffix))) return true;
+  if (IDENTITY_HOSTS.has(host)) return true;
 
-  // Google's own consent/redirect chain.
-  if (host === "google.com" || host.endsWith(".google.com")) return true;
-
-  return false;
+  const allowedAuth = normaliseHost(authDomain);
+  return Boolean(allowedAuth) && host === allowedAuth;
 }
 
-module.exports = { isAllowedPopup, OAUTH_HOSTS, AUTH_DOMAIN_SUFFIXES };
+module.exports = { isAllowedPopup, normaliseHost, IDENTITY_HOSTS };

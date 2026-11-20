@@ -18,6 +18,7 @@
     "productName": "dipkri",
     "files": [
       "main.js",
+      "popup-preload.js",
       "popup-policy.js",
       "preload.js",
       "sidecar.mjs",
