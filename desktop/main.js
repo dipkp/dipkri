@@ -6,7 +6,7 @@
  * this machine's swarm connection via http://127.0.0.1:<port>.
  */
 
-const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, session, shell, ipcMain } = require("electron");
 const path = require("path");
 const crypto = require("crypto");
 const http = require("http");
@@ -20,7 +20,7 @@ const REQUESTED_PORT = Number(process.env.DIPKRI_SIDECAR_PORT || 17891);
 // torrent client.
 const SIDECAR_TOKEN = crypto.randomBytes(24).toString("hex");
 
-const OAUTH_HOSTS = new Set(["accounts.google.com", "appleid.apple.com"]);
+const { isAllowedPopup } = require("./popup-policy");
 
 let mainWindow = null;
 let sidecar = null;
@@ -150,25 +150,11 @@ function createWindow() {
 
   mainWindow.loadURL(APP_URL);
 
-  // Only the app origin and the OAuth consent pages may open inside the app;
-  // everything else goes to the system browser.
+  // Firebase sign-in opens <project>.firebaseapp.com, which then hops to
+  // Google, so that whole auth chain has to stay inside the app. Everything
+  // else opens in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAppUrl(url)) return { action: "allow" };
-    try {
-      if (OAUTH_HOSTS.has(new URL(url).hostname)) {
-        return {
-          action: "allow",
-          overrideBrowserWindowOptions: {
-            webPreferences: {
-              preload: undefined,
-              contextIsolation: true,
-              nodeIntegration: false,
-              sandbox: true,
-            },
-          },
-        };
-      }
-    } catch (e) {}
+    if (isAllowedPopup(url, APP_ORIGIN)) return { action: "allow" };
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
@@ -189,6 +175,12 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    // An open OAuth popup would otherwise keep the app (and the sidecar) alive.
+    for (const win of BrowserWindow.getAllWindows()) {
+      try {
+        win.close();
+      } catch (e) {}
+    }
   });
 }
 
@@ -262,6 +254,16 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    // Google blocks OAuth from browsers that identify as Electron, so present
+    // a plain Chrome user agent instead (Chromium version stays the same).
+    try {
+      const ua = session.defaultSession
+        .getUserAgent()
+        .replace(/\sElectron\/[\d.]+/i, "")
+        .replace(/\sdipkri\/[\d.]+/i, "");
+      session.defaultSession.setUserAgent(ua);
+    } catch (e) {}
+
     startSidecar();
     createWindow();
 
