@@ -4,6 +4,14 @@ import express, { type Response } from "express";
 import bodyParser from "body-parser";
 import compression from "compression";
 import cors from "cors";
+import {
+  apiErrorHandler,
+  corsOrigin,
+  isMagnet,
+  rateLimit,
+  RATE_LIMITS,
+  securityHeaders,
+} from "./security.ts";
 import https from "node:https";
 import http from "node:http";
 import { Server } from "socket.io";
@@ -132,7 +140,11 @@ if (process.env.NODE_ENV === "development") {
   }
 }
 
-app.use(cors());
+app.set("trust proxy", "loopback"); // real client IP comes from our own nginx
+app.disable("x-powered-by");
+app.use(securityHeaders);
+app.use(cors({ origin: corsOrigin, methods: ["GET", "POST", "OPTIONS"] }));
+app.use(rateLimit(RATE_LIMITS.global));
 app.use(bodyParser.json());
 app.use(bodyParser.raw({ type: "text/plain", limit: 1000000 }));
 app.use("/api/movies", movieRouter);
@@ -521,7 +533,7 @@ app.get("/youtubePlaylist/:playlistId", async (req, res) => {
   }
 });
 
-app.post("/createRoom", async (req, res) => {
+app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
   const genName = () => "/" + makeRoomName(config.SHARD);
   let name = genName();
   console.log("createRoom: ", name);
@@ -712,7 +724,11 @@ app.get("/metadata", async (req, res) => {
   });
 });
 
-// Direct torrent streaming endpoints for BitTorrent magnet links
+// Direct torrent streaming endpoints for BitTorrent magnet links.
+// A player issues many range requests, so these get their own, higher budget.
+app.use(["/data", "/stream", "/streamAudio", "/streamInfo", "/streamSubtitle"],
+  rateLimit(RATE_LIMITS.stream));
+
 app.get("/data", handleTorrentData);
 app.get("/stream", handleTorrentStream);
 app.get("/progress", handleTorrentProgress);
@@ -1169,3 +1185,5 @@ function computeOpenSubtitlesHash(first: Buffer, last: Buffer, size: number) {
     }
   }
 }
+
+app.use(apiErrorHandler);

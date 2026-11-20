@@ -222,6 +222,13 @@ export function extractEpisodeFromRequest(req: any): number | undefined {
  * safely preserving all tracker parameters even if unencoded.
  */
 export function extractMagnetFromRequest(req: any): string {
+  const value = extractRawTorrentParam(req);
+  // WebTorrent treats a bare string as magnet, http(s) URL or file path.
+  // Only magnets are legitimate here, and only magnets may be fetched.
+  return /^magnet:\?[^#\s]*xt=urn:btih:[a-z0-9]{32,40}/i.test(value) ? value : "";
+}
+
+function extractRawTorrentParam(req: any): string {
   const fullUrl = req.originalUrl || req.url || "";
   const idx = fullUrl.indexOf("torrent=");
   if (idx !== -1) {
