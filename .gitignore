@@ -25,3 +25,5 @@ yarn-error.log*
 
 .theia
 .eslintcache
+.oh-venv/
+.oh52/
