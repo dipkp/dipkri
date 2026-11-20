@@ -771,12 +771,18 @@ app.get("/metadata", async (req, res) => {
 
 // Identity for the stream itself. Off until a Firebase admin key exists, so
 // nothing changes for viewers in the meantime.
-const STREAM_AUTH_ON =
-  Boolean(config.FIREBASE_ADMIN_SDK_CONFIG) || process.env.SEC_STREAM_AUTH === "on";
+// Adding the admin key must not lock out guests on its own: enforcement is a
+// deliberate flip (SEC_STREAM_AUTH=on) after the guest story is decided.
+const STREAM_AUTH_CONFIGURED = Boolean(config.FIREBASE_ADMIN_SDK_CONFIG);
+const STREAM_AUTH_ON = STREAM_AUTH_CONFIGURED && process.env.SEC_STREAM_AUTH === "on";
 
 app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
+  if (!STREAM_AUTH_CONFIGURED) {
+    res.json({ key: "", required: false, configured: false });
+    return;
+  }
   if (!STREAM_AUTH_ON) {
-    res.json({ key: "", required: false });
+    res.json({ key: "", required: false, configured: true });
     return;
   }
   const decoded = await verifyIdTokenOnly(String(req.body?.token || ""));
@@ -784,7 +790,7 @@ app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
     res.status(401).json({ error: "sign in required" });
     return;
   }
-  res.json({ key: mintStreamKey(decoded.uid), required: true });
+  res.json({ key: mintStreamKey(decoded.uid), required: true, configured: true });
 });
 
 app.use(["/data", "/stream", "/streamAudio"], streamKeyGuard(STREAM_AUTH_ON));
