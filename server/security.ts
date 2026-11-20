@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 /**
@@ -128,3 +129,49 @@ export const RATE_LIMITS = {
   rooms: { name: "rooms", limit: 30, windowMs: 5 * 60_000 },
   subtitles: { name: "subtitles", limit: 60, windowMs: 60_000 },
 } satisfies Record<string, RateLimitOptions>;
+
+// --- stream keys -------------------------------------------------------------
+// A Firebase ID token lives one hour, which is shorter than a film. Instead the
+// player proves who it is once and gets a signed key for the session.
+
+const STREAM_SECRET =
+  process.env.SEC_STREAM_SECRET || crypto.randomBytes(32).toString("hex");
+const STREAM_KEY_TTL_MS = Number(process.env.SEC_STREAM_KEY_TTL_MS || 12 * 3600_000);
+
+export function mintStreamKey(uid: string): string {
+  const payload = `${uid}.${Date.now() + STREAM_KEY_TTL_MS}`;
+  const sig = crypto.createHmac("sha256", STREAM_SECRET).update(payload).digest("base64url");
+  return `${Buffer.from(payload).toString("base64url")}.${sig}`;
+}
+
+export function verifyStreamKey(value: unknown): string | null {
+  const raw = String(value || "");
+  const [body, sig] = raw.split(".");
+  if (!body || !sig) return null;
+
+  let payload: string;
+  try {
+    payload = Buffer.from(body, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+
+  const expected = crypto.createHmac("sha256", STREAM_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  const [uid, exp] = payload.split(".");
+  if (!uid || !Number(exp) || Number(exp) < Date.now()) return null;
+  return uid;
+}
+
+/** No-op while no identity provider is configured, so playback never breaks. */
+export function streamKeyGuard(enabled: boolean) {
+  return function guard(req: Request, res: Response, next: NextFunction): void {
+    if (!enabled) return next();
+    const value = (req.query?.key as string) || req.headers["x-stream-key"];
+    if (verifyStreamKey(value)) return next();
+    res.status(401).json({ error: "stream key required" });
+  };
+}

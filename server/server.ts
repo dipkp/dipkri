@@ -11,6 +11,8 @@ import {
   rateLimit,
   RATE_LIMITS,
   securityHeaders,
+  streamKeyGuard,
+  mintStreamKey,
 } from "./security.ts";
 import https from "node:https";
 import http from "node:http";
@@ -24,7 +26,7 @@ import {
   getIsSubscriberByUid,
   stripe,
 } from "./utils/stripe.ts";
-import { deleteUser, validateUserToken } from "./utils/firebase.ts";
+import { deleteUser, validateUserToken, verifyIdTokenOnly } from "./utils/firebase.ts";
 import path from "node:path";
 import { getStartOfDay } from "./utils/time.ts";
 import { getSessionLimitSeconds } from "./vm/utils.ts";
@@ -766,6 +768,26 @@ app.get("/metadata", async (req, res) => {
     streamPath,
   });
 });
+
+// Identity for the stream itself. Off until a Firebase admin key exists, so
+// nothing changes for viewers in the meantime.
+const STREAM_AUTH_ON =
+  Boolean(config.FIREBASE_ADMIN_SDK_CONFIG) || process.env.SEC_STREAM_AUTH === "on";
+
+app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
+  if (!STREAM_AUTH_ON) {
+    res.json({ key: "", required: false });
+    return;
+  }
+  const decoded = await verifyIdTokenOnly(String(req.body?.token || ""));
+  if (!decoded) {
+    res.status(401).json({ error: "sign in required" });
+    return;
+  }
+  res.json({ key: mintStreamKey(decoded.uid), required: true });
+});
+
+app.use(["/data", "/stream", "/streamAudio"], streamKeyGuard(STREAM_AUTH_ON));
 
 // Direct torrent streaming endpoints for BitTorrent magnet links.
 // A player issues many range requests, so these get their own, higher budget.

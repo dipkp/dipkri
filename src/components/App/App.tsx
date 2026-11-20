@@ -57,6 +57,7 @@ import {
   isClientTranscodeSupported,
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
+import { withStreamKey } from "../../utils/streamAuth";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
@@ -842,7 +843,7 @@ export class App extends React.Component<AppProps, AppState> {
             const detectTorrentSubtitles = async () => {
               if (this.state.roomSubtitle || this.state.roomMedia !== currentMedia) return;
               const dataUrl = currentMedia.includes("/stream?")
-                ? currentMedia.replace("/stream?", "/data?")
+                ? (await withStreamKey(currentMedia.replace("/stream?", "/data?")))
                 : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
 
               for (let attempt = 0; attempt < 5; attempt++) {
@@ -1036,7 +1037,7 @@ export class App extends React.Component<AppProps, AppState> {
             const streamUrl = isMagnet(src)
               ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
               : (src.startsWith("/stream") ? `${serverPath}${src}` : src);
-            await this.Player().setSrcAndTime(streamUrl, time);
+            await this.Player().setSrcAndTime(await withStreamKey(streamUrl), time);
 
             // The player itself only knows "media error". Ask the API why, so a
             // rate limit or a full disk is not shown as a silent stall.

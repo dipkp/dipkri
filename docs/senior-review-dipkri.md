@@ -142,5 +142,5 @@ production.
 | 3.1 UI error surface | fixed, live (player explains 400/404/429/507) |
 | 3.2 restart drops rooms | fixed: SIGTERM/SIGINT now tells every room and exits cleanly |
 | 3.4 log retention | fixed: pm2-logrotate, 10 MB x 7, compressed |
-| 2.2 stream auth per user | **open**: needs FIREBASE_ADMIN_SDK_CONFIG before it can identify users |
-| 3.3 bundle size | **open**: needs a lazy-load pass on the player stack |
+| 2.2 stream auth per user | **implemented, off**: `/streamKey` + HMAC guard; switches on automatically when FIREBASE_ADMIN_SDK_CONFIG is set |
+| 3.3 bundle size | **partly**: dashjs is type-only now; a vendor split was measured and reverted (it grew the initial payload), route-level splitting is the next step |

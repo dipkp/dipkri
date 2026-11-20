@@ -1,4 +1,4 @@
-import { MediaPlayerClass } from "dashjs";
+import type { MediaPlayerClass } from "dashjs";
 import { Player } from "./Player";
 
 export class YouTube implements Player {

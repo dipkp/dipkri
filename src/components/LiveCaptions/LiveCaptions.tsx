@@ -12,6 +12,7 @@ import {
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
 import { cleanMovieTitle } from "../Modal/SubtitleModal";
 import { serverPath } from "../../utils/utils";
+import { withStreamKey } from "../../utils/streamAuth";
 
 export interface SubtitleCue {
   start: number;
@@ -636,8 +637,8 @@ export const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       // 2. Torrent / Magnet internal subtitle files (.srt/.vtt)
       if (roomMedia.includes("/stream?torrent=") || roomMedia.startsWith("magnet:")) {
         const dataUrl = roomMedia.includes("/stream?")
-          ? roomMedia.replace("/stream?", "/data?")
-          : `${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`;
+          ? await withStreamKey(roomMedia.replace("/stream?", "/data?"))
+          : await withStreamKey(`${serverPath}/data?torrent=${encodeURIComponent(roomMedia)}`);
 
         for (let i = 0; i < 4; i++) {
           if (isDisposed || parsedCuesRef.current.length > 0) return;
