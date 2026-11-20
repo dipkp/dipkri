@@ -1,0 +1,41 @@
+{
+  "name": "dipkri-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dipkri desktop app - local torrent streaming, server only syncs playback",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "sidecar": "node sidecar.mjs",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "org.dipkri.desktop",
+    "productName": "dipkri",
+    "files": [
+      "main.js",
+      "preload.js",
+      "sidecar.mjs",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}
