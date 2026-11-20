@@ -52,7 +52,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.addJavascriptInterface(bridge, "dipkriAndroid")
-        TorrentService.start(this)
+        try {
+            TorrentService.start(this)
+        } catch (e: Throwable) {
+            // a foreground-service restriction must never take the UI down
+            android.util.Log.w("dipkri", "service start failed: ${e.message}")
+        }
         webView.loadUrl(APP_URL)
     }
 

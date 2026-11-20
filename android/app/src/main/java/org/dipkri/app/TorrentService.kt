@@ -35,8 +35,14 @@ class TorrentService : Service() {
         // If libtorrent cannot start on this ABI the app keeps working: ready
         // stays false and the web build streams from the server instead.
         val torrentDir = java.io.File(cacheDir, "torrents").apply { mkdirs() }
-        val real = LibtorrentEngine(this, torrentDir)
-        engine = if (real.start()) real else PlaceholderEngine()
+        engine = try {
+            val real = LibtorrentEngine(this, torrentDir)
+            if (real.start()) real else PlaceholderEngine()
+        } catch (e: Throwable) {
+            // UnsatisfiedLinkError / SO load failures must not crash the app
+            android.util.Log.w("dipkri", "torrent engine unavailable: ${e.message}")
+            PlaceholderEngine()
+        }
         server = LocalHttpServer(
             port = LocalHttpServer.DEFAULT_PORT,
             token = token,
