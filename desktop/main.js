@@ -56,6 +56,14 @@ function pipeChild(stream, target) {
   stream.on("data", (chunk) => logLine(target, String(chunk)));
 }
 
+// The window can be destroyed while a message is in flight.
+function sendToWindow(channel, payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.webContents.send(channel, payload);
+  } catch (e) {}
+}
+
 function sidecarUrl() {
   return `http://127.0.0.1:${sidecarPort}`;
 }
@@ -79,7 +87,7 @@ function startSidecar() {
       sidecarPort = msg.port;
       sidecarReady = true;
       logLine(process.stdout, `[desktop] sidecar ready on ${sidecarUrl()}\n`);
-      if (mainWindow) mainWindow.webContents.send("dipkri:sidecar-port", sidecarPort);
+      sendToWindow("dipkri:sidecar-port", sidecarPort);
     }
   });
 
@@ -151,7 +159,7 @@ function createWindow() {
   mainWindow.webContents.on("will-redirect", guardNavigation);
 
   mainWindow.webContents.once("did-finish-load", () => {
-    if (sidecarReady) mainWindow.webContents.send("dipkri:sidecar-port", sidecarPort);
+    if (sidecarReady) sendToWindow("dipkri:sidecar-port", sidecarPort);
   });
 
   mainWindow.on("closed", () => {

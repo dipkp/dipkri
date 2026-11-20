@@ -279,6 +279,12 @@ function addTorrent(magnet) {
   });
 
   pending.set(magnet, promise);
+  // A failed add must not stay cached: client.add can throw synchronously, in
+  // which case finish() never runs and every retry would replay the rejection.
+  promise.then(
+    () => pending.delete(magnet),
+    () => pending.delete(magnet)
+  );
   return promise;
 }
 
