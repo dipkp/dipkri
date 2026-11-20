@@ -153,8 +153,32 @@ app.get("/ping", (_req, res) => {
   res.json("pong");
 });
 
-// In-memory fallback cache for subtitles when Redis is not available
+// In-memory fallback cache for subtitles when Redis is not available.
+// Bounded: every entry can be ~1 MB, and the box only has 1 GB of RAM.
+const SUBTITLE_CACHE_MAX = Number(process.env.SUBTITLE_CACHE_MAX || 150);
 const memorySubtitleCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
+const roomHosts = new Map<string, string>();
+const MAX_ROOMS = Number(process.env.MAX_ROOMS || 200);
+
+function cacheSubtitle(hash: string, buffer: Buffer, ttlMs: number): void {
+  memorySubtitleCache.delete(hash); // re-insert so Map order stays LRU-ish
+  memorySubtitleCache.set(hash, { buffer, expiresAt: Date.now() + ttlMs });
+  while (memorySubtitleCache.size > SUBTITLE_CACHE_MAX) {
+    const oldest = memorySubtitleCache.keys().next().value;
+    if (oldest === undefined) break;
+    memorySubtitleCache.delete(oldest);
+  }
+}
+
+function readSubtitle(hash: string): Buffer | undefined {
+  const cached = memorySubtitleCache.get(hash);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    memorySubtitleCache.delete(hash);
+    return undefined;
+  }
+  return cached.buffer;
+}
 
 // Data's already compressed so go before the compression middleware
 app.get("/subtitle/:hash", async (req, res) => {
@@ -162,10 +186,7 @@ app.get("/subtitle/:hash", async (req, res) => {
   const key = "subtitle:" + hash;
   let buf = await redis?.getBuffer(key);
   if (!buf) {
-    const cached = memorySubtitleCache.get(hash);
-    if (cached && cached.expiresAt > Date.now()) {
-      buf = cached.buffer;
-    }
+    buf = readSubtitle(hash);
   }
   if (!buf) {
     res.status(404).end("not found");
@@ -195,10 +216,7 @@ app.post("/subtitle", async (req, res) => {
   if (redis) {
     await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
   } else {
-    memorySubtitleCache.set(hash, {
-      buffer: gzipData,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    });
+    cacheSubtitle(hash, gzipData, 24 * 60 * 60 * 1000);
   }
   redisCount("subUploads");
   res.json({ hash });
@@ -261,10 +279,7 @@ app.get("/downloadSubtitles", async (req, res) => {
     if (redis) {
       await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
     } else {
-      memorySubtitleCache.set(hash, {
-        buffer: gzipData,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      });
+      cacheSubtitle(hash, gzipData, 24 * 60 * 60 * 1000);
     }
 
     redisCount("subDownloadsOS");
@@ -568,8 +583,15 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
       newRoom.playlistAdd(null, item);
     }
   }
+  if (rooms.size >= MAX_ROOMS) {
+    res.status(503).json({ error: "Server is at capacity, please try again in a minute." });
+    return;
+  }
+
+  const hostToken = crypto.randomBytes(24).toString("hex");
   rooms.set(name, newRoom);
-  res.json({ name });
+  roomHosts.set(name, hostToken);
+  res.json({ name, hostToken });
 });
 
 app.post("/terminateRoom", async (req, res) => {
@@ -581,6 +603,14 @@ app.post("/terminateRoom", async (req, res) => {
   const cleanId = String(roomId).replace(/^\//, "");
   const key = "/" + cleanId;
   const room = rooms.get(key);
+
+  // Only the host that created the room may end it.
+  const expectedHost = roomHosts.get(key);
+  const providedHost = String(req.body?.hostToken || "");
+  if (room && expectedHost && providedHost !== expectedHost) {
+    res.status(403).json({ error: "only the host can terminate this room" });
+    return;
+  }
   if (room) {
     try {
       console.log("[TERMINATE_ROOM] Terminating room %s", key);
@@ -593,6 +623,7 @@ app.post("/terminateRoom", async (req, res) => {
       } catch {}
       room.destroy();
       rooms.delete(key);
+      roomHosts.delete(key);
       io._nsps.delete(key);
       if (postgres) {
         await postgres.query(`DELETE FROM room WHERE "roomId" = $1`, [key]).catch(() => {});

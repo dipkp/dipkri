@@ -57,6 +57,10 @@ export async function createRoom(
 
   const name: string = data.name;
   const cleanName = (name || "").replace(/^\//, "");
+  // Only the creator holds this; it is required to terminate the room later.
+  if (data.hostToken && cleanName) {
+    localStorage.setItem(`wp_host_${cleanName}`, String(data.hostToken));
+  }
   if (cleanName) {
     try {
       localStorage.setItem("wp_last_room", cleanName);
@@ -286,7 +290,10 @@ export const TopBar = (props: {
                   fetch("/terminateRoom", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId: cleanId }),
+                    body: JSON.stringify({
+                      roomId: cleanId,
+                      hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
+                    }),
                   }).catch(() => {});
                   localStorage.removeItem("wp_last_room");
                   localStorage.removeItem("wp_active_party");

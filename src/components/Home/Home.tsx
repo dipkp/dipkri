@@ -67,7 +67,10 @@ export const Home = () => {
       fetch("/terminateRoom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: targetRoom }),
+        body: JSON.stringify({
+          roomId: targetRoom,
+          hostToken: localStorage.getItem(`wp_host_${targetRoom}`) || "",
+        }),
       }).catch(() => {});
     } catch {}
 
