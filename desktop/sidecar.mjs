@@ -183,29 +183,32 @@ function findLoaded(magnet) {
   );
 }
 
+// Resolve only once the torrent has metadata; `files` is empty before that.
+function whenReady(torrent) {
+  torrent.__lastAccess = Date.now();
+  if (torrent.ready) return Promise.resolve(torrent);
+  return new Promise((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      torrent.__lastAccess = Date.now();
+      resolve(torrent);
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const cleanup = () => {
+      torrent.removeListener("ready", onReady);
+      torrent.removeListener("error", onError);
+    };
+    torrent.once("ready", onReady);
+    torrent.once("error", onError);
+  });
+}
+
 function addTorrent(magnet) {
   const known = findLoaded(magnet);
-  if (known) {
-    known.__lastAccess = Date.now();
-    if (known.ready) return Promise.resolve(known);
-    return new Promise((resolve, reject) => {
-      const onReady = () => {
-        cleanupListeners();
-        known.__lastAccess = Date.now();
-        resolve(known);
-      };
-      const onError = (err) => {
-        cleanupListeners();
-        reject(err);
-      };
-      const cleanupListeners = () => {
-        known.removeListener("ready", onReady);
-        known.removeListener("error", onError);
-      };
-      known.once("ready", onReady);
-      known.once("error", onError);
-    });
-  }
+  if (known) return whenReady(known);
   if (pending.has(magnet)) return pending.get(magnet);
 
   const promise = new Promise((resolve, reject) => {
@@ -218,7 +221,8 @@ function addTorrent(magnet) {
       });
     } catch (err) {
       const dup = findLoaded(magnet);
-      return dup ? resolve(dup) : reject(err);
+      if (dup) return whenReady(dup).then(resolve, reject);
+      return reject(err);
     }
 
     torrent.__lastAccess = Date.now();

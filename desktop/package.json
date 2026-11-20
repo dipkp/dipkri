@@ -36,6 +36,12 @@
       "target": [
         "AppImage"
       ]
-    }
+    },
+    "asarUnpack": [
+      "**/*.node"
+    ]
+  },
+  "dependencies": {
+    "webtorrent": "^2.8.5"
   }
 }

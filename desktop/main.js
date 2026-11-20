@@ -28,6 +28,8 @@ function sidecarUrl() {
   return `http://127.0.0.1:${sidecarPort}`;
 }
 
+let sidecarRestarts = 0;
+
 function startSidecar() {
   sidecar = fork(path.join(__dirname, "sidecar.mjs"), [], {
     env: {
@@ -53,6 +55,17 @@ function startSidecar() {
   sidecar.on("exit", (code) => {
     sidecarReady = false;
     console.warn(`[desktop] sidecar exited (${code})`);
+
+    // Recover from a crash, but do not loop forever on a broken install.
+    if (!quitting && sidecarRestarts < 3) {
+      sidecarRestarts += 1;
+      setTimeout(() => {
+        if (!quitting) {
+          console.warn(`[desktop] restarting sidecar (${sidecarRestarts}/3)`);
+          startSidecar();
+        }
+      }, 1500 * sidecarRestarts);
+    }
   });
 }
 
@@ -113,7 +126,7 @@ ipcMain.handle("dipkri:sidecar", () => ({
 // app really leaves no video files behind.
 function stopSidecar() {
   return new Promise((resolve) => {
-    if (!sidecar || sidecar.killed) return resolve();
+    if (!sidecar || sidecar.killed || sidecar.exitCode !== null) return resolve();
 
     const done = () => resolve();
     const timer = setTimeout(() => {
