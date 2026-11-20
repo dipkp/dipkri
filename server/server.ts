@@ -549,6 +549,17 @@ app.get("/youtubePlaylist/:playlistId", async (req, res) => {
   }
 });
 
+// Socket.IO has no public "remove namespace" API. Keep the private access in
+// one guarded place so an upgrade fails soft instead of throwing mid-request.
+function dropNamespace(key: string): void {
+  try {
+    const nsps = (io as any)._nsps;
+    if (nsps && typeof nsps.delete === "function") nsps.delete(key);
+  } catch (e) {
+    console.warn("[namespace] could not drop", key, (e as Error)?.message);
+  }
+}
+
 app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
   const genName = () => "/" + makeRoomName(config.SHARD);
   let name = genName();
@@ -624,7 +635,7 @@ app.post("/terminateRoom", async (req, res) => {
       room.destroy();
       rooms.delete(key);
       roomHosts.delete(key);
-      io._nsps.delete(key);
+      dropNamespace(key);
       if (postgres) {
         await postgres.query(`DELETE FROM room WHERE "roomId" = $1`, [key]).catch(() => {});
       }
@@ -1081,7 +1092,7 @@ async function saveRooms() {
         rooms.delete(key);
         saveCount += 1;
         // Unregister the namespace to avoid dupes on reload
-        io._nsps.delete(key);
+        dropNamespace(key);
       } else if (room.roster.length) {
         room.lastUpdateTime = new Date();
         await room.saveRoom();
@@ -1219,3 +1230,35 @@ function computeOpenSubtitlesHash(first: Buffer, last: Buffer, size: number) {
 }
 
 app.use(apiErrorHandler);
+
+// A deploy or `pm2 restart` kills every in-memory room. Say so before leaving
+// instead of dropping sockets with no explanation.
+let shuttingDown = false;
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal}: closing ${rooms.size} room(s)`);
+
+  for (const [key, room] of rooms) {
+    try {
+      io.of(key).emit("REC:chat", {
+        system: true,
+        text: "The server is restarting. The party will be back in a few seconds.",
+      });
+      io.of(key).disconnectSockets(true);
+    } catch (e) {
+      // a broken namespace must not block the shutdown
+    }
+    try {
+      room.destroy();
+    } catch (e) {}
+  }
+  rooms.clear();
+  roomHosts.clear();
+
+  setTimeout(() => process.exit(0), 900);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));

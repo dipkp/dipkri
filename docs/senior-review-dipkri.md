@@ -128,3 +128,19 @@ production.
 3. 2.1 subtitle cache bound (30 min) — protects the box.
 4. 3.1 error surface (1 h) — makes the new limits understandable.
 5. 2.2 stream auth (half day) — needs the Firebase admin key.
+
+---
+
+## 6. Status (2026-11-20, branch `sec/api-hardening`)
+
+| Item | Status |
+|---|---|
+| 1.1 host-only termination | fixed, live (403 without the host token) |
+| 1.2 room cap | fixed, live (MAX_ROOMS=200 -> 503) |
+| 2.1 subtitle cache bound | fixed, live (LRU 150 + 24 h TTL) |
+| 2.3 private socket.io namespace | guarded in `dropNamespace()`, logs instead of throwing |
+| 3.1 UI error surface | fixed, live (player explains 400/404/429/507) |
+| 3.2 restart drops rooms | fixed: SIGTERM/SIGINT now tells every room and exits cleanly |
+| 3.4 log retention | fixed: pm2-logrotate, 10 MB x 7, compressed |
+| 2.2 stream auth per user | **open**: needs FIREBASE_ADMIN_SDK_CONFIG before it can identify users |
+| 3.3 bundle size | **open**: needs a lazy-load pass on the player stack |
