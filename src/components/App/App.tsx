@@ -58,6 +58,7 @@ import {
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
 import { withStreamKey } from "../../utils/streamAuth";
+import { buildLocalStreamUrl, getDesktopBridge } from "../../utils/desktopStream";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
@@ -1034,9 +1035,22 @@ export class App extends React.Component<AppProps, AppState> {
 
           if (isMagnet(src) || src.includes("/stream?torrent=")) {
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
-            const streamUrl = isMagnet(src)
+            let streamUrl = isMagnet(src)
               ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
               : (src.startsWith("/stream") ? `${serverPath}${src}` : src);
+
+            // Desktop app: the torrent runs on this machine, so the bytes come
+            // from 127.0.0.1 and the server only keeps the room in sync.
+            const bridge = getDesktopBridge();
+            if (bridge?.getSidecar) {
+              try {
+                const sidecar = await bridge.getSidecar();
+                if (sidecar?.ready) {
+                  const local = buildLocalStreamUrl(src, sidecar);
+                  if (local) streamUrl = local;
+                }
+              } catch {}
+            }
             await this.Player().setSrcAndTime(await withStreamKey(streamUrl), time);
 
             // The player itself only knows "media error". Ask the API why, so a

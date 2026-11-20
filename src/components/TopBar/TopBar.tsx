@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useState } from "react";
 import { serverPath, getUserImage } from "../../utils/utils";
+import { desktopRoomEnd } from "../../utils/desktopStream";
 import { Avatar, Tooltip } from "@mantine/core";
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
@@ -23,9 +24,8 @@ export async function createRoom(
   const uid = user?.uid;
   const token = await user?.getIdToken();
 
-  let response: Response;
-  try {
-    response = await fetch(serverPath + "/createRoom", {
+  const request = () =>
+    fetch(serverPath + "/createRoom", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -36,8 +36,19 @@ export async function createRoom(
         video,
       }),
     });
+
+  let response: Response;
+  try {
+    response = await request();
   } catch {
-    throw new Error("Network error — could not reach the server.");
+    // A deploy or a WiFi blip drops the first attempt; one retry fixes most of
+    // them and turns the rest into an honest message.
+    await new Promise((r) => setTimeout(r, 800));
+    try {
+      response = await request();
+    } catch {
+      throw new Error("Could not reach the server. Check your connection and try again.");
+    }
   }
 
   const raw = await response.text();
@@ -295,6 +306,8 @@ export const TopBar = (props: {
                       hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
                     }),
                   }).catch(() => {});
+                  // Desktop: the video lives on this device, wipe it now.
+                  desktopRoomEnd(cleanId);
                   localStorage.removeItem("wp_last_room");
                   localStorage.removeItem("wp_active_party");
                   if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
