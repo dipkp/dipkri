@@ -582,6 +582,11 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
     }
   }
   const decoded = await validateUserToken(req.body?.uid, req.body?.token);
+  // With an identity provider configured, rooms are for signed-in users only.
+  if (config.FIREBASE_ADMIN_SDK_CONFIG && !decoded) {
+    res.status(401).json({ error: "Please sign in to start a party." });
+    return;
+  }
   newRoom.creator = decoded?.email;
   const preload = (req.body?.video || "").slice(0, 20000);
   if (preload) {

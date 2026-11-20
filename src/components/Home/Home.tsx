@@ -156,6 +156,11 @@ export const Home = () => {
   };
 
   const handleStartInstantRoom = async () => {
+    if (!context.user) {
+      setError("Please sign in with Google to start a party.");
+      await handleGoogleSignIn();
+      return;
+    }
     setIsCreating(true);
     try {
       await createRoom(context.user, false);
@@ -170,6 +175,11 @@ export const Home = () => {
 
   const handleInlineJoin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!context.user) {
+      setError("Please sign in with Google to join a party.");
+      void handleGoogleSignIn();
+      return;
+    }
     let code = roomInput.trim();
     if (!code && lastRoom) {
       code = lastRoom;

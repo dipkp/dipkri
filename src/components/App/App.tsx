@@ -1726,7 +1726,9 @@ export class App extends React.Component<AppProps, AppState> {
       if (res.ok) return;
 
       const message =
-        res.status === 429
+        res.status === 401
+          ? "Please sign in with Google to watch this party."
+          : res.status === 429
           ? "The server is busy right now — please try again in a minute."
           : res.status === 507
             ? "The server's storage is full, so this stream cannot start. Try another title or come back later."

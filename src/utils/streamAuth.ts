@@ -12,10 +12,28 @@ import firebase from "firebase/compat/app";
 let cached: { key: string; at: number } | null = null;
 const CLIENT_TTL_MS = 6 * 60 * 60 * 1000;
 
+function authReady(timeoutMs = 5000): Promise<firebase.User | null> {
+  const auth = firebase.auth();
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (user: firebase.User | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(user);
+    };
+    const unsubscribe = auth.onAuthStateChanged((user) => finish(user));
+    const timer = setTimeout(() => finish(auth.currentUser), timeoutMs);
+  });
+}
+
 export async function getStreamKey(): Promise<string> {
   if (cached && Date.now() - cached.at < CLIENT_TTL_MS) return cached.key;
 
-  const user = firebase.auth().currentUser;
+  const user = await authReady();
   if (!user) return "";
 
   try {
