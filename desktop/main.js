@@ -13,22 +13,34 @@ const http = require("http");
 const { fork } = require("child_process");
 
 const APP_URL = process.env.DIPKRI_APP_URL || "https://dipkri.duckdns.org";
+const APP_ORIGIN = new URL(APP_URL).origin;
 const REQUESTED_PORT = Number(process.env.DIPKRI_SIDECAR_PORT || 17891);
 
-// One token per launch: only our renderer can drive the local torrent client.
+// One token per launch: only our own top-level page can drive the local
+// torrent client.
 const SIDECAR_TOKEN = crypto.randomBytes(24).toString("hex");
+
+const OAUTH_HOSTS = new Set(["accounts.google.com", "appleid.apple.com"]);
 
 let mainWindow = null;
 let sidecar = null;
 let sidecarPort = REQUESTED_PORT;
 let sidecarReady = false;
+let sidecarRestarts = 0;
 let quitting = false;
+
+// Exact origin match: "https://app.example.evil.com" must not count as the app.
+function isAppUrl(url) {
+  try {
+    return new URL(url).origin === APP_ORIGIN;
+  } catch (e) {
+    return false;
+  }
+}
 
 function sidecarUrl() {
   return `http://127.0.0.1:${sidecarPort}`;
 }
-
-let sidecarRestarts = 0;
 
 function startSidecar() {
   sidecar = fork(path.join(__dirname, "sidecar.mjs"), [], {
@@ -87,25 +99,37 @@ function createWindow() {
 
   mainWindow.loadURL(APP_URL);
 
-  // external links open in the system browser; OAuth popups stay in-app
+  // Only the app origin and the OAuth consent pages may open inside the app;
+  // everything else goes to the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAppUrl(url)) return { action: "allow" };
     try {
-      const { hostname } = new URL(url);
-      const sameApp = url.startsWith(APP_URL);
-      const oauth = hostname === "accounts.google.com" || hostname === "appleid.apple.com";
-      if (sameApp || oauth) return { action: "allow" };
+      if (OAUTH_HOSTS.has(new URL(url).hostname)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            webPreferences: {
+              preload: undefined,
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+            },
+          },
+        };
+      }
     } catch (e) {}
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
 
-  // never let the page navigate away from the app origin
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(APP_URL)) {
-      event.preventDefault();
-      if (/^https?:/i.test(url)) shell.openExternal(url);
-    }
-  });
+  // Keep the window on the app origin, including server-side redirects.
+  const guardNavigation = (event, url) => {
+    if (isAppUrl(url)) return;
+    event.preventDefault();
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+  };
+  mainWindow.webContents.on("will-navigate", guardNavigation);
+  mainWindow.webContents.on("will-redirect", guardNavigation);
 
   mainWindow.webContents.once("did-finish-load", () => {
     if (sidecarReady) mainWindow.webContents.send("dipkri:sidecar-port", sidecarPort);
@@ -116,11 +140,17 @@ function createWindow() {
   });
 }
 
-ipcMain.handle("dipkri:sidecar", () => ({
-  url: sidecarUrl(),
-  token: SIDECAR_TOKEN,
-  ready: sidecarReady,
-}));
+// The token stays with the top-level app frame: OAuth popups inherit the
+// preload, so the sender is validated instead of trusting the bridge.
+ipcMain.handle("dipkri:sidecar", (event) => {
+  const denied = { url: "", token: "", ready: false };
+  const frame = event.senderFrame;
+  if (!mainWindow || event.sender !== mainWindow.webContents) return denied;
+  if (!frame || event.sender.mainFrame !== frame) return denied;
+  if (!isAppUrl(frame.url)) return denied;
+
+  return { url: sidecarUrl(), token: SIDECAR_TOKEN, ready: sidecarReady };
+});
 
 // Ask the sidecar to delete everything and wait for it to exit, so closing the
 // app really leaves no video files behind.
@@ -150,7 +180,13 @@ function stopSidecar() {
 
     // fallback: HTTP room-end, then kill
     const req = http.request(
-      { host: "127.0.0.1", port: sidecarPort, path: "/room-end", method: "POST", headers: { "x-dipkri-token": SIDECAR_TOKEN } },
+      {
+        host: "127.0.0.1",
+        port: sidecarPort,
+        path: "/room-end",
+        method: "POST",
+        headers: { "x-dipkri-token": SIDECAR_TOKEN },
+      },
       () => {}
     );
     req.on("error", () => {});
@@ -158,22 +194,35 @@ function stopSidecar() {
   });
 }
 
-app.whenReady().then(() => {
-  startSidecar();
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// One window, one sidecar: a second launch would otherwise wipe the cache the
+// first instance is streaming from.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+  app.whenReady().then(() => {
+    startSidecar();
+    createWindow();
 
-app.on("before-quit", (event) => {
-  if (quitting) return;
-  quitting = true;
-  event.preventDefault();
-  stopSidecar().then(() => app.quit());
-});
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+
+  app.on("before-quit", (event) => {
+    if (quitting) return;
+    quitting = true;
+    event.preventDefault();
+    stopSidecar().then(() => app.quit());
+  });
+}

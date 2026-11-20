@@ -17,55 +17,82 @@ Why not a browser/PWA: browsers can only reach WebRTC peers. Most movie
 torrents are seeded by qBittorrent/Transmission (TCP/UDP), so a browser-only
 player stalls on the majority of magnets. A real app has the full swarm.
 
-## Phase 1 — desktop shell + local streaming (in progress)
+## Phase 1 — desktop shell + local streaming (done)
 
 | Piece | File | Status |
 |---|---|---|
 | Local torrent sidecar (HTTP, Range) | `desktop/sidecar.mjs` | done, tested |
-| Electron shell loading dipkri UI | `desktop/main.js` | scaffolded |
-| Bridge to the web UI | `desktop/preload.js` | scaffolded |
-| Packaging config (nsis/dmg/AppImage) | `desktop/package.json` | scaffolded |
+| Electron shell loading dipkri UI | `desktop/main.js` | done, tested |
+| Bridge to the web UI | `desktop/preload.js` | done |
+| Packaging config (nsis/dmg/AppImage) | `desktop/package.json` | written, not built |
 
-Sidecar endpoints:
+### Sidecar endpoints
+
+`/health` is open (loopback only). Every other endpoint needs the per-launch
+token, either as the `x-dipkri-token` header or as `?token=...` — a `<video>`
+element can only use the query form.
 
 ```
 GET  /health                                  -> { ok, torrents, freeDiskGB, cacheMB }
-GET  /info?torrent=<magnet>                   -> { name, infoHash, files[] }
-GET  /stream?torrent=<magnet>&fileIndex=N     -> video bytes, Range supported
+GET  /info?torrent=<magnet>&token=...         -> { name, infoHash, files[] }
+GET  /stream?torrent=<magnet>&fileIndex=N&token=...
+                                              -> video bytes, Range supported
 POST /stop        { infoHash }                -> destroy + delete files
 POST /room-end                                -> destroy + delete everything
 ```
 
-Safety knobs (env):
+Also enforced: `Host` must be loopback (DNS rebinding), and a browser `Origin`
+must be one of the app origins (`Access-Control-Allow-Origin` is never `*`).
+
+### Env knobs
 
 ```
-DIPKRI_SIDECAR_PORT   17891
-DIPKRI_CACHE_DIR      %TEMP%\dipkri-cache
-DIPKRI_IDLE_MINUTES   30      drop a torrent after N idle minutes
-DIPKRI_MIN_FREE_GB    1       refuse a stream when this device is nearly full
+DIPKRI_SIDECAR_PORT   17891      first port to try; falls back if busy
+DIPKRI_CACHE_DIR      %TEMP%     parent folder; the sidecar owns "<parent>/dipkri-cache"
+DIPKRI_IDLE_MINUTES   30         drop a torrent after N idle minutes
+DIPKRI_MIN_FREE_GB    1          refuse a stream when this device is nearly full
+DIPKRI_META_TIMEOUT_MS 40000     give up when no seeder answers
+DIPKRI_TOKEN          (set by main.js per launch)   required by every endpoint
+DIPKRI_APP_URL        https://dipkri.duckdns.org    page the shell loads
 ```
 
-Verified on Windows (Node 24, webtorrent 2.8.5), Sintel magnet:
+### Verified on Windows (Node 24, webtorrent 2.8.5, Electron 45)
+
+Sintel magnet, 13 checks, all pass:
 
 ```
-/info        200  Sintel.mp4  129,241,752 bytes
-/stream      206  6,291,456 bytes served, valid MP4 ftyp header
-cache        123.3 MB buffered in %TEMP%\dipkri-cache
-POST /stop   200  dropped:true  -> cacheMB 0, 0 files left
+/health 200                        /info without token 401
+/info with token 200               /stream Range 206 (2 MB, valid MP4 ftyp)
+Range bytes=abc -> 416             Range bytes=999999999- -> 416
+fileIndex=abc -> 400               Origin: https://evil.example -> 403
+POST /room-end without token 401   POST /stop {} -> 400
+/stop { infoHash } 200             cache 123.3 MB -> 0 MB, 0 files left
+quit via IPC -> sidecar exit 0, cache dir removed
 ```
 
 ## Phase 2 — wire the UI to the sidecar
 
-- Detect `window.dipkriDesktop` in the React app.
-- When present, point the player at `http://127.0.0.1:17891/stream?...`
-  instead of the server's `/torrent/stream`.
-- Call `POST /room-end` when the room closes.
-- Keep the server path as a fallback (web users unchanged).
+```js
+const api = window.dipkriDesktop;            // undefined on the website
+const { url, token, ready } = await api.getSidecar();
+
+video.src = `${url}/stream?torrent=${encodeURIComponent(magnet)}` +
+            `&fileIndex=${i}&token=${token}`;
+
+await fetch(`${url}/room-end`, {
+  method: "POST",
+  headers: { "x-dipkri-token": token },
+});
+```
+
+- Never hardcode `17891`: the sidecar may have fallen back to another port.
+- `token` must go in the query string for `<video>`, in the header for `fetch`.
+- Web users keep the current server path; only the desktop build switches.
 
 ## Phase 3 — packaging
 
 - `npm run dist` → Windows NSIS, macOS dmg, Linux AppImage.
-- Ship the sidecar inside the asar-unpacked folder.
+- electron-builder packs `dependencies` (webtorrent) and unpacks `*.node`.
 - Auto-update later (electron-updater).
 
 ## Phase 4 — mobile
@@ -75,6 +102,9 @@ Play Store removes torrent apps, so distribution is direct APK from the site.
 
 ## Open items
 
-- Mobile signed-off APK hosting.
+- Build an actual installer and run it on a clean Windows box.
+- Mobile APK hosting.
 - Legal: distributing an app is more visible than a website; keep the
   catalogue metadata-only and honour takedowns.
+- Dependency pins (`uint8-util` 2.2.5) exist because 2.3.2 broke magnet parsing
+  in webtorrent; revisit when webtorrent ships a fix.

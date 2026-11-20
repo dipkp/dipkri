@@ -27,8 +27,12 @@ const BASE_PORT = Number(process.env.DIPKRI_SIDECAR_PORT || 17891);
 const TOKEN = String(process.env.DIPKRI_TOKEN || "");
 
 // All torrent data lives here and nowhere else, so "room over" == wipe folder.
-const CACHE_ROOT =
-  process.env.DIPKRI_CACHE_DIR || path.join(os.tmpdir(), "dipkri-cache");
+// DIPKRI_CACHE_DIR is a parent, never the folder itself: the sidecar deletes
+// CACHE_ROOT on boot and on quit, so it must own the folder completely.
+const CACHE_ROOT = path.join(
+  process.env.DIPKRI_CACHE_DIR || os.tmpdir(),
+  "dipkri-cache"
+);
 const IDLE_MINUTES = Number(process.env.DIPKRI_IDLE_MINUTES || 30);
 const MIN_FREE_GB = Number(process.env.DIPKRI_MIN_FREE_GB || 1);
 const META_TIMEOUT_MS = Number(process.env.DIPKRI_META_TIMEOUT_MS || 40000);
@@ -187,7 +191,16 @@ function findLoaded(magnet) {
 function whenReady(torrent) {
   torrent.__lastAccess = Date.now();
   if (torrent.ready) return Promise.resolve(torrent);
+  if (torrent.destroyed) return Promise.reject(new Error("torrent closed"));
+
+  // Always settles: /stop, the sweeper or a timeout can destroy the torrent
+  // while a request is still waiting for metadata.
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("torrent did not become ready in time"));
+    }, META_TIMEOUT_MS);
+
     const onReady = () => {
       cleanup();
       torrent.__lastAccess = Date.now();
@@ -197,19 +210,30 @@ function whenReady(torrent) {
       cleanup();
       reject(err);
     };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("torrent closed"));
+    };
     const cleanup = () => {
+      clearTimeout(timer);
       torrent.removeListener("ready", onReady);
       torrent.removeListener("error", onError);
+      torrent.removeListener("close", onClose);
     };
+
     torrent.once("ready", onReady);
     torrent.once("error", onError);
+    torrent.once("close", onClose);
   });
 }
 
 function addTorrent(magnet) {
+  // Reuse the in-flight add first: concurrent /info + /stream for one magnet
+  // must share a single promise.
+  if (pending.has(magnet)) return pending.get(magnet);
+
   const known = findLoaded(magnet);
   if (known) return whenReady(known);
-  if (pending.has(magnet)) return pending.get(magnet);
 
   const promise = new Promise((resolve, reject) => {
     let torrent;
