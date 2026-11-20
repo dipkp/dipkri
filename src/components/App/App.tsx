@@ -1037,6 +1037,13 @@ export class App extends React.Component<AppProps, AppState> {
               ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
               : (src.startsWith("/stream") ? `${serverPath}${src}` : src);
             await this.Player().setSrcAndTime(streamUrl, time);
+
+            // The player itself only knows "media error". Ask the API why, so a
+            // rate limit or a full disk is not shown as a silent stall.
+            const probe = this.HTMLInterface.getVideoEl();
+            if (probe) {
+              probe.addEventListener("error", () => void this.explainStreamFailure(streamUrl), { once: true });
+            }
           } else if (isDash(src)) {
             const Dash = await import("dashjs");
             window.dipkri.dash = Dash.MediaPlayer().create();
@@ -1708,6 +1715,28 @@ export class App extends React.Component<AppProps, AppState> {
     this.transcoder = undefined;
     if (this.state.convertProgress !== undefined) {
       this.setState({ convertProgress: undefined });
+    }
+  };
+
+  // Maps the API's refusal (400/404/429/507) to a sentence the viewer can act on.
+  explainStreamFailure = async (streamUrl: string) => {
+    try {
+      const res = await fetch(streamUrl, { method: "HEAD", cache: "no-store" });
+      if (res.ok) return;
+
+      const message =
+        res.status === 429
+          ? "The server is busy right now — please try again in a minute."
+          : res.status === 507
+            ? "The server's storage is full, so this stream cannot start. Try another title or come back later."
+            : res.status === 404
+              ? "No playable video file was found in this torrent."
+              : res.status === 400
+                ? "This stream link is not valid."
+                : "";
+      if (message) this.setState({ overlayMsg: message });
+    } catch {
+      // offline / aborted: the player already shows its own error state
     }
   };
 
