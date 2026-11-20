@@ -58,6 +58,7 @@ import {
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
 import { withStreamKey } from "../../utils/streamAuth";
+import { desktopRoomEnd } from "../../utils/desktopStream";
 import { buildLocalStreamUrl, getDesktopBridge } from "../../utils/desktopStream";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
@@ -3603,6 +3604,53 @@ export class App extends React.Component<AppProps, AppState> {
           isBehind={isBehind}
           onSync={onSyncAction}
         />
+        {this.state.isMobileView && this.state.roomId && (
+          <button
+            type="button"
+            onClick={() => {
+              const cleanId = this.state.roomId.replace(/^\//, "");
+              const ok = window.confirm(
+                "End this watch party for everyone? The room is removed from your active parties.",
+              );
+              if (!ok) return;
+              fetch("/terminateRoom", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  roomId: cleanId,
+                  hostToken: localStorage.getItem(`wp_host_${cleanId}`) || "",
+                }),
+              }).catch(() => {});
+              desktopRoomEnd(cleanId);
+              localStorage.removeItem("wp_last_room");
+              localStorage.removeItem("wp_active_party");
+              localStorage.removeItem(`wp_playback_${cleanId}`);
+              window.location.assign("/");
+            }}
+            style={{
+              position: "fixed",
+              left: 12,
+              bottom: 86,
+              zIndex: 60,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "rgba(239, 68, 68, 0.16)",
+              border: "1px solid rgba(239, 68, 68, 0.45)",
+              color: "#fca5a5",
+              fontFamily: "inherit",
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: "pointer",
+              backdropFilter: "blur(8px)",
+            }}
+            aria-label="End this watch party"
+          >
+            End party
+          </button>
+        )}
       </div>
     );
     return (
