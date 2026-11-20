@@ -29,3 +29,8 @@ yarn-error.log*
 .oh52/
 
 android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+*.aab
