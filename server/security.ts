@@ -1,5 +1,36 @@
 import crypto from "node:crypto";
+import { lookup } from "node:dns/promises";
 import type { NextFunction, Request, Response } from "express";
+
+const BLOCKED_IP_RANGES = [
+  /^127\./,                    // Loopback
+  /^10\./,                     // RFC1918 Class A
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,  // RFC1918 Class B
+  /^192\.168\./,               // RFC1918 Class C
+  /^169\.254\./,               // Link-local (metadata services)
+  /^::1$/,                     // IPv6 loopback
+  /^fe80::/,                   // IPv6 link-local
+  /^fd[0-9a-f]{2}:/,           // IPv6 ULA
+];
+
+export async function isBlockedHost(hostname: string): Promise<boolean> {
+  try {
+    const { address } = await lookup(hostname, { family: 4 });
+    return BLOCKED_IP_RANGES.some(re => re.test(address));
+  } catch {
+    return true; // Fail closed on DNS error
+  }
+}
+
+export function hasPathTraversal(pathname: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return true; // Block malformed URI encoding
+  }
+  return decoded.includes("..") || decoded.includes("%2e%2e") || decoded.includes("%2E%2E");
+}
 
 /**
  * Dependency-free API hardening.
@@ -130,12 +161,57 @@ export const RATE_LIMITS = {
   subtitles: { name: "subtitles", limit: 60, windowMs: 60_000 },
 } satisfies Record<string, RateLimitOptions>;
 
+// --- host token (room-scoped, signed) -----------------------------------------
+// Used by /terminateRoom to verify the caller is the room creator.
+// Payload is JSON-encoded to avoid issues with dots in room IDs.
+const HOST_TOKEN_SECRET =
+  process.env.SEC_HOST_TOKEN_SECRET || crypto.randomBytes(32).toString("hex");
+const HOST_TOKEN_TTL_MS = Number(process.env.SEC_HOST_TOKEN_TTL_MS || 30 * 24 * 3600_000); // 30 days
+
+export function mintHostToken(roomId: string, uid: string): string {
+  const payload = JSON.stringify({ roomId, uid, exp: Date.now() + HOST_TOKEN_TTL_MS });
+  const sig = crypto.createHmac("sha256", HOST_TOKEN_SECRET).update(payload).digest("base64url");
+  return `${Buffer.from(payload).toString("base64url")}.${sig}`;
+}
+
+export function verifyHostToken(value: unknown): { roomId: string; uid: string } | null {
+  const raw = String(value || "");
+  const [body, sig] = raw.split(".");
+  if (!body || !sig) return null;
+
+  let payload: string;
+  try {
+    payload = Buffer.from(body, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+
+  const expected = crypto.createHmac("sha256", HOST_TOKEN_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  let parsed: { roomId: string; uid: string; exp: number };
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  // Allow empty uid (anonymous room creator), reject only if uid is undefined/missing
+  if (!parsed.roomId || parsed.uid === undefined || !Number(parsed.exp) || Number(parsed.exp) < Date.now()) {
+    return null;
+  }
+  return { roomId: parsed.roomId, uid: parsed.uid };
+}
+
 // --- stream keys -------------------------------------------------------------
 // A Firebase ID token lives one hour, which is shorter than a film. Instead the
 // player proves who it is once and gets a signed key for the session.
 
-const STREAM_SECRET =
-  process.env.SEC_STREAM_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.SEC_STREAM_SECRET) {
+  throw new Error("SEC_STREAM_SECRET environment variable is required. Generate with: openssl rand -hex 32");
+}
+const STREAM_SECRET = process.env.SEC_STREAM_SECRET;
 const STREAM_KEY_TTL_MS = Number(process.env.SEC_STREAM_KEY_TTL_MS || 12 * 3600_000);
 
 export function mintStreamKey(uid: string): string {

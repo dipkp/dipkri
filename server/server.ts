@@ -13,6 +13,10 @@ import {
   securityHeaders,
   streamKeyGuard,
   mintStreamKey,
+  mintHostToken,
+  verifyHostToken,
+  isBlockedHost,
+  hasPathTraversal,
 } from "./security.ts";
 import https from "node:https";
 import http from "node:http";
@@ -610,9 +614,9 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
       newRoom.playlistAdd(null, item);
     }
   }
-  const hostToken = crypto.randomBytes(24).toString("hex");
+  const hostToken = mintHostToken(name, decoded?.uid || "");
   rooms.set(name, newRoom);
-  roomHosts.set(name, hostToken);
+  roomHosts.set(name, hostToken); // Keep for backwards compat, but verifyHostToken is source of truth
   res.json({ name, hostToken });
 });
 
@@ -626,11 +630,16 @@ app.post("/terminateRoom", async (req, res) => {
   const key = "/" + cleanId;
   const room = rooms.get(key);
 
-  // Only the host that created the room may end it.
-  const expectedHost = roomHosts.get(key);
-  const providedHost = String(req.body?.hostToken || "");
-  if (room && expectedHost && providedHost !== expectedHost) {
-    res.status(403).json({ error: "only the host can terminate this room" });
+  // Verify signed host token (bound to roomId + creatorUid)
+  const providedToken = String(req.body?.hostToken || "");
+  const verified = verifyHostToken(providedToken);
+  if (!verified || verified.roomId !== key) {
+    res.status(403).json({ error: "Invalid or mismatched host token" });
+    return;
+  }
+  // Also verify the token's uid matches the room's creatorUid
+  if (room && room.creatorUid && verified.uid !== room.creatorUid) {
+    res.status(403).json({ error: "Host token does not match room creator" });
     return;
   }
   if (room) {
@@ -692,6 +701,30 @@ app.post("/checkoutSub", async (req, res) => {
       email: decoded.email,
       metadata: { firebaseUid: decoded.uid },
     }));
+
+  // Validate return_url against allowlist to prevent open redirect
+  const returnUrl = req.body.return_url;
+  if (!returnUrl) {
+    res.status(400).json({ error: "return_url is required" });
+    return;
+  }
+  let returnUrlObj: URL;
+  try {
+    returnUrlObj = new URL(returnUrl);
+  } catch {
+    res.status(400).json({ error: "Invalid return_url format" });
+    return;
+  }
+  const allowedReturnHosts = new Set([
+    "dipkri.duckdns.org",
+    "localhost",
+    "127.0.0.1",
+  ]);
+  if (!allowedReturnHosts.has(returnUrlObj.hostname)) {
+    res.status(400).json({ error: "return_url hostname not allowed" });
+    return;
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     client_reference_id: decoded.uid,
@@ -705,9 +738,8 @@ app.post("/checkoutSub", async (req, res) => {
         quantity: 1,
       },
     ],
-    // Redirect back to the user's room, passed in the body
-    success_url: req.body.return_url,
-    cancel_url: req.body.return_url,
+    success_url: returnUrl,
+    cancel_url: returnUrl,
   });
   res.json({ url: session.url });
 });
@@ -726,9 +758,33 @@ app.post("/manageSub", async (req, res) => {
     res.status(400).json({ error: "customer not found" });
     return;
   }
+
+  // Validate return_url against allowlist to prevent open redirect
+  const returnUrl = req.body?.return_url;
+  if (!returnUrl) {
+    res.status(400).json({ error: "return_url is required" });
+    return;
+  }
+  let returnUrlObj: URL;
+  try {
+    returnUrlObj = new URL(returnUrl);
+  } catch {
+    res.status(400).json({ error: "Invalid return_url format" });
+    return;
+  }
+  const allowedReturnHosts = new Set([
+    "dipkri.duckdns.org",
+    "localhost",
+    "127.0.0.1",
+  ]);
+  if (!allowedReturnHosts.has(returnUrlObj.hostname)) {
+    res.status(400).json({ error: "return_url hostname not allowed" });
+    return;
+  }
+
   const session = await createSelfServicePortal(
     customer.id,
-    req.body?.return_url,
+    returnUrl,
   );
   res.json(session);
 });
@@ -865,7 +921,9 @@ app.get("/download/desktop", (req, res) => {
 });
 
 app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
-  const isLocalhost = req.ip === "127.0.0.1" || req.ip === "::1" || req.ip === "::ffff:127.0.0.1";
+  // Use socket remoteAddress directly (not req.ip which trusts X-Forwarded-For)
+  const remoteAddr = req.socket?.remoteAddress || "";
+  const isLocalhost = remoteAddr === "127.0.0.1" || remoteAddr === "::1" || remoteAddr === "::ffff:127.0.0.1";
   const token = String(req.body?.token || "");
   const decoded = await verifyIdTokenOnly(token);
   const userEmail = decoded?.email;
@@ -1052,6 +1110,24 @@ app.get("/proxy/*splat", async (req, res) => {
     const parsed = new URL("http://localhost" + req.url);
     const pathname = parsed.pathname.slice("/proxy".length);
     const host = parsed.searchParams.get("host");
+
+    // Path traversal protection
+    if (hasPathTraversal(pathname)) {
+      res.status(400).send("Invalid path");
+      return;
+    }
+
+    if (!host) {
+      res.status(400).send("Missing host parameter");
+      return;
+    }
+
+    // SSRF protection: block internal IPs and private ranges
+    if (await isBlockedHost(host)) {
+      res.status(403).send("Blocked destination");
+      return;
+    }
+
     if (pathname.endsWith("index-dvr.m3u8")) {
       // VOD
       // https://d2vjef5jvl6bfs.cloudfront.net/3012391a6c3e84c79ef6_gamesdonequick_41198403369_1681059003/chunked/index-dvr.m3u8
@@ -1104,6 +1180,19 @@ app.get("/stream-proxy", async (req, res) => {
     const rawUrl = req.query.url ? String(req.query.url).trim() : "";
     if (!rawUrl || (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://"))) {
       res.status(400).send("Invalid target URL");
+      return;
+    }
+
+    // SSRF protection: block internal IPs and private ranges
+    let targetHostname: string;
+    try {
+      targetHostname = new URL(rawUrl).hostname;
+    } catch {
+      res.status(400).send("Invalid URL format");
+      return;
+    }
+    if (await isBlockedHost(targetHostname)) {
+      res.status(403).send("Blocked destination");
       return;
     }
 
