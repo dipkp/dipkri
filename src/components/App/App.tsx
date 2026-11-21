@@ -1642,6 +1642,9 @@ export class App extends React.Component<AppProps, AppState> {
               if (target > 0) {
                 this.YouTubeInterface.seekVideo(target);
               }
+              if (!this.state.roomPaused) {
+                this.YouTubeInterface.playVideo();
+              }
             }
             if (
               this.usingYoutube() &&
@@ -2944,6 +2947,29 @@ export class App extends React.Component<AppProps, AppState> {
     this.localSetMute(!this.Player().isMuted());
   };
 
+  terminateRoom = () => {
+    const confirmTerminate = window.confirm(
+      "End this watch party for everyone? The room will be closed and removed from your active parties."
+    );
+    if (!confirmTerminate) return;
+    const cleanId = this.state.roomId?.replace(/^\//, "");
+    try {
+      fetch("/terminateRoom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: cleanId,
+          hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
+        }),
+      }).catch(() => {});
+      desktopRoomEnd(cleanId);
+      localStorage.removeItem("wp_last_room");
+      localStorage.removeItem("wp_active_party");
+      if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
+    } catch {}
+    window.location.assign("/");
+  };
+
   canStreamTorrent = (): boolean => {
     return canStreamTorrents(this.context?.user?.email);
   };
@@ -3824,6 +3850,7 @@ export class App extends React.Component<AppProps, AppState> {
           setMediaPath={this.setMediaPath}
           myName={this.state.myName}
           updateName={this.updateName}
+          onTerminate={this.terminateRoom}
         />
         {this.state.errorMessage && (
           <Alert
@@ -3945,6 +3972,16 @@ export class App extends React.Component<AppProps, AppState> {
                     title="Share room link"
                   >
                     <span>{this.state.copiedLink ? "✓" : "Share"}</span>
+                  </button>
+                )}
+                {this.state.roomId && (
+                  <button
+                    type="button"
+                    className={styles.mobileTerminateBtn}
+                    onClick={this.terminateRoom}
+                    title="End this watch party"
+                  >
+                    <span>End</span>
                   </button>
                 )}
               </div>
@@ -4233,6 +4270,7 @@ export class App extends React.Component<AppProps, AppState> {
                     setMediaPath={this.setMediaPath}
                     myName={this.state.myName}
                     updateName={this.updateName}
+                    onTerminate={this.terminateRoom}
                   />
                 </div>
               )}

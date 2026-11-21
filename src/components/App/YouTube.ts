@@ -50,22 +50,25 @@ export class YouTube implements Player {
   };
 
   playVideo = async () => {
-    setTimeout(() => {
-      console.log("play yt");
+    try {
       this.dipkriYTPlayer?.playVideo();
       if (typeof this.pendingTime === "number" && this.pendingTime > 0) {
-        try {
-          const cur = this.dipkriYTPlayer?.getCurrentTime() ?? 0;
-          if (Math.abs(cur - this.pendingTime) > 1.5) {
-            this.dipkriYTPlayer?.seekTo(this.pendingTime, true);
-          }
-        } catch {}
+        const cur = this.dipkriYTPlayer?.getCurrentTime() ?? 0;
+        if (Math.abs(cur - this.pendingTime) > 1.5) {
+          this.dipkriYTPlayer?.seekTo(this.pendingTime, true);
+        }
       }
-    }, 200);
+    } catch (e) {
+      console.warn("YouTube playVideo error:", e);
+    }
   };
 
   pauseVideo = () => {
-    this.dipkriYTPlayer?.pauseVideo();
+    try {
+      this.dipkriYTPlayer?.pauseVideo();
+    } catch (e) {
+      console.warn("YouTube pauseVideo error:", e);
+    }
   };
 
   seekVideo = (time: number) => {
@@ -76,11 +79,16 @@ export class YouTube implements Player {
   };
 
   shouldPlay = () => {
-    return (
-      this.dipkriYTPlayer?.getPlayerState() ===
-        window.YT?.PlayerState.PAUSED ||
-      this.getCurrentTime() === this.getDuration()
-    );
+    if (!this.dipkriYTPlayer) return true;
+    try {
+      const state = this.dipkriYTPlayer.getPlayerState?.();
+      // YouTube player states:
+      // -1 = unstarted, 0 = ended, 1 = playing, 2 = paused, 3 = buffering, 5 = video cued
+      // If it is NOT playing, tapping should trigger play!
+      return state !== window.YT?.PlayerState?.PLAYING;
+    } catch {
+      return true;
+    }
   };
 
   setMute = (muted: boolean) => {

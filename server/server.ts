@@ -644,6 +644,13 @@ app.post("/terminateRoom", async (req, res) => {
         io.of(key).disconnectSockets(true);
       } catch {}
       room.destroy();
+      // Purge any downloaded torrent chunks from disk immediately
+      if ((room as any)?.video) {
+        try {
+          const { removeTorrent } = await import("./torrent.js");
+          removeTorrent((room as any).video, `room ${key} terminated`);
+        } catch {}
+      }
       rooms.delete(key);
       roomHosts.delete(key);
       dropNamespace(key);

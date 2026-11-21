@@ -92,6 +92,22 @@ function destroyCachedTorrent(t: any, reason: string) {
   } catch {}
 }
 
+export function removeTorrent(magnetUriOrHash: string, reason = "room terminated") {
+  const client = torrentClient;
+  if (!client || client.torrents.length === 0 || !magnetUriOrHash) return;
+  try {
+    const hash = extractInfoHash(magnetUriOrHash);
+    const target = hash
+      ? client.torrents.find((t) => t.infoHash && t.infoHash.toLowerCase() === hash.toLowerCase())
+      : client.torrents.find((t) => t.magnetURI === magnetUriOrHash);
+    if (target) {
+      destroyCachedTorrent(target, reason);
+    }
+  } catch (err) {
+    console.warn("removeTorrent error:", err);
+  }
+}
+
 async function sweepTorrentCache() {
   const client = torrentClient;
   if (!client || client.torrents.length === 0) return;

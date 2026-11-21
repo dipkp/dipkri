@@ -61,6 +61,7 @@ interface SettingsModalProps {
   inline?: boolean;
   myName?: string;
   updateName?: (name: string) => void;
+  onTerminate?: () => void;
 }
 
 export const SettingsModal = ({
@@ -78,6 +79,7 @@ export const SettingsModal = ({
   setRoomDescription,
   myName,
   updateName,
+  onTerminate,
 }: SettingsModalProps) => {
   const [updateTS, setUpdateTS] = useState(0);
   const [nickname, setNickname] = useState(myName || "");
@@ -466,6 +468,25 @@ export const SettingsModal = ({
               </div>
             }
           />
+
+          {onTerminate && (
+            <div style={{ marginTop: "16px", padding: "14px", borderRadius: "10px", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", color: "#fca5a5", marginBottom: "4px" }}>
+                🛑 End Watch Party
+              </div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "12px" }}>
+                Close this room permanently for all participants, purge downloaded stream cache, and return home.
+              </div>
+              <Button
+                color="red"
+                variant="filled"
+                fullWidth
+                onClick={onTerminate}
+              >
+                End Party for Everyone
+              </Button>
+            </div>
+          )}
 
     </div>
   );
