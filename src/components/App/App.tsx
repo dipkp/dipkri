@@ -2844,18 +2844,35 @@ export class App extends React.Component<AppProps, AppState> {
     }
     let target = time;
     target = Math.max(target, 0);
-    this.Player().seekVideo(target);
-    const seekId = this.generateSeekId();
-    this.lastSentSeekId = seekId;
-    const toSend = { time: this.getRoomTSToSet(target), seekId };
-    this.socket.emit("CMD:seek", toSend);
-    if (this.state.roomMedia && this.state.roomId) {
-      this.savePlaybackTime(
-        this.state.roomId,
-        this.state.roomMedia,
-        target,
-        this.state.roomPaused,
-      );
+
+    // For remuxed streams (MKV -> MP4 with format=mp4), we need to reload the stream with ?ss= parameter
+    // since the remuxed stream has Accept-Ranges: none
+    const isRemuxed = this.state.roomMedia && this.state.roomMedia.includes("format=mp4");
+    if (isRemuxed) {
+      // Reload the stream with ?ss= parameter
+      const currentMedia = this.state.roomMedia;
+      const separator = currentMedia.includes("?") ? "&" : "?";
+      const newStreamUrl = `${currentMedia}${separator}ss=${target}`;
+
+      // Emit CMD:host to server, which will broadcast REC:host to all clients
+      // The REC:host handler will reload the stream with the new ss parameter
+      this.socket.emit("CMD:host", newStreamUrl);
+      // Don't call localSeek here - REC:host handler will handle seeking after reload
+    } else {
+      // Normal seek for non-remuxed streams
+      this.Player().seekVideo(target);
+      const seekId = this.generateSeekId();
+      this.lastSentSeekId = seekId;
+      const toSend = { time: this.getRoomTSToSet(target), seekId };
+      this.socket.emit("CMD:seek", toSend);
+      if (this.state.roomMedia && this.state.roomId) {
+        this.savePlaybackTime(
+          this.state.roomId,
+          this.state.roomMedia,
+          target,
+          this.state.roomPaused,
+        );
+      }
     }
   };
 

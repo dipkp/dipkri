@@ -899,6 +899,11 @@ export async function handleTorrentStream(req: any, res: any) {
       (isUnsupportedContainer && req.query?.raw !== "1");
 
     if (shouldRemuxToMp4) {
+      // Check if this is a seek request (has ss parameter or Range header for remuxed stream)
+      const ss = parseFloat(req.query?.ss || "0");
+      // For remuxed streams, we also check for Range header on the initial request
+      // but we'll handle seeking via ss parameter since we set Accept-Ranges: none
+
       res.writeHead(200, {
         "Content-Type": "video/mp4",
         "Cache-Control": "no-cache",
@@ -907,7 +912,6 @@ export async function handleTorrentStream(req: any, res: any) {
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
       });
-      const ss = parseFloat(req.query?.ss || "0");
       const diskPath = (targetFile as any).path ? path.join(torrent.path, (targetFile as any).path) : null;
       const canReadDirect = diskPath && fs.existsSync(diskPath);
 
@@ -956,6 +960,26 @@ export async function handleTorrentStream(req: any, res: any) {
       const { start, end } = parsed;
       const chunkSize = end - start + 1;
 
+      // Prioritize the requested byte range in WebTorrent for faster buffering
+      // Access the parent torrent via the private _torrent property on the file
+      const torrent = (targetFile as any)._torrent;
+      if (torrent) {
+        const pieceLength = torrent.pieceLength || 256 * 1024; // Default piece length
+        const startPiece = Math.floor(start / pieceLength);
+        const endPiece = Math.floor(end / pieceLength);
+
+        // Prioritize pieces that overlap with the requested range
+        if (torrent.pieces) {
+          for (let i = startPiece; i <= endPiece && i < torrent.pieces.length; i++) {
+            torrent.pieces[i]?.setPriority?.(2); // High priority
+          }
+          // Also prioritize a few pieces ahead for smooth seeking
+          const lookAhead = Math.min(5, torrent.pieces.length - endPiece - 1);
+          for (let i = endPiece + 1; i <= endPiece + lookAhead && i < torrent.pieces.length; i++) {
+            torrent.pieces[i]?.setPriority?.(1); // Normal priority
+          }
+        }
+      }
 
       res.writeHead(206, {
         "Content-Range": `bytes ${start}-${end}/${fileSize}`,
