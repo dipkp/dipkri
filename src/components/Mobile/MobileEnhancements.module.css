@@ -65,9 +65,9 @@
     gap: 2px;
   }
   .reactionBtn {
-    width: 22px !important;
-    height: 22px !important;
-    font-size: 12px !important;
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 16px !important;
   }
 }
 
@@ -91,9 +91,9 @@
 
 @media (max-width: 600px) {
   .reactionBtn {
-    width: 23px;
-    height: 23px;
-    font-size: 13px;
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
   }
 }
 
@@ -213,6 +213,7 @@
 @media (max-width: 600px) {
   .mobileTabBar {
     display: flex;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background: rgba(15, 17, 24, 0.92);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);

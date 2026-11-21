@@ -54,6 +54,7 @@ export class Room {
   private pictureMap: StringDict = {};
   public vBrowser: AssignedVM | undefined = undefined;
   public creator: string | undefined = undefined; // email of the user who created the room (just used for stats)
+  public creatorUid: string | undefined = undefined; // uid of the creator - the only one who may control playback
   public lock: string | undefined = undefined; // uid of the user who locked the room
   public playlist: PlaylistVideo[] = [];
 
@@ -125,15 +126,17 @@ export class Room {
           next(new Error("password"));
           return;
         }
-        // Check if room is at capacity
-        const isSubRoom = result.rows[0]?.isSubRoom;
-        const roomCapacity = isSubRoom
-          ? config.ROOM_CAPACITY_SUB
-          : config.ROOM_CAPACITY;
-        if (roomCapacity && this.roster.length >= roomCapacity) {
-          next(new Error("This room is full"));
-          return;
-        }
+      }
+
+      // Capacity is enforced in memory too: without a database the check above
+      // never ran, so a single room could take unlimited viewers on a 1 GB box.
+      const envCapacity = process.env.ROOM_CAPACITY;
+      const capacity = envCapacity !== undefined
+        ? Number(envCapacity)
+        : config.ROOM_CAPACITY || 12;
+      if (capacity > 0 && this.roster.length >= capacity) {
+        next(new Error("This room is full"));
+        return;
       }
       // clientId is meant for things that shouldn't require login
       // Anything sensitive (e.g. subscriber features, room lock) should be validated with uid and require login
@@ -231,6 +234,16 @@ export class Room {
         return !this.lock || socket.uid === this.lock;
       };
 
+      // Playback belongs to the host. Rooms created before this field existed
+      // (they die on restart anyway) stay open so nobody loses control mid-film.
+      const validateHost = () => {
+        if (!this.creatorUid || socket.uid === this.creatorUid) {
+          return true;
+        }
+        socket.emit("errorMessage", "Only the host can control playback.");
+        return false;
+      };
+
       // Check if this socket matches the room owner UID
       const validateOwner = async () => {
         const result = await postgres?.query(
@@ -265,25 +278,26 @@ export class Room {
       });
       socket.on("CMD:host", (data: unknown) => {
         validateLock() &&
+          validateHost() &&
           this.startHosting(socket, String(data)).catch((e: any) => {
             console.warn("startHosting failed:", e?.message ?? e);
             socket.emit("errorMessage", "Couldn't load that video.");
           });
       });
       socket.on("CMD:play", () => {
-        validateLock() && this.playVideo(socket);
+        validateLock() && validateHost() && this.playVideo(socket);
       });
       socket.on("CMD:pause", () => {
-        validateLock() && this.pauseVideo(socket);
+        validateLock() && validateHost() && this.pauseVideo(socket);
       });
       socket.on("CMD:seek", (data: unknown) => {
-        validateLock() && this.seekVideo(socket, Number(data));
+        validateLock() && validateHost() && this.seekVideo(socket, Number(data));
       });
       socket.on("CMD:playbackRate", (data: unknown) => {
-        validateLock() && this.setPlaybackRate(socket, Number(data));
+        validateLock() && validateHost() && this.setPlaybackRate(socket, Number(data));
       });
       socket.on("CMD:loop", (data: unknown) => {
-        validateLock() && this.setLoop(Boolean(data));
+        validateLock() && validateHost() && this.setLoop(Boolean(data));
       });
       socket.on("CMD:ts", (data: unknown) =>
         this.setTimestamp(socket, Number(data)),
@@ -318,12 +332,6 @@ export class Room {
         this.setUserMute(socket, data),
       );
       socket.on("CMD:leaveScreenShare", () => this.leaveScreenSharing(socket));
-      socket.on("CMD:startVBrowser", (data: unknown) => {
-        validateLock() && this.startVBrowser(socket, data);
-      });
-      socket.on("CMD:stopVBrowser", () => {
-        validateLock() && this.stopVBrowser();
-      });
       socket.on("CMD:changeController", (data: unknown) => {
         validateLock() && this.changeController(String(data));
       });
@@ -406,6 +414,7 @@ export class Room {
       vBrowser: this.vBrowser,
       lock: this.lock,
       creator: this.creator,
+      creatorUid: this.creatorUid,
       playlist: this.playlist,
       loop: this.loop,
     });
@@ -438,6 +447,9 @@ export class Room {
     }
     if (roomObj.creator) {
       this.creator = roomObj.creator;
+    }
+    if (roomObj.creatorUid) {
+      this.creatorUid = roomObj.creatorUid;
     }
     if (roomObj.playlist) {
       this.playlist = roomObj.playlist;
@@ -718,7 +730,9 @@ export class Room {
                 const queueEpisodes = episodes.slice(1).map((ep, idx) => {
                   let epName = ep.name
                     .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                    .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
+                    // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+                    .replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "")
+                    // eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
                     .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
                     .replace(/[\._\-]/g, " ")
                     .replace(/\s+/g, " ")
@@ -793,8 +807,10 @@ export class Room {
             const queueEpisodes = episodes.map((ep, idx) => {
               let epName = ep.name
                 .replace(/\.(mkv|mp4|webm|avi|mov|flv|ts)$/i, "")
-                .replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "")
-                .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
+                // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+                .replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "")
+                // eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
+                    .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "")
                 .replace(/[\._\-]/g, " ")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -838,8 +854,10 @@ export class Room {
         }
       }
       magnetName = magnetName.replace(/\.(mkv|mp4|webm|avi|mov|flv|m4v|ts)$/i, "");
-      magnetName = magnetName.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
-      magnetName = magnetName.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+      // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+      magnetName = magnetName.replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "");
+      magnetName = magnetName// eslint-disable-next-line security/detect-unsafe-regex -- fixed keyword list
+                    .replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
       magnetName = magnetName.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
     }
     const item = {
@@ -966,9 +984,11 @@ export class Room {
     if (this.preventTSUpdate) {
       return;
     }
-    // This is negative for live streams, so allow overwriting
-    // Otherwise, only increment this value to prevent a lagging viewer from holding up the room state
-    if (data < 0 || data > this.videoTS || this.roster.length <= 1) {
+    // Only the host may move the room's clock. A guest who scrubs locally still
+    // reports their own offset (tsMap below) but can no longer pull everyone to
+    // their position - that was the hole left by the first host-check pass.
+    const isHost = !this.creatorUid || socket.uid === this.creatorUid;
+    if (isHost && (data < 0 || data > this.videoTS || this.roster.length <= 1)) {
       this.videoTS = data;
     }
     // Normalize the received TS based on how long since the last tsMap emit
@@ -1429,9 +1449,10 @@ export class Room {
     if (this.isChatDisabled === undefined) {
       this.isChatDisabled = Boolean(first?.isChatDisabled);
     }
-    // TODO only send the password if this is current owner
     socket.emit("REC:getRoomState", {
-      password: first?.password,
+      // Only expose the plaintext password to the room owner
+      password: socket.uid && socket.uid === first?.owner ? first?.password : undefined,
+      hasPassword: Boolean(first?.password),
       vanity: first?.vanity,
       owner: first?.owner,
       isChatDisabled: first?.isChatDisabled,
@@ -1487,6 +1508,7 @@ export class Room {
       return;
     }
     // check if is valid hex color representation
+    // eslint-disable-next-line security/detect-unsafe-regex -- bounded {3}/{1,2}, no ReDoS
     if (!/^#([0-9a-f]{3}){1,2}$/i.test(roomTitleColor)) {
       socket.emit("errorMessage", "Invalid color code");
       return;

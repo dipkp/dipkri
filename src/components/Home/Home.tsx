@@ -10,6 +10,8 @@ import {
   WPIconLogin,
   WPIconLink,
   WPIconGoogle,
+  WPIconDownload,
+  WPIconMonitor,
 } from "../Icons/CustomIcons";
 import styles from "./Home.module.css";
 
@@ -46,6 +48,13 @@ export const Home = () => {
     }
     return null;
   });
+  const [isAndroidUser, setIsAndroidUser] = useState(false);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      setIsAndroidUser(/Android/i.test(navigator.userAgent));
+    }
+  }, []);
 
   const formatPlaybackTime = (sec?: number) => {
     if (!sec || sec <= 0) return "";
@@ -67,7 +76,10 @@ export const Home = () => {
       fetch("/terminateRoom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: targetRoom }),
+        body: JSON.stringify({
+          roomId: targetRoom,
+          hostToken: localStorage.getItem(`wp_host_${targetRoom}`) || "",
+        }),
       }).catch(() => {});
     } catch {}
 
@@ -153,17 +165,30 @@ export const Home = () => {
   };
 
   const handleStartInstantRoom = async () => {
+    if (!context.user) {
+      setError("Please sign in with Google to start a party.");
+      await handleGoogleSignIn();
+      return;
+    }
     setIsCreating(true);
     try {
       await createRoom(context.user, false);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to create room:", e);
+      setError(
+        e?.message || "Could not create a room right now. Please try again.",
+      );
       setIsCreating(false);
     }
   };
 
   const handleInlineJoin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!context.user) {
+      setError("Please sign in with Google to join a party.");
+      void handleGoogleSignIn();
+      return;
+    }
     let code = roomInput.trim();
     if (!code && lastRoom) {
       code = lastRoom;
@@ -253,7 +278,7 @@ export const Home = () => {
         ) : (
           <div className={styles.googleBanner}>
             <div className={styles.googleBannerTitle}>
-              Sign in to sync your rooms
+              Sign in
             </div>
             <button
               type="button"
@@ -374,6 +399,69 @@ export const Home = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+
+        {/* 3. App Download Hub - Direct Device P2P Zero-Load Streaming */}
+        <div className={styles.appDownloadHub}>
+          <div className={styles.hubGlowOrb} />
+          <div className={styles.hubHeader}>
+            <div className={styles.hubBadgeRow}>
+              <span className={styles.hubBadge}>⚡ Zero Buffering • 100% P2P Swarm</span>
+            </div>
+            <h3 className={styles.hubTitle}>
+              Get Dipkri for Android & Desktop
+            </h3>
+            <p className={styles.hubDesc}>
+              Stream 4K torrents directly from device to device with 0% server lag, hardware transcoding, and instant peer sync. Video files download directly to your device so our central servers carry zero streaming load.
+            </p>
+          </div>
+
+          <div className={styles.hubActions}>
+            <a
+              href={isAndroidUser ? "/download/android" : "/download/desktop"}
+              className={styles.hubPrimaryBtn}
+              download
+            >
+              {isAndroidUser ? <WPIconDownload size={16} /> : <WPIconMonitor size={16} />}
+              <span>
+                {isAndroidUser ? "Download Android APK (Direct)" : "Download Desktop App"}
+              </span>
+            </a>
+
+            <a
+              href={isAndroidUser ? "/download/desktop" : "/download/android"}
+              className={styles.hubSecondaryBtn}
+              download
+            >
+              {isAndroidUser ? <WPIconMonitor size={15} /> : <WPIconDownload size={15} />}
+              <span>
+                {isAndroidUser ? "Desktop Version" : "Android APK"}
+              </span>
+            </a>
+          </div>
+
+          <div className={styles.hubFeaturePills}>
+            <div className={styles.hubFeaturePill}>
+              <span className={styles.hubFeatureDot} />
+              <span>Zero Server Lag</span>
+            </div>
+            <div className={styles.hubFeaturePill}>
+              <span className={styles.hubFeatureDot} />
+              <span>Native 4K / HDR</span>
+            </div>
+            <div className={styles.hubFeaturePill}>
+              <span className={styles.hubFeatureDot} />
+              <span>Battery Efficient P2P</span>
+            </div>
+            <div className={styles.hubFeaturePill}>
+              <span className={styles.hubFeatureDot} />
+              <span>Room Playback Synced</span>
+            </div>
+          </div>
+
+          <div className={styles.hubWebNotice}>
+            💡 <strong>Using Web Browser?</strong> You can create and join rooms in your browser. YouTube, media links, and party chat work directly online. For torrent playback, install our native app to bypass server bandwidth limits.
           </div>
         </div>
       </div>

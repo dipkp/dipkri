@@ -105,7 +105,7 @@ export const SettingsModal = ({
                   setNickname(val);
                   updateName(val);
                   if (typeof window !== "undefined") {
-                    window.localStorage.setItem("watchparty-custom-name", val);
+                    window.localStorage.setItem("dipkri-custom-name", val);
                   }
                 }}
                 placeholder="Enter nickname..."

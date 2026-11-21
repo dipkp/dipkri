@@ -10,12 +10,22 @@ import {
   buildMovieEmbedUrl,
 } from "../../utils/utils";
 import { Loader } from "@mantine/core";
+import firebase from "firebase/compat/app";
+import { canStreamTorrents } from "../../utils/streamAuth";
+import {
+  tmdbDetails,
+  tmdbSearch,
+  tmdbSeason,
+  tmdbTrending,
+  tmdbFallbackAvailable,
+} from "../../utils/tmdbClient";
 
 interface MovieModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPlay: (movieUrl: string) => void;
   onQueue: (movieUrl: string) => void;
+  onOpenVBrowser?: (url: string) => void;
 }
 
 const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
@@ -25,11 +35,52 @@ const SERVER_OPTIONS: Array<{ id: MovieServer; name: string; tag: string }> = [
   { id: "apiplayer", name: "APIPlayer", tag: "Global Mirror" },
 ];
 
+// TMDB matches titles literally, so "begins batman" returns nothing. These
+// helpers fire a few word-order / stopword variants and merge the hits.
+const SEARCH_STOPWORDS = new Set([
+  "the", "a", "an", "movie", "film", "full", "hd", "hindi", "dubbed",
+  "subbed", "part", "series", "watch", "online",
+]);
+
+const normalizeForSearch = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildSearchVariants = (raw: string): string[] => {
+  const base = raw.trim();
+  const words = normalizeForSearch(raw).split(" ").filter(Boolean);
+  const core = words.filter((w) => !SEARCH_STOPWORDS.has(w));
+  const variants = new Set<string>();
+
+  if (base) variants.add(base);
+  if (words.length > 1) variants.add([...words].reverse().join(" "));
+  if (core.length > 0 && core.join(" ") !== normalizeForSearch(base)) {
+    variants.add(core.join(" "));
+  }
+  if (core.length > 1) {
+    variants.add(`${core[core.length - 1]} ${core[0]}`);
+    variants.add(core.slice(0, 2).join(" "));
+  }
+
+  return [...variants].filter(Boolean).slice(0, 4);
+};
+
+const searchRelevance = (title: string, query: string): number => {
+  const hay = normalizeForSearch(title);
+  const tokens = normalizeForSearch(query).split(" ").filter(Boolean);
+  if (!tokens.length) return 0;
+  return tokens.filter((token) => hay.includes(token)).length / tokens.length;
+};
+
 export const MovieModal: React.FC<MovieModalProps> = ({
   isOpen,
   onClose,
   onPlay,
   onQueue,
+  onOpenVBrowser,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"trending" | "movie" | "tv">("trending");
@@ -43,6 +94,14 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const [directStreams, setDirectStreams] = useState<MovieDirectStream[]>([]);
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [selectedStreamIndex, setSelectedStreamIndex] = useState(0);
+  const [audioFilter, setAudioFilter] = useState<
+    "sub" | "dub" | "dual" | "hindi"
+  >("sub");
+  // Quality filter: "auto" keeps the current best pick, otherwise the user pins
+  // a resolution and we auto-select that tier's best-seeded stream.
+  const [qualityFilter, setQualityFilter] = useState<string>("auto");
+  const [detailsError, setDetailsError] = useState("");
+  const lastSelectedRef = useRef<MovieSearchResult | null>(null);
 
   const [selectedServer, setSelectedServer] = useState<MovieServer>("vidlink");
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -52,6 +111,74 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
 
   const searchDebounceRef = useRef<any>(null);
+  const prewarmedRef = useRef<Set<string>>(new Set());
+
+  // Start fetching torrent metadata the moment a stream is highlighted, so the
+  // player does not spend its first minute waiting for peers.
+  const prewarmStream = (magnet: string) => {
+    if (!magnet || prewarmedRef.current.has(magnet)) return;
+    if (!canStreamTorrents(firebase.auth().currentUser?.email)) return;
+    prewarmedRef.current.add(magnet);
+    const url = `/stream?torrent=${encodeURIComponent(magnet)}`;
+    // Metadata
+    fetch(`/data?torrent=${encodeURIComponent(magnet)}`).catch(() => {});
+    // Head: first megabyte for the container + first frames.
+    fetch(url, { headers: { Range: "bytes=0-1048575" } })
+      .then((r) => r.arrayBuffer())
+      .catch(() => {});
+    // Tail: MP4 keeps its moov atom at the end, so the browser asks for it
+    // before it can even know the duration. Warm it too.
+    fetch(url, { headers: { Range: "bytes=-1048576" } })
+      .then((r) => r.arrayBuffer())
+      .catch(() => {});
+  };
+
+  // 2160p / 4K / 1080p / 720p / 480p all collapse into one comparable label.
+  const qualityTier = (q?: string): string => {
+    const t = (q || "").toUpperCase();
+    if (t.includes("2160") || t.includes("4K")) return "4K";
+    if (t.includes("1080")) return "1080p";
+    if (t.includes("720")) return "720p";
+    if (t.includes("480")) return "480p";
+    return "HD";
+  };
+
+  const QUALITY_TIERS = ["4K", "1080p", "720p", "480p", "HD"] as const;
+
+  const availableQualities = QUALITY_TIERS.map((tier) => ({
+    tier,
+    count: directStreams.filter((s) => qualityTier(s.quality) === tier).length,
+  })).filter((q) => q.count > 0);
+
+  const passesFilters = (s: MovieDirectStream) => {
+    if (qualityFilter !== "auto" && qualityTier(s.quality) !== qualityFilter) {
+      return false;
+    }
+    const t = (s.cleanTitle || "").toLowerCase();
+    if (audioFilter === "hindi") {
+      return /\bhindi\b|\bhin\b|hindi[\s._-]*dubbed/.test(t);
+    }
+    if (audioFilter === "sub") return true;
+    const dual = /dual[\s._-]*audio|multi[\s._-]*audio/.test(t);
+    const dub = /\bdub(bed)?\b|english[\s._-]*audio/.test(t);
+    return audioFilter === "dual" ? dual : dub || dual;
+  };
+
+  const visibleStreamCount = directStreams.filter(passesFilters).length;
+
+  // Pin a resolution and highlight that tier's best-seeded stream right away,
+  // so pressing Play uses exactly what the user just picked.
+  const applyQualityFilter = (tier: string) => {
+    setQualityFilter(tier);
+    if (tier === "auto") return;
+    const candidates = directStreams
+      .map((s, idx) => ({ s, idx }))
+      .filter(({ s }) => qualityTier(s.quality) === tier)
+      .sort((a, b) => (b.s.seeders || 0) - (a.s.seeders || 0));
+    if (candidates.length === 0) return;
+    setSelectedStreamIndex(candidates[0].idx);
+    prewarmStream(candidates[0].s.magnet);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -73,16 +200,33 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     }
   }, [isOpen, selectedMedia]);
 
-  const fetchTrending = async () => {
+  const fetchTrending = async (type: "trending" | "movie" | "tv" = "trending") => {
     setLoading(true);
+    const scope: "all" | "movie" | "tv" = type === "trending" ? "all" : type;
+
     try {
-      const res = await fetch("/api/movies/trending");
+      const res = await fetch(`/api/movies/trending?type=${scope}`);
       if (res.ok) {
         const data = await res.json();
         setItems(data.results || []);
+        setLoading(false);
+        return;
       }
+      throw new Error(`trending HTTP ${res.status}`);
+    } catch (e) {
+      console.warn("Trending via server failed, trying browser TMDB:", e);
+    }
+
+    try {
+      if (!tmdbFallbackAvailable) {
+        setItems([]);
+        return;
+      }
+      const data = await tmdbTrending(scope);
+      setItems(data.results || []);
     } catch (e) {
       console.error("Failed to load trending:", e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -111,11 +255,67 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   const executeSearch = async (query: string, type: "all" | "movie" | "tv") => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/movies/search?q=${encodeURIComponent(query)}&type=${type}`);
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.results || []);
+      const variants = buildSearchVariants(query);
+      const batches = await Promise.all(
+        variants.map(async (variant) => {
+          try {
+            const res = await fetch(
+              `/api/movies/search?q=${encodeURIComponent(variant)}&type=${type}`,
+            );
+            if (!res.ok) return [] as MovieSearchResult[];
+            const data = await res.json();
+            return (data.results || []) as MovieSearchResult[];
+          } catch {
+            return [] as MovieSearchResult[];
+          }
+        }),
+      );
+
+      const merged = new Map<string, MovieSearchResult>();
+      batches.flat().forEach((item) => {
+        merged.set(`${item.type}-${item.id}`, item);
+      });
+
+      const ranked = [...merged.values()]
+        .map((item) => ({ item, score: searchRelevance(item.title, query) }))
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            (b.item.voteCount || 0) - (a.item.voteCount || 0),
+        )
+        .map(({ item }) => item);
+
+      if (ranked.length === 0 && tmdbFallbackAvailable) {
+        const fallbacks = await Promise.all(
+          variants.map(async (variant) => {
+            try {
+              const data = await tmdbSearch(variant, type);
+              return data.results || [];
+            } catch {
+              return [] as MovieSearchResult[];
+            }
+          }),
+        );
+
+        const fb = new Map<string, MovieSearchResult>();
+        fallbacks.flat().forEach((item) => {
+          fb.set(`${item.type}-${item.id}`, item);
+        });
+
+        setItems(
+          [...fb.values()]
+            .map((item) => ({ item, score: searchRelevance(item.title, query) }))
+            .sort(
+              (a, b) =>
+                b.score - a.score ||
+                (b.item.voteCount || 0) - (a.item.voteCount || 0),
+            )
+            .map(({ item }) => item),
+        );
+        return;
       }
+
+      setItems(ranked);
     } catch (e) {
       console.error("Search failed:", e);
     } finally {
@@ -127,177 +327,154 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     setFilterType(type);
     if (type === "trending") {
       setSearchQuery("");
-      fetchTrending();
-    } else {
-      if (searchQuery.trim()) {
-        executeSearch(searchQuery.trim(), type);
-      }
+      fetchTrending("trending");
+      return;
     }
-  };
-
-  const fetchClientSideStreams = async (
-    media: MovieDetails,
-    season: number,
-    episode: number
-  ): Promise<MovieDirectStream[]> => {
-    try {
-      let imdbId = media.imdbId;
-
-      // 1. If no imdbId, attempt fast Cinemeta search via public CORS
-      if (!imdbId && media.title) {
-        try {
-          const cType = media.type === "tv" ? "series" : "movie";
-          const cinemetaUrl = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(media.title)}.json`;
-          const cRes = await fetch(cinemetaUrl);
-          if (cRes.ok) {
-            const cData = await cRes.json();
-            const metas = cData?.metas || [];
-            const match =
-              metas.find((m: any) => m.name.toLowerCase() === media.title.toLowerCase()) ||
-              metas[0];
-            if (match?.id && match.id.startsWith("tt")) {
-              imdbId = match.id;
-              media.imdbId = match.id;
-              setSelectedMedia((prev) => (prev ? { ...prev, imdbId: match.id } : null));
-            }
-          }
-        } catch (cErr) {
-          console.warn("Client-side Cinemeta lookup failed:", cErr);
-        }
-      }
-
-      if (!imdbId) return [];
-
-      // 2. Fetch directly from Torrentio via CORS
-      const stremioEndpoint =
-        media.type === "tv"
-          ? `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`
-          : `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
-
-      const response = await fetch(stremioEndpoint);
-      if (!response.ok) return [];
-
-      const data = await response.json();
-      const rawStreams = data?.streams || [];
-
-      const formatted: MovieDirectStream[] = rawStreams.map((s: any, idx: number) => {
-        const titleStr = s.title || "";
-        const nameStr = s.name || "";
-        const combined = `${nameStr} ${titleStr}`;
-
-        const seederMatch = titleStr.match(/👤\s*(\d+)/);
-        const sizeMatch = titleStr.match(/💾\s*([\d.]+\s*[GM]B)/i);
-        const seeders = seederMatch ? parseInt(seederMatch[1], 10) : 0;
-        const size = sizeMatch ? sizeMatch[1] : "";
-
-        const qualityMatch = combined.match(/(2160p|4k|1080p|720p|480p)/i);
-        const quality = qualityMatch ? qualityMatch[1].toUpperCase() : "HD";
-
-        let codec = "";
-        if (/x265|hevc/i.test(combined)) codec = "HEVC";
-        else if (/x264|h264|avc/i.test(combined)) codec = "x264";
-
-        const titleLines = titleStr.split("\n").map((l: string) => l.trim()).filter(Boolean);
-        const episodeFile =
-          s.behaviorHints?.filename ||
-          (titleLines.length > 1 && !titleLines[1].includes("👤") ? titleLines[1] : "");
-        const cleanTitle = media.type === "tv" && episodeFile ? episodeFile : titleLines[0] || "Stream";
-
-        const trackers = (s.sources || [])
-          .filter((src: string) => src.startsWith("tracker:"))
-          .map((src: string) => src.replace("tracker:", ""));
-        const trackerQuery =
-          trackers.length > 0
-            ? "&tr=" + trackers.map((t: string) => encodeURIComponent(t)).join("&tr=")
-            : "";
-
-        const displayTitle = media.title || "Movie";
-        const seasonEpSuffix = media.type === "tv" && season && episode ? ` S${season}E${episode}` : "";
-        const dn = encodeURIComponent(`${displayTitle}${seasonEpSuffix} ${quality}`);
-
-        const seasonParam = media.type === "tv" && season ? `&season=${season}` : "";
-        const episodeParam = media.type === "tv" && episode ? `&episode=${episode}` : "";
-        const fileIndexParam = s.fileIdx != null ? `&fileIndex=${s.fileIdx}` : "";
-        const magnet = `magnet:?xt=urn:btih:${s.infoHash}&dn=${dn}&isMovie=1${seasonParam}${episodeParam}${fileIndexParam}${trackerQuery}`;
-
-        const episodeBadge = media.type === "tv" && season && episode ? `📺 S${season}:E${episode} • ` : "";
-        const label = `${episodeBadge}${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders > 0 ? ` (${seeders} seeders)` : ""}`;
-
-        return {
-          id: idx,
-          label,
-          quality,
-          codec,
-          seeders,
-          size,
-          cleanTitle,
-          infoHash: s.infoHash,
-          fileIdx: s.fileIdx,
-          magnet,
-        };
-      });
-
-      formatted.sort((a, b) => {
-        const aCompat = a.codec === "x264" ? 60 : 0;
-        const bCompat = b.codec === "x264" ? 60 : 0;
-        return b.seeders + bCompat - (a.seeders + aCompat);
-      });
-
-      return formatted.slice(0, 20);
-    } catch (err) {
-      console.warn("Client-side direct torrent fetch error:", err);
-      return [];
+    if (searchQuery.trim()) {
+      executeSearch(searchQuery.trim(), type);
+    } else {
+      // No active search: load that category's trending list instead of leaving
+      // the previous tab's results on screen.
+      fetchTrending(type);
     }
   };
 
   const fetchDirectStreams = async (media: MovieDetails, season = 1, episode = 1) => {
     setLoadingStreams(true);
+    setQualityFilter("auto");
+
     try {
-      const imdbParam = media.imdbId ? `&imdbId=${media.imdbId}` : "";
-      const tmdbParam = `&tmdbId=${media.id}`;
-      const typeParam = `&type=${media.type}`;
-      const seasonParam = media.type === "tv" ? `&season=${season}&episode=${episode}` : "";
-      const titleParam = `&title=${encodeURIComponent(media.title)}`;
-
       let streams: MovieDirectStream[] = [];
+      let imdbForFallback = media.imdbId;
 
-      // 1. Try server-side streams endpoint first
+      // Try the existing backend first.
       try {
-        const res = await fetch(
-          `/api/movies/streams?${imdbParam}${tmdbParam}${typeParam}${seasonParam}${titleParam}`
-        );
+        const params = new URLSearchParams({
+          tmdbId: String(media.id),
+          type: media.type,
+          title: media.title,
+        });
+
+        if (media.imdbId) params.set("imdbId", media.imdbId);
+
+        if (media.type === "tv") {
+          params.set("season", String(season));
+          params.set("episode", String(episode));
+        }
+
+        const res = await fetch(`/api/movies/streams?${params}`);
+
         if (res.ok) {
           const data = await res.json();
           streams = data.streams || [];
-          if (data.imdbId && (!media.imdbId || media.imdbId !== data.imdbId)) {
-            media.imdbId = data.imdbId;
-            setSelectedMedia((prev) => (prev ? { ...prev, imdbId: data.imdbId } : null));
-          }
+          if (!imdbForFallback && data.imdbId) imdbForFallback = data.imdbId;
         }
-      } catch (serverErr) {
-        console.warn("Backend streams fetch failed, attempting client fallback:", serverErr);
+      } catch (error) {
+        console.warn("Backend stream lookup failed:", error);
       }
 
-      // 2. If server returns 0 streams (e.g. Render datacenter IP blocked/rate-limited by Torrentio),
-      // seamlessly fetch directly from Torrentio via CORS in user's browser!
-      if (streams.length === 0) {
-        streams = await fetchClientSideStreams(media, season, episode);
+      // Browser fallback if the backend returns no streams.
+      if (streams.length === 0 && imdbForFallback) {
+        const endpoint =
+          media.type === "tv"
+            ? `https://torrentio.strem.fun/stream/series/${imdbForFallback}:${season}:${episode}.json`
+            : `https://torrentio.strem.fun/stream/movie/${imdbForFallback}.json`;
+
+        const res = await fetch(endpoint);
+
+        if (!res.ok) {
+          throw new Error(`Torrentio HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        streams = (data.streams || [])
+          .map((s: any, idx: number): MovieDirectStream | null => {
+            if (!s.infoHash) return null;
+
+            const combined = `${s.name || ""} ${s.title || ""}`;
+            const seederMatch = (s.title || "").match(/👤\s*(\d+)/);
+            const sizeMatch = (s.title || "").match(/💾\s*([\d.]+\s*[GM]B)/i);
+            const qualityMatch = combined.match(/(2160p|4k|1080p|720p|480p)/i);
+
+            const quality = qualityMatch
+              ? qualityMatch[1].toUpperCase()
+              : "HD";
+            const seeders = seederMatch ? Number(seederMatch[1]) : 0;
+            const size = sizeMatch ? sizeMatch[1] : "";
+
+            let codec = "";
+            if (/x265|hevc/i.test(combined)) codec = "HEVC";
+            else if (/x264|h264|avc/i.test(combined)) codec = "x264";
+
+            const lines = (s.title || "")
+              .split("\n")
+              .map((line: string) => line.trim())
+              .filter(Boolean);
+
+            const cleanTitle =
+              s.behaviorHints?.filename ||
+              lines.find((line: string) =>
+                !line.includes("👤") && !line.includes("💾")
+              ) ||
+              media.title;
+
+            const magnetParams = new URLSearchParams({
+              xt: `urn:btih:${s.infoHash}`,
+              dn: `${media.title} ${quality}`,
+              isMovie: "1",
+            });
+
+            if (media.type === "tv") {
+              magnetParams.set("season", String(season));
+              magnetParams.set("episode", String(episode));
+            }
+
+            if (s.fileIdx != null) {
+              magnetParams.set("fileIndex", String(s.fileIdx));
+            }
+
+            (s.sources || [])
+              .filter((src: string) => typeof src === "string" && src.startsWith("tracker:"))
+              .forEach((src: string) => magnetParams.append("tr", src.slice(8)));
+
+            return {
+              id: idx,
+              label: `${quality}${codec ? ` ${codec}` : ""}${size ? ` • ${size}` : ""}${seeders ? ` (${seeders} seeders)` : ""}`,
+              quality,
+              codec,
+              seeders,
+              size,
+              cleanTitle,
+              infoHash: s.infoHash,
+              fileIdx: s.fileIdx,
+              magnet: `magnet:?${magnetParams.toString()}`,
+            };
+          })
+          .filter((s: MovieDirectStream | null): s is MovieDirectStream => s !== null);
+
+        console.info("Browser Torrentio streams:", streams.length);
       }
 
       setDirectStreams(streams);
+
       if (streams.length > 0) {
-        // Pre-select 1080p stream with highest seeders, or first stream
-        const bestIdx = streams.findIndex((s) => s.quality === "1080P" && s.seeders > 10);
+        const playable = streams.filter(
+          (s) => (s.codec || "").toUpperCase() !== "HEVC",
+        );
+        const pool = playable.length > 0 ? playable : streams;
+        const preferred =
+          pool.find((s) => s.quality === "1080P" && s.seeders > 10) || pool[0];
+
+        const bestIdx = streams.indexOf(preferred);
         setSelectedStreamIndex(bestIdx !== -1 ? bestIdx : 0);
         setPlaybackMode("direct");
       } else {
-        // Fallback to web mirror if no direct streams found
-        setPlaybackMode("web_mirror");
+        console.warn("No direct streams found:", media.title);
       }
-    } catch (e) {
-      console.warn("Failed to fetch direct streams:", e);
+    } catch (error) {
+      console.warn("Failed to fetch direct streams:", error);
       setDirectStreams([]);
-      setPlaybackMode("web_mirror");
     } finally {
       setLoadingStreams(false);
     }
@@ -305,26 +482,51 @@ export const MovieModal: React.FC<MovieModalProps> = ({
 
   const selectMediaItem = async (item: MovieSearchResult) => {
     setLoadingDetails(true);
+    setDetailsError("");
+    lastSelectedRef.current = item;
     setSelectedMedia(null);
     setIsPreviewing(false);
     setDirectStreams([]);
     try {
-      const res = await fetch(`/api/movies/details?id=${item.id}&type=${item.type}`);
-      if (res.ok) {
-        const details: MovieDetails = await res.json();
-        setSelectedMedia(details);
-        if (details.type === "tv") {
-          const firstSeasonNum =
-            details.seasons && details.seasons.length > 0 && details.seasons[0].seasonNumber
-              ? details.seasons[0].seasonNumber
-              : 1;
-          setSelectedSeason(firstSeasonNum);
-          setSelectedEpisode(1);
-          fetchSeasonEpisodes(details.id, firstSeasonNum);
-          fetchDirectStreams(details, firstSeasonNum, 1);
-        } else {
-          fetchDirectStreams(details);
+      let details: MovieDetails | null = null;
+
+      try {
+        // One retry: the VM<->TMDB link resets often, and a second attempt
+        // costs nothing next to showing an empty screen.
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          const res = await fetch(
+            `/api/movies/details?id=${item.id}&type=${item.type}`,
+          );
+          if (res.ok) {
+            details = await res.json();
+            break;
+          }
+          if (attempt === 2) throw new Error(`details HTTP ${res.status}`);
+          await new Promise((resolve) => setTimeout(resolve, 400));
         }
+      } catch (serverError) {
+        console.warn("Details via server failed, trying browser TMDB:", serverError);
+        if (tmdbFallbackAvailable) {
+          details = await tmdbDetails(item.id, item.type);
+        }
+      }
+
+      if (!details) {
+        setDetailsError(
+          `Couldn't load "${item.title}". Tap Retry — if it keeps failing, the server can't reach TMDB right now.`,
+        );
+        return;
+      }
+
+      setSelectedMedia(details);
+      if (details.type === "tv" && details.seasons && details.seasons.length > 0) {
+        const firstSeasonNum = details.seasons[0].seasonNumber || 1;
+        setSelectedSeason(firstSeasonNum);
+        setSelectedEpisode(1);
+        fetchSeasonEpisodes(details.id, firstSeasonNum);
+        fetchDirectStreams(details, firstSeasonNum, 1);
+      } else {
+        fetchDirectStreams(details);
       }
     } catch (e) {
       console.error("Failed to load details:", e);
@@ -340,9 +542,19 @@ export const MovieModal: React.FC<MovieModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         setEpisodes(data.episodes || []);
+        return;
       }
+      throw new Error(`season HTTP ${res.status}`);
     } catch (e) {
-      console.error("Failed to load season:", e);
+      console.warn("Season via server failed, trying browser TMDB:", e);
+      if (tmdbFallbackAvailable) {
+        try {
+          const data = await tmdbSeason(id, seasonNum);
+          setEpisodes(data.episodes || []);
+        } catch (fallbackError) {
+          console.error("Failed to load season:", fallbackError);
+        }
+      }
     } finally {
       setLoadingEpisodes(false);
     }
@@ -386,7 +598,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
           return;
         }
       }
-      alert("No direct high-speed streams available right now for this title. You can switch to Web Embed Mirror.");
+      alert("No direct streams available right now for this title.");
       return;
     }
 
@@ -464,13 +676,13 @@ export const MovieModal: React.FC<MovieModalProps> = ({
             onClose();
             return;
           } else {
-            alert(`No direct streams found for Season ${seasonNum} Episode ${episodeNum}. You can switch to Web Embed Mirror.`);
+            alert(`No direct streams found for Season ${seasonNum} Episode ${episodeNum}.`);
             return;
           }
         }
       } catch (e) {
         console.warn("Direct episode stream error:", e);
-        alert("Failed to load direct stream. Please try again or switch to Web Embed Mirror.");
+        alert("Failed to load direct stream. Please try again.");
         return;
       } finally {
         setLoadingStreams(false);
@@ -494,7 +706,6 @@ export const MovieModal: React.FC<MovieModalProps> = ({
             <div>
               <h2 className={styles.modalTitle}>Movies & Web Series</h2>
               <p className={styles.modalSubtitle}>
-                Stream & synchronize HD movies, anime, and TV shows directly in room
               </p>
             </div>
           </div>
@@ -643,10 +854,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       <span>📺 1. Select Season</span>
                     </h4>
                     <div className={styles.seasonSelector}>
-                      {(selectedMedia.seasons && selectedMedia.seasons.length > 0
-                        ? selectedMedia.seasons
-                        : [{ id: 1, seasonNumber: 1, name: "Season 1", episodeCount: selectedMedia.numberOfEpisodes || 10 }]
-                      ).map((s) => (
+                      {(selectedMedia.seasons || []).map((s) => (
                         <button
                           key={s.id}
                           type="button"
@@ -729,38 +937,102 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 </div>
               )}
 
-              {/* Player Mode Switcher Tabs */}
-              <div className={styles.playerModeTabs}>
-                <button
-                  type="button"
-                  className={`${styles.playerModeTab} ${playbackMode === "direct" ? styles.playerModeTabActive : ""}`}
-                  onClick={() => setPlaybackMode("direct")}
-                >
-                  <span>⚡ Native Direct Player (Full Audio & 100% Sync)</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.playerModeTab} ${playbackMode === "web_mirror" ? styles.playerModeTabActive : ""}`}
-                  onClick={() => setPlaybackMode("web_mirror")}
-                >
-                  <span>🌐 Web Embed Mirrors</span>
-                </button>
-              </div>
-
               {/* DIRECT NATIVE PLAYER MODE */}
               {playbackMode === "direct" && (
                 <div className={styles.serverSection}>
-                  <div className={styles.audioGuaranteeBanner}>
-                    <span className={styles.audioGuaranteeIcon}>🔊</span>
-                    <span>
-                      <strong>100% Working Audio & Sync:</strong> Plays via WatchParty native HTML5 engine.
-                      Full volume controls, up to 200% AudioBoost, skip buttons, and instant timeline seeking!
-                    </span>
+                  {availableQualities.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        margin: "4px 0 8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {[
+                        { tier: "auto", count: directStreams.length },
+                        ...availableQualities,
+                      ].map(({ tier, count }) => {
+                        const active = qualityFilter === tier;
+                        return (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => applyQualityFilter(tier)}
+                            style={{
+                              minHeight: 32,
+                              minWidth: 44,
+                              padding: "4px 12px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              border: active
+                                ? "1px solid #06b6d4"
+                                : "1px solid rgba(255,255,255,0.12)",
+                              background: active
+                                ? "rgba(6,182,212,0.25)"
+                                : "rgba(255,255,255,0.04)",
+                              color: active ? "#fff" : "#94a3b8",
+                            }}
+                            title={
+                              tier === "auto"
+                                ? "Let dipkri pick the best stream"
+                                : `Show only ${tier} streams`
+                            }
+                          >
+                            {tier === "auto" ? "Auto" : tier} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      margin: "4px 0 8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {(["sub", "dub", "dual", "hindi"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAudioFilter(mode)}
+                        style={{
+                          padding: "5px 12px",
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          border:
+                            audioFilter === mode
+                              ? "1px solid #6366f1"
+                              : "1px solid rgba(255,255,255,0.12)",
+                          background:
+                            audioFilter === mode
+                              ? "rgba(99,102,241,0.25)"
+                              : "rgba(255,255,255,0.04)",
+                          color: audioFilter === mode ? "#fff" : "#94a3b8",
+                        }}
+                      >
+                        {mode === "sub"
+                          ? "Subbed"
+                          : mode === "dub"
+                            ? "Dubbed"
+                            : mode === "hindi"
+                              ? "Hindi"
+                              : "Dual Audio"}
+                      </button>
+                    ))}
                   </div>
 
                   <h4 className={styles.sectionHeading}>
                     <span>
-                      ⚡ Available HD Streams ({directStreams.length})
+                      ⚡ Available HD Streams ({visibleStreamCount})
                       {selectedMedia.type === "tv" ? ` — Season ${selectedSeason} Episode ${selectedEpisode}` : ""}
                     </span>
                   </h4>
@@ -768,19 +1040,34 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                   {loadingStreams ? (
                     <div className={styles.loadingSpinner} style={{ padding: "30px 0" }}>
                       <Loader size="sm" color="indigo" />
-                      <span>Finding high-speed HD streams...</span>
+                      <span>Loading streams…</span>
                     </div>
                   ) : directStreams.length > 0 ? (
                     <>
                       <div className={styles.streamListGrid}>
-                        {directStreams.map((s, idx) => {
+                        {directStreams
+                          .map((s, idx) => ({ s, idx }))
+                          .filter(({ s }) => passesFilters(s))
+                          // Best-seeded first: a 167 B/s stream should never be
+                          // the default choice.
+                          .sort((a, b) => (b.s.seeders || 0) - (a.s.seeders || 0))
+                          .map(({ s, idx }) => {
                           const isSelected = selectedStreamIndex === idx;
                           return (
                             <div
                               key={s.id}
                               className={`${styles.streamCard} ${isSelected ? styles.streamCardActive : ""}`}
-                              onClick={() => setSelectedStreamIndex(idx)}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`${s.quality} stream, ${s.seeders} seeders`}
+                              onClick={() => { setSelectedStreamIndex(idx); prewarmStream(s.magnet); }}
                               onDoubleClick={() => handlePlaySelectedStream(idx)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSelectedStreamIndex(idx);
+                                }
+                              }}
                             >
                               <div className={styles.streamQualityRow}>
                                 <span className={styles.streamQualityBadge}>
@@ -816,6 +1103,22 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                                 <span className={s.seeders > 50 ? styles.streamSeedersGood : styles.streamSeedersOk}>
                                   👤 {s.seeders} seeders
                                 </span>
+                                {(s.codec || "").toUpperCase() === "HEVC" && (
+                                  <span
+                                    style={{ color: "#f87171", fontWeight: 700 }}
+                                    title="Chrome/Edge cannot decode HEVC — expect a black screen"
+                                  >
+                                    ⚠ HEVC not playable
+                                  </span>
+                                )}
+                                {/\b(ddp|dd\+|ac3|eac3|dts)\b/i.test(s.cleanTitle || "") && (
+                                  <span
+                                    style={{ color: "#fbbf24", fontWeight: 700 }}
+                                    title="DTS/AC3 audio cannot be decoded by browsers — video may play silent"
+                                  >
+                                    ⚠ audio may be silent
+                                  </span>
+                                )}
                               </div>
                               <span className={styles.streamReleaseTitle} title={s.cleanTitle}>
                                 {s.cleanTitle}
@@ -824,6 +1127,19 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                           );
                         })}
                       </div>
+
+                      {visibleStreamCount === 0 && (
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "#94a3b8",
+                            margin: "10px 0 0",
+                          }}
+                        >
+                          No streams match this quality/audio filter. Pick
+                          another quality or switch back to Auto.
+                        </p>
+                      )}
 
                       {/* Primary Action Row for Selected Direct Stream */}
                       <div className={styles.actionRow} style={{ marginTop: 12 }}>
@@ -847,100 +1163,52 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                     <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                       No direct peer streams currently active for this specific release.
                       <br />
-                      <button
-                        type="button"
-                        style={{
-                          marginTop: 8,
-                          background: "rgba(99, 102, 241, 0.2)",
-                          border: "1px solid #6366f1",
-                          color: "#fff",
-                          padding: "6px 14px",
-                          borderRadius: 8,
-                          cursor: "pointer",
-                        }}
-                        onClick={() => setPlaybackMode("web_mirror")}
-                      >
-                        Switch to Web Embed Mirror
-                      </button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* WEB EMBED MIRROR MODE */}
-              {playbackMode === "web_mirror" && (
-                <div className={styles.serverSection}>
-                  <h4 className={styles.sectionHeading}>
-                    <span>🌐 Select Web Embed Server</span>
-                  </h4>
-                  <div className={styles.serverList}>
-                    {SERVER_OPTIONS.map((srv) => (
-                      <button
-                        key={srv.id}
-                        type="button"
-                        className={`${styles.serverButton} ${selectedServer === srv.id ? styles.serverButtonActive : ""}`}
-                        onClick={() => setSelectedServer(srv.id)}
-                      >
-                        <span className={styles.serverName}>{srv.name}</span>
-                        <span className={styles.serverBadge}>{srv.tag}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Web Mirror Movie Primary Actions */}
-              {playbackMode === "web_mirror" && selectedMedia.type === "movie" && (
-                <div className={styles.actionRow} style={{ marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className={styles.playRoomBtn}
-                    onClick={() => handlePlayMedia()}
-                  >
-                    ▶ Play in Room
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.queueBtn}
-                    onClick={() => handleQueueMedia()}
-                  >
-                    + Add to Queue
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.previewBtn}
-                    onClick={() => setIsPreviewing(!isPreviewing)}
-                  >
-                    {isPreviewing ? "Hide Preview" : "👁️ Preview Stream"}
-                  </button>
-                </div>
-              )}
-
-              {/* In-Modal Stream Preview if enabled */}
-              {isPreviewing && playbackMode === "web_mirror" && (
-                <div className={styles.previewFrameWrapper}>
-                  <iframe
-                    title="Movie Preview"
-                    src={buildMovieEmbedUrl({
-                      tmdbId: String(selectedMedia.id),
-                      type: selectedMedia.type,
-                      title: selectedMedia.title,
-                      season: selectedSeason,
-                      episode: 1,
-                      server: selectedServer,
-                    })}
-                    className={styles.previewFrame}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                    allowFullScreen
-                  />
-                </div>
-              )}
+            </div>
+          ) : detailsError ? (
+            <div
+              style={{
+                margin: "0 16px 12px",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.45)",
+                background: "rgba(248,113,113,0.12)",
+                color: "#fecaca",
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ flex: "1 1 220px" }}>{detailsError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const again = lastSelectedRef.current;
+                  if (again) selectMediaItem(again);
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Retry
+              </button>
             </div>
           ) : items.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyStateIcon}>🎬</div>
               <h3>No titles found</h3>
-              <p>Try searching with a different movie or web series name</p>
             </div>
           ) : (
             /* Search Results / Trending Poster Grid */
@@ -949,7 +1217,16 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                 <div
                   key={`${item.type}-${item.id}`}
                   className={styles.mediaCard}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${item.title} (${item.year || item.type})`}
                   onClick={() => selectMediaItem(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectMediaItem(item);
+                    }
+                  }}
                 >
                   <div className={styles.posterWrapper}>
                     {item.poster ? (
@@ -984,3 +1261,4 @@ export const MovieModal: React.FC<MovieModalProps> = ({
     </div>
   );
 };
+

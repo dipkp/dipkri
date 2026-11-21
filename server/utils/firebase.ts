@@ -31,6 +31,17 @@ export async function validateUserToken(uid: string, token: string) {
   }
 }
 
+export async function verifyIdTokenOnly(rawCred?: string) {
+  if (!config.FIREBASE_ADMIN_SDK_CONFIG || !rawCred) {
+    return undefined;
+  }
+  try {
+    return await admin.auth().verifyIdToken(rawCred);
+  } catch (e) {
+    return undefined;
+  }
+}
+
 export async function writeData(key: string, value: string) {
   if (!config.FIREBASE_ADMIN_SDK_CONFIG) {
     return;

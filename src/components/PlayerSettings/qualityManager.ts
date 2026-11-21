@@ -20,9 +20,9 @@ class QualityManager {
    */
   public applyQuality(quality: string, isYouTube?: boolean) {
     // 1. YouTube IFrame API
-    if (isYouTube && typeof window !== "undefined" && (window as any).watchPartyYTPlayer) {
+    if (isYouTube && typeof window !== "undefined" && (window as any).dipkriYTPlayer) {
       try {
-        const yt = (window as any).watchPartyYTPlayer;
+        const yt = (window as any).dipkriYTPlayer;
         const ytQualityMap: Record<string, string> = {
           auto: "auto",
           "1080p": "hd1080",
@@ -41,9 +41,9 @@ class QualityManager {
     }
 
     // 2. HLS.js adaptive stream
-    if (typeof window !== "undefined" && window.watchparty?.hls) {
+    if (typeof window !== "undefined" && window.dipkri?.hls) {
       try {
-        const hls = window.watchparty.hls;
+        const hls = window.dipkri.hls;
         if (quality === "auto") {
           hls.currentLevel = -1; // Auto level
         } else {
@@ -51,7 +51,7 @@ class QualityManager {
           const levels = hls.levels || [];
           let bestIdx = -1;
           let minDiff = Infinity;
-          levels.forEach((lvl, idx) => {
+          levels.forEach((lvl: any, idx: number) => {
             const h = lvl.height || 0;
             const diff = Math.abs(h - targetH);
             if (diff < minDiff) {
@@ -70,9 +70,9 @@ class QualityManager {
     }
 
     // 3. Dash.js adaptive stream
-    if (typeof window !== "undefined" && window.watchparty?.dash) {
+    if (typeof window !== "undefined" && window.dipkri?.dash) {
       try {
-        const dash = window.watchparty.dash as any;
+        const dash = window.dipkri.dash as any;
         if (quality === "auto") {
           dash.updateSettings?.({
             streaming: { abr: { autoSwitchBitrate: { video: true } } },

@@ -23,6 +23,7 @@ import {
   getOrCreateClientId,
   isEmojiString,
 } from "../../utils/utils";
+import { extractYouTubeId } from "../../utils/regex";
 import { UserMenu } from "../UserMenu/UserMenu";
 import { Socket } from "socket.io-client";
 import { CSSTransition } from "react-transition-group";
@@ -60,11 +61,9 @@ export const getCleanVideoTitle = (raw?: string): string => {
     return "Screen Share";
   }
   // If YouTube
-  const ytMatch = raw.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|(?:embed|v)\/))([a-zA-Z0-9_-]{11})/i,
-  );
-  if (ytMatch) {
-    return `YouTube (${ytMatch[1]})`;
+  const ytId = extractYouTubeId(raw);
+  if (ytId) {
+    return `YouTube (${ytId})`;
   }
   // If Magnet
   if (raw.startsWith("magnet:")) {
@@ -96,14 +95,6 @@ export const getCleanVideoTitle = (raw?: string): string => {
     }
   }
   return raw;
-};
-
-const extractYouTubeId = (text?: string): string | null => {
-  if (!text) return null;
-  const match = text.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|(?:embed|v)\/))([a-zA-Z0-9_-]{11})/i,
-  );
-  return match ? match[1] : null;
 };
 
 const formatWhatsAppTime = (isoString: string) => {
@@ -966,7 +957,7 @@ const ChatMessageItem = ({
               isChatMessage
               disabled={!Boolean(owner && owner === user?.uid)}
               trigger={
-                <span title={isSub ? "WatchParty Plus subscriber" : ""}>
+                <span title={isSub ? "dipkri Plus subscriber" : ""}>
                   {authorName}
                 </span>
               }

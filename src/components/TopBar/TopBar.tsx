@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useState } from "react";
 import { serverPath, getUserImage } from "../../utils/utils";
+import { desktopRoomEnd } from "../../utils/desktopStream";
 import { Avatar, Tooltip } from "@mantine/core";
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
@@ -22,20 +23,55 @@ export async function createRoom(
 ) {
   const uid = user?.uid;
   const token = await user?.getIdToken();
-  const response = await fetch(serverPath + "/createRoom", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      uid,
-      token,
-      video,
-    }),
-  });
-  const data = await response.json();
-  const { name } = data;
+
+  const request = () =>
+    fetch(serverPath + "/createRoom", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uid,
+        token,
+        video,
+      }),
+    });
+
+  let response: Response;
+  try {
+    response = await request();
+  } catch {
+    // A deploy or a WiFi blip drops the first attempt; one retry fixes most of
+    // them and turns the rest into an honest message.
+    await new Promise((r) => setTimeout(r, 800));
+    try {
+      response = await request();
+    } catch {
+      throw new Error("Could not reach the server. Check your connection and try again.");
+    }
+  }
+
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {}
+
+  // Without this guard a failed create still navigated to "/watchundefined",
+  // which looks exactly like "the room was never created".
+  if (!response.ok || !data || typeof data.name !== "string" || !data.name) {
+    const reason =
+      (data && (data.error || data.message)) ||
+      `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`;
+    throw new Error(`Room creation failed: ${reason}`);
+  }
+
+  const name: string = data.name;
   const cleanName = (name || "").replace(/^\//, "");
+  // Only the creator holds this; it is required to terminate the room later.
+  if (data.hostToken && cleanName) {
+    localStorage.setItem(`wp_host_${cleanName}`, String(data.hostToken));
+  }
   if (cleanName) {
     try {
       localStorage.setItem("wp_last_room", cleanName);
@@ -54,7 +90,14 @@ export const NewRoomButton = (props: {
 }) => {
   const context = useContext(MetadataContext);
   const onClick = useCallback(async () => {
-    await createRoom(context.user, props.openNewTab);
+    try {
+      await createRoom(context.user, props.openNewTab);
+    } catch (e: any) {
+      console.error("New room failed:", e);
+      alert(
+        e?.message || "Could not create a room right now. Please try again.",
+      );
+    }
   }, [context.user, props.openNewTab]);
   return (
     <button
@@ -250,7 +293,7 @@ export const TopBar = (props: {
             className={styles.terminateBtn}
             onClick={async () => {
               const confirmTerminate = window.confirm(
-                "Terminate this watch party? It will end the room session and remove it from your active parties on the home screen."
+                "End this watch party for everyone? The room will be closed and removed from your active parties."
               );
               if (confirmTerminate) {
                 const cleanId = props.roomId?.replace(/^\//, "");
@@ -258,8 +301,13 @@ export const TopBar = (props: {
                   fetch("/terminateRoom", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId: cleanId }),
+                    body: JSON.stringify({
+                      roomId: cleanId,
+                      hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
+                    }),
                   }).catch(() => {});
+                  // Desktop: the video lives on this device, wipe it now.
+                  desktopRoomEnd(cleanId);
                   localStorage.removeItem("wp_last_room");
                   localStorage.removeItem("wp_active_party");
                   if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
@@ -267,9 +315,9 @@ export const TopBar = (props: {
                 window.location.assign("/");
               }
             }}
-            title="Terminate this watch party and clear from home screen"
+            title="End this watch party for everyone"
           >
-            <span>Terminate Room</span>
+            <span>End Party</span>
           </button>
         )}
         {!props.hideNewRoom && <JoinRoomButton size="sm" />}

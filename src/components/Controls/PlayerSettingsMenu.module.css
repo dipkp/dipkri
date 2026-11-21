@@ -242,7 +242,7 @@
 
 .optionRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
@@ -250,6 +250,10 @@
   transition: background 0.12s ease;
   min-height: 42px;
   box-sizing: border-box;
+}
+
+.optionRow > div:first-child {
+  padding-top: 2px;
 }
 
 .optionRow:last-child {
@@ -354,6 +358,7 @@
 
 .searchInput {
   flex: 1;
+  min-width: 0;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;

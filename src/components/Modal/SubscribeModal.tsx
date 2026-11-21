@@ -46,19 +46,19 @@ export class SubscribeModal extends React.Component<{
         onClose={closeSubscribe}
         centered
         size="auto"
-        title="Subscribe to WatchParty Plus"
+        title="Subscribe to dipkri Plus"
       >
         <div>
           Subscriptions help us maintain the service and build new features!
-          Please consider supporting us if you're enjoying WatchParty.
+          Please consider supporting us if you're enjoying dipkri.
         </div>
         <Title order={6}>Features</Title>
         <Table striped>
           <Table.Thead>
             <Table.Tr>
               <Table.Th />
-              <Table.Th>WatchParty Free</Table.Th>
-              <Table.Th>WatchParty Plus</Table.Th>
+              <Table.Th>dipkri Free</Table.Th>
+              <Table.Th>dipkri Plus</Table.Th>
             </Table.Tr>
           </Table.Thead>
 

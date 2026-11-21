@@ -114,3 +114,14 @@ interface ShardMetric {
   users: number;
   vbWaiting: number;
 }
+
+interface DipkriWindow {
+  ourStream: MediaStream | undefined;
+  videoRefs: HTMLVideoElementDict;
+  videoPCs: PCDict;
+  remoteStreams?: { [key: string]: MediaStream };
+  webtorrent?: WebTorrent.Instance;
+  hls?: Hls;
+  dash?: MediaPlayerClass;
+  speakerDeviceId?: string;
+}

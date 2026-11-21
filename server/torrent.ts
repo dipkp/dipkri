@@ -31,6 +31,7 @@ interface AudioCacheState {
 }
 const audioTranscodeMap = new Map<string, AudioCacheState>();
 
+
 // Singleton WebTorrent client for server-side torrent streaming
 let torrentClient: WebTorrent.Instance | null = null;
 
@@ -59,6 +60,70 @@ const DEFAULT_TRACKERS = [
 
 // Map to deduplicate concurrent requests for the same torrent metadata
 const pendingTorrents = new Map<string, Promise<WebTorrent.Torrent>>();
+
+// --- Temporary-cache guard ---------------------------------------------------
+// WebTorrent writes every streamed piece into os.tmpdir(). On a small Oracle
+// disk that adds up fast, so idle torrents are evicted and new streams are
+// refused when free space gets critical. Knobs:
+//   TORRENT_IDLE_MINUTES  (default 45)  destroy a torrent after N idle minutes
+//   TORRENT_MIN_FREE_GB   (default 3)   refuse/evict below this free space
+const CACHE_MIN_FREE_GB = Number(process.env.TORRENT_MIN_FREE_GB || 3);
+const CACHE_IDLE_MINUTES = Number(process.env.TORRENT_IDLE_MINUTES || 45);
+
+function freeDiskGB(): number {
+  try {
+    const statfs = (fs as any).statfsSync;
+    if (typeof statfs === "function") {
+      const s = statfs(os.tmpdir());
+      return (Number(s.bavail) * Number(s.bsize)) / 1e9;
+    }
+  } catch {}
+  return Number.POSITIVE_INFINITY;
+}
+
+function touchTorrent(t: any) {
+  if (t) t.__lastAccess = Date.now();
+}
+
+function destroyCachedTorrent(t: any, reason: string) {
+  try {
+    console.warn(`[Cache] evict ${t?.infoHash || t?.magnetURI || "torrent"} (${reason})`);
+    t.destroy({ destroyStore: true });
+  } catch {}
+}
+
+async function sweepTorrentCache() {
+  const client = torrentClient;
+  if (!client || client.torrents.length === 0) return;
+
+  const now = Date.now();
+  const idleMs = CACHE_IDLE_MINUTES * 60_000;
+
+  for (const t of [...client.torrents]) {
+    const last = (t as any).__lastAccess || 0;
+    if (last && now - last > idleMs) destroyCachedTorrent(t, "idle");
+  }
+
+  let free = freeDiskGB();
+  if (free >= CACHE_MIN_FREE_GB) return;
+
+  const oldestFirst = [...client.torrents].sort(
+    (a: any, b: any) => (a.__lastAccess || 0) - (b.__lastAccess || 0)
+  );
+  for (const t of oldestFirst) {
+    if (free >= CACHE_MIN_FREE_GB) break;
+    destroyCachedTorrent(t, `low disk (${free.toFixed(1)} GB free)`);
+    await new Promise((r) => setTimeout(r, 600));
+    free = freeDiskGB();
+  }
+}
+
+if (!(globalThis as any).__wpCacheSweeper) {
+  (globalThis as any).__wpCacheSweeper = setInterval(() => {
+    void sweepTorrentCache();
+  }, 5 * 60_000);
+  (globalThis as any).__wpCacheSweeper.unref?.();
+}
 
 /**
  * Extracts 40-char hex or 32-char base32 infoHash from a magnet link or raw hash.
@@ -157,6 +222,13 @@ export function extractEpisodeFromRequest(req: any): number | undefined {
  * safely preserving all tracker parameters even if unencoded.
  */
 export function extractMagnetFromRequest(req: any): string {
+  const value = extractRawTorrentParam(req);
+  // WebTorrent treats a bare string as magnet, http(s) URL or file path.
+  // Only magnets are legitimate here, and only magnets may be fetched.
+  return /^magnet:\?[^#\s]*xt=urn:btih:[a-z0-9]{32,40}/i.test(value) ? value : "";
+}
+
+function extractRawTorrentParam(req: any): string {
   const fullUrl = req.originalUrl || req.url || "";
   const idx = fullUrl.indexOf("torrent=");
   if (idx !== -1) {
@@ -265,11 +337,12 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
   }
 
   if (existing) {
+    touchTorrent(existing);
     if (existing.ready) {
       return existing;
     }
     return new Promise((resolve, reject) => {
-      existing!.once("ready", () => resolve(existing!));
+      existing!.once("ready", () => { touchTorrent(existing); resolve(existing!); });
       existing!.once("error", (err) => reject(err));
     });
   }
@@ -277,10 +350,20 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
   // 2. Check pending promises by infoHash or magnetUri
   const cacheKey = infoHash || magnetUri;
   if (pendingTorrents.has(cacheKey)) {
-    return pendingTorrents.get(cacheKey)!;
+    return pendingTorrents.get(cacheKey)!.then((t) => { touchTorrent(t); return t; });
   }
 
-  // 3. Add torrent safely
+  // 3. Storage guard: never start a stream that could fill the disk
+  if (freeDiskGB() < CACHE_MIN_FREE_GB) {
+    await sweepTorrentCache();
+    if (freeDiskGB() < CACHE_MIN_FREE_GB) {
+      throw new Error(
+        "Server storage is nearly full right now. Try another stream, or retry in a couple of minutes."
+      );
+    }
+  }
+
+  // 4. Add torrent safely
   const promise = new Promise<WebTorrent.Torrent>((resolve, reject) => {
     try {
       // Re-check right before adding in case of concurrent execution
@@ -290,6 +373,7 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
 
       if (doubleCheck) {
         pendingTorrents.delete(cacheKey);
+        touchTorrent(doubleCheck);
         if (doubleCheck.ready) {
           return resolve(doubleCheck);
         }
@@ -300,6 +384,7 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
         announce: DEFAULT_TRACKERS,
         destroyStoreOnDestroy: true,
       });
+      touchTorrent(torrent);
 
       const timeout = setTimeout(() => {
         pendingTorrents.delete(cacheKey);
@@ -608,12 +693,17 @@ export async function handleTorrentProgress(req: any, res: any) {
     });
   }
 
+  const targetFile = resolveTargetVideoFile(torrent, req);
   return res.json({
     downloaded: torrent.downloaded,
     total: torrent.length,
     speed: torrent.downloadSpeed,
     connections: torrent.numPeers,
     progress: torrent.progress,
+    // Per-file numbers: a season pack can sit at 0.1% overall while the one
+    // episode being watched is already buffered 40%.
+    fileProgress: (targetFile as any)?.progress ?? torrent.progress,
+    fileLength: targetFile?.length ?? torrent.length,
   });
 }
 
@@ -671,6 +761,7 @@ export async function handleTorrentStream(req: any, res: any) {
 
       end = Math.min(end, fileSize - 1);
       const chunkSize = end - start + 1;
+
 
       res.writeHead(206, {
         "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -761,14 +852,14 @@ export async function handleTorrentInfo(req: any, res: any) {
   }
 
   try {
+    if (!magnetUri.startsWith("magnet:?") && !magnetUri.startsWith("/")) {
+      return res.status(400).json({ error: "Only magnet links and local paths are accepted" });
+    }
     const streamPort = config.PORT || process.env.PORT || 8080;
     const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
-    let streamUrl = magnetUri;
-    if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
-    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
-    }
+    const streamUrl = magnetUri.startsWith("/")
+      ? `http://127.0.0.1:${streamPort}${magnetUri}`
+      : `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
 
     execFile(
       getFfprobePath(),
@@ -780,7 +871,7 @@ export async function handleTorrentInfo(req: any, res: any) {
         "-analyzeduration",
         "1500000",
         "-show_entries",
-        "stream=index,codec_name,codec_type:stream_tags=language,title",
+        "stream=index,codec_name,codec_type,width,height,pix_fmt:stream_tags=language,title",
         "-of",
         "json",
         streamUrl,
@@ -788,13 +879,22 @@ export async function handleTorrentInfo(req: any, res: any) {
       { timeout: 20000 },
       (err, stdout) => {
         if (err || !stdout) {
-          return res.json({ audioTracks: [], subtitleTracks: [] });
+          return res.json({ audioTracks: [], subtitleTracks: [], videoTracks: [] });
         }
         try {
           const parsed = JSON.parse(stdout);
           const streams: any[] = parsed.streams || [];
           const audioStreams = streams.filter((s) => s.codec_type === "audio");
           const subStreams = streams.filter((s) => s.codec_type === "subtitle");
+          const videoStreams = streams.filter((s) => s.codec_type === "video");
+
+          const videoTracks = videoStreams.map((s) => ({
+            index: s.index,
+            codec: s.codec_name,
+            width: s.width,
+            height: s.height,
+            pixFmt: s.pix_fmt,
+          }));
 
           const audioTracks = audioStreams.map((s, idx) => ({
             id: idx,
@@ -812,13 +912,13 @@ export async function handleTorrentInfo(req: any, res: any) {
             codec: s.codec_name,
           }));
 
-          const result = { audioTracks, subtitleTracks };
+          const result = { audioTracks, subtitleTracks, videoTracks };
           if (audioTracks.length > 0 || subtitleTracks.length > 0) {
             streamInfoCache.set(cacheKey, result);
           }
           return res.json(result);
         } catch {
-          return res.json({ audioTracks: [], subtitleTracks: [] });
+          return res.json({ audioTracks: [], subtitleTracks: [], videoTracks: [] });
         }
       }
     );
@@ -1012,14 +1112,14 @@ export async function handleTorrentSubtitle(req: any, res: any) {
   const episode = extractEpisodeFromRequest(req);
 
   try {
+    if (!magnetUri.startsWith("magnet:?") && !magnetUri.startsWith("/")) {
+      return res.status(400).json({ error: "Only magnet links and local paths are accepted" });
+    }
     const streamPort = config.PORT || process.env.PORT || 8080;
     const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
-    let streamUrl = magnetUri;
-    if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
-    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
-    }
+    const streamUrl = magnetUri.startsWith("/")
+      ? `http://127.0.0.1:${streamPort}${magnetUri}`
+      : `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
 
     const args: string[] = [
       "-nostdin",

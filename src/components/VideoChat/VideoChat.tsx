@@ -20,6 +20,7 @@ import {
   WPIconVideoOff,
   WPIconClose,
 } from "../Icons/CustomIcons";
+import { warmSpeakerLookup, resetSpeakerCache } from "./SpeakerHelper";
 
 interface VideoChatProps {
   socket: Socket;
@@ -33,27 +34,49 @@ interface VideoChatProps {
   getLeaderTime: () => number;
 }
 
-export class VideoChat extends React.Component<VideoChatProps, { mediaError?: string }> {
+export class VideoChat extends React.Component<VideoChatProps> {
   static contextType = MetadataContext;
   declare context: React.ContextType<typeof MetadataContext>;
 
   socket = this.props.socket;
-  state: { mediaError?: string } = {};
 
   componentDidMount() {
     this.socket.on("signal", this.handleSignal);
     if (typeof window !== "undefined") {
-      window.addEventListener("watchparty-stream-update", this.handleStreamUpdate);
+      window.addEventListener("dipkri-stream-update", this.handleStreamUpdate);
     }
-    if (window.watchparty.ourStream) {
+    if (window.dipkri.ourStream) {
       this.updateWebRTC();
     }
   }
 
+  retryAttempts = new Map<string, number>();
+
   componentWillUnmount() {
     this.socket.off("signal", this.handleSignal);
     if (typeof window !== "undefined") {
-      window.removeEventListener("watchparty-stream-update", this.handleStreamUpdate);
+      window.removeEventListener("dipkri-stream-update", this.handleStreamUpdate);
+    }
+    // Release camera/mic and every peer connection; otherwise the device stays
+    // captured after the panel closes.
+    const ourStream = window.dipkri.ourStream;
+    if (ourStream) {
+      ourStream.getTracks().forEach((track) => track.stop());
+      window.dipkri.ourStream = undefined;
+      try {
+        this.socket.emit("CMD:leaveVideo");
+      } catch {}
+    }
+    Object.keys(window.dipkri.videoPCs).forEach((key) => {
+      try {
+        window.dipkri.videoPCs[key].close();
+      } catch {}
+      delete window.dipkri.videoPCs[key];
+    });
+    if (window.dipkri.remoteStreams) {
+      Object.keys(window.dipkri.remoteStreams).forEach((key) => {
+        delete window.dipkri.remoteStreams![key];
+      });
     }
   }
 
@@ -77,13 +100,13 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     const selfId = getOrCreateClientId();
     if (!msg || !from || from === selfId) return;
 
-    let pc: RTCPeerConnection | undefined = window.watchparty.videoPCs[from];
+    let pc: RTCPeerConnection | undefined = window.dipkri.videoPCs[from];
     if (!pc || pc.connectionState === "closed" || pc.connectionState === "failed") {
       if (pc) {
         try {
           pc.close();
         } catch {}
-        delete window.watchparty.videoPCs[from];
+        delete window.dipkri.videoPCs[from];
       }
       pc = this.createPeerConnection(from);
     }
@@ -106,12 +129,12 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     } else if (msg.sdp && msg.sdp.type === "offer") {
       try {
         // Ensure our local tracks are attached so the answer includes our outgoing video/audio
-        if (window.watchparty.ourStream) {
+        if (window.dipkri.ourStream) {
           const senders = pc.getSenders();
-          window.watchparty.ourStream.getTracks().forEach((track) => {
+          window.dipkri.ourStream.getTracks().forEach((track) => {
             if (!senders.some((s) => s.track === track)) {
               try {
-                pc!.addTrack(track, window.watchparty.ourStream!);
+                pc!.addTrack(track, window.dipkri.ourStream!);
               } catch (e) {}
             }
           });
@@ -170,13 +193,15 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     }
   };
 
-
   setupWebRTC = async () => {
-    this.setState({ mediaError: undefined });
-    let stream: MediaStream | undefined;
-    let videoFailed = false;
+    if (window.dipkri.ourStream) {
+      // Already in the call — a second join would leak the first capture.
+      return;
+    }
+    // Pre-warm loudspeaker device lookup on user gesture (Join Video tap)
+    warmSpeakerLookup();
 
-    // Step 1: Try camera + mic together
+    let stream: MediaStream | undefined;
     try {
       stream = await navigator?.mediaDevices?.getUserMedia({
         audio: {
@@ -190,15 +215,8 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
           frameRate: { ideal: 30, max: 30 },
         },
       });
-    } catch (e: any) {
-      videoFailed = true;
-      const errName = e?.name || "";
-      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
-        this.setState({ mediaError: "Camera/Mic permission denied. Please allow access in browser settings and try again." });
-        return;
-      }
-      console.warn("Camera+Mic request failed, trying audio only:", errName, e?.message);
-      // Step 2: Fall back to audio-only
+    } catch (e) {
+      console.warn("Camera+Mic request failed, falling back to audio only:", e);
       try {
         stream = await navigator?.mediaDevices?.getUserMedia({
           audio: {
@@ -208,38 +226,26 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
           },
           video: false,
         });
-      } catch (err: any) {
-        const audioErrName = err?.name || "";
-        if (audioErrName === "NotAllowedError" || audioErrName === "PermissionDeniedError") {
-          this.setState({ mediaError: "Microphone permission denied. Please allow access in browser settings." });
-        } else if (audioErrName === "NotFoundError" || audioErrName === "DevicesNotFoundError") {
-          this.setState({ mediaError: "No microphone found. Please connect a mic and try again." });
-        } else {
-          this.setState({ mediaError: `Could not access microphone: ${err?.message || audioErrName}` });
-        }
-        console.warn("Audio-only request also failed:", err);
-        return;
+      } catch (err) {
+        console.warn("Microphone request also failed:", err);
       }
     }
 
-    if (!stream || stream.getTracks().length === 0) {
-      // getUserMedia returned nothing usable — don't join video chat
-      this.setState({ mediaError: "No media tracks available. Check your camera/microphone." });
+    if (!stream) {
+      window.alert(
+        "Camera and microphone are blocked. Allow access in the browser's site settings, then press Join again.",
+      );
       return;
     }
 
-    window.watchparty.ourStream = stream;
-    if (videoFailed) {
-      // Let user know they joined audio-only
-      this.setState({ mediaError: "📷 Camera not available — joined with audio only." });
-    }
+    window.dipkri.ourStream = stream;
     this.socket.emit("CMD:joinVideo");
     this.emitUserMute();
 
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream },
         }),
       );
@@ -248,14 +254,24 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     this.forceUpdate();
   };
 
-
   stopWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
     if (ourStream) {
       ourStream.getTracks().forEach((track) => track.stop());
     }
-    window.watchparty.ourStream = undefined;
+    window.dipkri.ourStream = undefined;
+    // Clear cached speaker deviceId so a future rejoin re-enumerates devices
+    // (the OS may have changed routing while the call was active).
+    resetSpeakerCache();
+    if (window.dipkri.remoteStreams) {
+      Object.keys(window.dipkri.remoteStreams).forEach((key) => {
+        const el = window.dipkri.videoRefs[key];
+        if (el) el.srcObject = null;
+        delete window.dipkri.remoteStreams![key];
+      });
+    }
+    this.retryAttempts.clear();
     Object.keys(videoPCs).forEach((key) => {
       try {
         videoPCs[key].close();
@@ -267,7 +283,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream: null },
         }),
       );
@@ -276,7 +292,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
   };
 
   toggleVideoWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     if (ourStream && ourStream.getVideoTracks()[0]) {
       const track = ourStream.getVideoTracks()[0];
       track.enabled = !track.enabled;
@@ -284,7 +300,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     const selfId = getOrCreateClientId();
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("watchparty-stream-update", {
+        new CustomEvent("dipkri-stream-update", {
           detail: { id: selfId, stream: ourStream },
         }),
       );
@@ -293,12 +309,12 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
   };
 
   getVideoWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     return Boolean(ourStream && ourStream.getVideoTracks()[0]?.enabled);
   };
 
   toggleAudioWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     if (ourStream && ourStream.getAudioTracks()[0]) {
       const track = ourStream.getAudioTracks()[0];
       track.enabled = !track.enabled;
@@ -308,7 +324,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
   };
 
   getAudioWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
+    const ourStream = window.dipkri.ourStream;
     return Boolean(
       ourStream &&
       ourStream.getAudioTracks()[0] &&
@@ -319,9 +335,9 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
   createPeerConnection = (id: string): RTCPeerConnection | undefined => {
     const selfId = getOrCreateClientId();
     if (id === selfId) return undefined;
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
+    const videoRefs = window.dipkri.videoRefs;
 
     const pc = new RTCPeerConnection({ iceServers: iceServers() });
     videoPCs[id] = pc;
@@ -343,13 +359,13 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
     };
 
     pc.ontrack = (event: RTCTrackEvent) => {
-      if (!window.watchparty.remoteStreams) {
-        window.watchparty.remoteStreams = {};
+      if (!window.dipkri.remoteStreams) {
+        window.dipkri.remoteStreams = {};
       }
-      let stream = window.watchparty.remoteStreams[id];
+      let stream = window.dipkri.remoteStreams[id];
       if (!stream) {
         stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream();
-        window.watchparty.remoteStreams[id] = stream;
+        window.dipkri.remoteStreams[id] = stream;
       }
       if (!stream.getTracks().includes(event.track)) {
         stream.addTrack(event.track);
@@ -364,7 +380,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("watchparty-stream-update", {
+          new CustomEvent("dipkri-stream-update", {
             detail: { id, stream },
           }),
         );
@@ -372,23 +388,40 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
       this.forceUpdate();
     };
 
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed") {
-        try {
-          pc.close();
-        } catch {}
-        delete videoPCs[id];
-        setTimeout(() => this.updateWebRTC(), 600);
+    // Adding a track after the first negotiation (e.g. camera enabled after an
+    // audio-only join) needs a fresh offer; without this the peer never sees video.
+    pc.onnegotiationneeded = async () => {
+      try {
+        if (!pc.currentRemoteDescription) return; // initial offer is sent by updateWebRTC
+        if (pc.signalingState !== "stable") return;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.sendSignal(id, { sdp: pc.localDescription });
+      } catch (err) {
+        console.warn("VideoChat renegotiation failed for", id, err);
       }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState !== "failed") return;
+      try {
+        pc.close();
+      } catch {}
+      delete videoPCs[id];
+      const attempt = (this.retryAttempts.get(id) || 0) + 1;
+      this.retryAttempts.set(id, attempt);
+      if (attempt > 4) return; // give up quietly rather than looping forever
+      const delay = Math.min(2000 * attempt, 15000);
+      setTimeout(() => this.updateWebRTC(), delay);
     };
 
     return pc;
   };
 
   updateWebRTC = () => {
-    const ourStream = window.watchparty.ourStream;
-    const videoPCs = window.watchparty.videoPCs;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoPCs = window.dipkri.videoPCs;
+    const videoRefs = window.dipkri.videoRefs;
     if (!ourStream) {
       return;
     }
@@ -403,8 +436,8 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
           value.close();
         } catch {}
         delete videoPCs[key];
-        if (window.watchparty.remoteStreams) {
-          delete window.watchparty.remoteStreams[key];
+        if (window.dipkri.remoteStreams) {
+          delete window.dipkri.remoteStreams[key];
         }
       }
     });
@@ -455,68 +488,20 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
   render() {
     const { participants, pictureMap, nameMap, tsMap, socket, owner } =
       this.props;
-    const { mediaError } = this.state;
-    const ourStream = window.watchparty.ourStream;
-    const videoRefs = window.watchparty.videoRefs;
+    const ourStream = window.dipkri.ourStream;
+    const videoRefs = window.dipkri.videoRefs;
     const selfId = getOrCreateClientId();
-    const isInfoMsg = mediaError?.startsWith("📷");
     return (
       <div
         style={{
-          display: this.props.hide ? "none" : "flex",
-          flexDirection: "column",
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: "10px",
+          padding: "8px",
           width: "100%",
           boxSizing: "border-box",
         }}
       >
-        {/* Media error / info banner */}
-        {mediaError && (
-          <div
-            style={{
-              margin: "8px 8px 4px",
-              padding: "8px 12px",
-              borderRadius: "10px",
-              fontSize: "12px",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              background: isInfoMsg
-                ? "rgba(99,102,241,0.15)"
-                : "rgba(239,68,68,0.15)",
-              border: `1px solid ${isInfoMsg ? "rgba(99,102,241,0.35)" : "rgba(239,68,68,0.35)"}`,
-              color: isInfoMsg ? "#a5b4fc" : "#f87171",
-            }}
-          >
-            <span style={{ flex: 1 }}>{mediaError}</span>
-            <button
-              onClick={() => this.setState({ mediaError: undefined })}
-              style={{
-                background: "none",
-                border: "none",
-                color: "inherit",
-                cursor: "pointer",
-                fontSize: "14px",
-                padding: "0 2px",
-                lineHeight: 1,
-              }}
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: "10px",
-            padding: "8px",
-            width: "100%",
-            boxSizing: "border-box",
-          }}
-        >
-
         {participants.map((p) => {
           const isSelf = p.id === selfId;
           const isUserInVideo = p.isVideoChat;
@@ -684,9 +669,9 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
                 ? Boolean(ourStream && this.getVideoWebRTC())
                 : Boolean(
                     isUserInVideo &&
-                    window.watchparty?.remoteStreams?.[p.id]?.getVideoTracks()?.length &&
-                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].enabled &&
-                    window.watchparty.remoteStreams[p.id].getVideoTracks()[0].readyState === "live",
+                    window.dipkri?.remoteStreams?.[p.id]?.getVideoTracks()?.length &&
+                    window.dipkri.remoteStreams[p.id].getVideoTracks()[0].enabled &&
+                    window.dipkri.remoteStreams[p.id].getVideoTracks()[0].readyState === "live",
                   )) ? (
                 <video
                   ref={(el) => {
@@ -694,7 +679,7 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
                       videoRefs[p.id] = el;
                       const targetStream = isSelf
                         ? ourStream
-                        : window.watchparty?.remoteStreams?.[p.id];
+                        : window.dipkri?.remoteStreams?.[p.id];
                       if (targetStream && el.srcObject !== targetStream) {
                         el.srcObject = targetStream;
                         el.play().catch(() => {});
@@ -761,7 +746,6 @@ export class VideoChat extends React.Component<VideoChatProps, { mediaError?: st
             </div>
           );
         })}
-        </div>
       </div>
     );
   }

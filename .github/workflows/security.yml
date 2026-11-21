@@ -1,0 +1,59 @@
+name: security
+
+on:
+  push:
+    branches: ["experiment/movie-stream", "sec/api-hardening", "main"]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secrets-and-lint:
+    name: secrets + security lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: secretlint (hardcoded credentials)
+        run: npx secretlint "**/*"
+      - name: eslint security rules
+        run: npx eslint "server/**/*.ts" --max-warnings=100
+      - name: knip (dead code & bloat audit)
+        run: npx knip --no-exit-code
+      - name: semgrep (SAST security scan)
+        run: npx semgrep --config auto
+
+  dependencies:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    # Known debt: 3 critical (protobufjs, websocket-driver) reachable only via
+    # firebase-admin / firebase. Reported, not blocking, until the upgrade is
+    # done on its own branch (needs a build + smoke test).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx audit-ci --critical
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3

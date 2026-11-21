@@ -25,3 +25,16 @@ yarn-error.log*
 
 .theia
 .eslintcache
+.oh-venv/
+.oh52/
+
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+*.aab
+*.patch
+
+desktop/node_modules/
+desktop/dist/

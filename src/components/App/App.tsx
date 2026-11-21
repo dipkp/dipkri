@@ -47,6 +47,7 @@ import { ComboBox } from "../ComboBox/ComboBox";
 import { SearchComponent } from "../SearchComponent/SearchComponent";
 import { Controls } from "../Controls/Controls";
 import { MovieModal } from "../MovieModal/MovieModal";
+import { AppDownloadModal } from "../AppDownloadModal/AppDownloadModal";
 import { SettingsModal } from "../Settings/SettingsModal";
 import { ErrorModal } from "../Modal/ErrorModal";
 import { PasswordModal } from "../Modal/PasswordModal";
@@ -57,6 +58,9 @@ import {
   isClientTranscodeSupported,
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
+import { withStreamKey, canStreamTorrents } from "../../utils/streamAuth";
+import { desktopRoomEnd } from "../../utils/desktopStream";
+import { buildLocalStreamUrl, getDesktopBridge } from "../../utils/desktopStream";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
 import { HTML } from "./HTML";
 import { YouTube } from "./YouTube";
@@ -96,7 +100,6 @@ import {
 } from "../Icons/CustomIcons";
 import {
   MobileFloatingReactions,
-  MobileTabBar,
 } from "../Mobile/MobileEnhancements";
 import { LiveCaptions } from "../LiveCaptions/LiveCaptions";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
@@ -111,19 +114,11 @@ declare global {
   interface Window {
     onYouTubeIframeAPIReady: any;
     YT: YT.JsApi;
-    watchparty: {
-      ourStream: MediaStream | undefined;
-      videoRefs: HTMLVideoElementDict;
-      videoPCs: PCDict;
-      remoteStreams?: { [key: string]: MediaStream };
-      webtorrent?: WebTorrent.Instance;
-      hls?: Hls;
-      dash?: MediaPlayerClass;
-    };
+    dipkri: DipkriWindow;
   }
 }
 
-window.watchparty = {
+window.dipkri = {
   ourStream: undefined,
   videoRefs: {},
   videoPCs: {},
@@ -166,6 +161,8 @@ interface AppState {
   total: number;
   speed: number;
   connections: number;
+  fileProgress: number;
+  videoDecodeIssue: boolean;
   fileSelection: {
     name: string;
     url: string;
@@ -180,8 +177,6 @@ interface AppState {
   isVBrowserLarge: boolean;
   nonPlayableMedia: boolean;
   currentTab: string;
-  isSubscribeModalOpen: boolean;
-  isVBrowserModalOpen: boolean;
   isScreenShareModalOpen: boolean;
   isFileShareModalOpen: boolean;
   isSubtitleModalOpen: boolean;
@@ -218,6 +213,8 @@ interface AppState {
   copiedLink: boolean;
   quickQueueUrl: string;
   isMovieModalOpen: boolean;
+  isAppDownloadModalOpen: boolean;
+  nonPlayableTorrentWeb: boolean;
 }
 
 const checkIsMobileDevice = () => {
@@ -270,7 +267,7 @@ export class App extends React.Component<AppProps, AppState> {
     tsMap: {},
     nameMap: {},
     pictureMap: {},
-    myName: window.localStorage.getItem("watchparty-username") ?? "",
+    myName: window.localStorage.getItem("dipkri-username") ?? "",
     myPicture: "",
     loading: true,
     scrollTimestamp: 0,
@@ -284,6 +281,8 @@ export class App extends React.Component<AppProps, AppState> {
     total: 0,
     speed: 0,
     connections: 0,
+    fileProgress: 0,
+    videoDecodeIssue: false,
     fileSelection: [],
     overlayMsg: "",
     isErrorAuth: false,
@@ -294,13 +293,13 @@ export class App extends React.Component<AppProps, AppState> {
     nonPlayableMedia: false,
     currentTab:
       new URLSearchParams(window.location.search).get("tab") ?? "chat",
-    isSubscribeModalOpen: false,
-    isVBrowserModalOpen: false,
     isScreenShareModalOpen: false,
     isFileShareModalOpen: false,
     isSubtitleModalOpen: false,
     isMultiSelectModalOpen: false,
     isMovieModalOpen: false,
+    isAppDownloadModalOpen: false,
+    nonPlayableTorrentWeb: false,
     roomLock: "",
     controller: "",
     roomId: "",
@@ -313,13 +312,13 @@ export class App extends React.Component<AppProps, AppState> {
       ? true
       : Boolean(
           Number(
-            window.localStorage.getItem("watchparty-showchatcolumn") ?? "1",
+            window.localStorage.getItem("dipkri-showchatcolumn") ?? "1",
           ),
         ),
     showPeopleColumn: false,
     // Boolean(
     //       Number(
-    //         window.localStorage.getItem('watchparty-showpeoplecolumn') ?? '0',
+    //         window.localStorage.getItem('dipkri-showpeoplecolumn') ?? '0',
     //       ),
     //     ),
     owner: undefined,
@@ -334,7 +333,7 @@ export class App extends React.Component<AppProps, AppState> {
     isLiveStream: false,
     settingsModalOpen: false,
     convertProgress: undefined,
-    convertEnabled: window.localStorage.getItem("watchparty-convert") === "1",
+    convertEnabled: window.localStorage.getItem("dipkri-convert") === "1",
     incomingReaction: null,
     audioBoost: getPlayerSettings().audioBoost || 100,
     copiedLink: false,
@@ -358,6 +357,9 @@ export class App extends React.Component<AppProps, AppState> {
   heartbeat: number | undefined = undefined;
   tsInterval: number | undefined = undefined;
   movieCurrentTime = 0;
+  // True while a remote seek is being applied; the iframe's echo must not be
+  // sent back as CMD:seek or the room ping-pongs forever.
+  isRemoteSyncing = false;
   movieStartAt = 0;
   movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
@@ -449,6 +451,16 @@ export class App extends React.Component<AppProps, AppState> {
     return 0;
   };
 
+  getDownloadPercent = () => {
+    if (this.state.fileProgress > 0) {
+      return Math.min(this.state.fileProgress * 100, 100);
+    }
+    if (this.state.total > 0) {
+      return Math.min((this.state.downloaded / this.state.total) * 100, 100);
+    }
+    return 0;
+  };
+
   handleBeforeUnload = () => {
     if (this.state.roomMedia && this.state.roomId) {
       const curTime = this.Player().getCurrentTime();
@@ -461,6 +473,23 @@ export class App extends React.Component<AppProps, AppState> {
         );
       }
     }
+  };
+
+  handleFirstInteraction = () => {
+    // Clicks before any media exists (home screen, modals) must not consume the
+    // unlocking gesture — otherwise the film starts muted with no way back.
+    if (!this.state.roomMedia) return;
+    try {
+      audioEnhancer.getAudioContext()?.resume();
+    } catch {}
+    // Unmute regardless of what testAutoplay() reported: some browsers mute the
+    // element even when the probe succeeds, which looks exactly like "no audio".
+    if (this.Player().isMuted()) {
+      this.localSetMute(false);
+    }
+    this.setState({ isAutoPlayable: true });
+    // Unlocked once: stop listening so a manual mute is never overridden.
+    document.removeEventListener("pointerdown", this.handleFirstInteraction, true);
   };
 
   handleVisibilityChange = () => {
@@ -530,6 +559,11 @@ export class App extends React.Component<AppProps, AppState> {
     window.addEventListener("beforeunload", this.handleBeforeUnload);
     window.addEventListener("pagehide", this.handleBeforeUnload);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    // Browsers block audio until a user gesture. Instead of a blocking overlay,
+    // unmute once on the first interaction anywhere on the page.
+    document.addEventListener("pointerdown", this.handleFirstInteraction, {
+      capture: true,
+    });
     window.addEventListener("message", this.handleMovieMessage);
 
     const canAutoplay = await testAutoplay();
@@ -566,6 +600,10 @@ export class App extends React.Component<AppProps, AppState> {
     }
     window.clearInterval(this.heartbeat);
     window.clearInterval(this.tsInterval);
+    window.clearInterval(this.progressUpdater);
+    try {
+      this.socket?.disconnect();
+    } catch {}
   }
 
   handleResize = () => {
@@ -622,9 +660,9 @@ export class App extends React.Component<AppProps, AppState> {
       },
     });
     this.socket = socket;
-    (window as any).watchparty = (window as any).watchparty || {};
-    (window as any).watchparty.socket = socket;
-    (window as any).watchparty.app = this;
+    (window as any).dipkri = (window as any).dipkri || {};
+    (window as any).dipkri.socket = socket;
+    (window as any).dipkri.app = this;
     socket.on("connect", async () => {
       this.setState({
         state: "connected",
@@ -639,34 +677,27 @@ export class App extends React.Component<AppProps, AppState> {
         this.context.user?.email?.split("@")[0];
       const customName =
         typeof window !== "undefined"
-          ? window.localStorage.getItem("watchparty-custom-name")
+          ? window.localStorage.getItem("dipkri-custom-name")
           : null;
       const initialName =
         customName || googleName || this.state.myName || (await generateName());
       this.updateName(initialName);
       this.loadSignInData(this.context.user);
       // Re-join video chat if we were in it before the reconnection
-      if (window.watchparty.ourStream) {
+      if (window.dipkri.ourStream) {
         socket.emit("CMD:joinVideo");
       }
     });
     socket.on("connect_error", async (err: any) => {
       console.warn("Socket connect_error (will retry):", err);
       if (err?.message === "Invalid namespace") {
-        // If room is missing on reconnect (e.g. server restarted), ask server to initialize it and reconnect smoothly
-        try {
-          const targetRoom = this.state.roomId?.replace(/^\//, "");
-          if (targetRoom) {
-            await fetch(serverPath + "/createRoom", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ roomId: targetRoom }),
-            });
-            this.socket?.connect();
-            return;
-          }
-        } catch {}
-        this.setState({ warningMessage: "Reconnecting to room..." });
+        // /createRoom ignores the roomId it is given, so the old "recreate and
+        // reconnect" path looped forever against a namespace that cannot come
+        // back (rooms are in memory). Say so and stop retrying.
+        this.setState({
+          overlayMsg: "This room is no longer active. Please create a new one.",
+        });
+        this.socket?.disconnect();
       } else if (err?.message === "password") {
         this.setState({ isErrorAuth: true });
       } else {
@@ -706,7 +737,11 @@ export class App extends React.Component<AppProps, AppState> {
       this.localPause();
     });
     socket.on("REC:seek", (data: number) => {
+      this.isRemoteSyncing = true;
       this.localSeek(data);
+      window.setTimeout(() => {
+        this.isRemoteSyncing = false;
+      }, 600);
     });
     socket.on("REC:playbackRate", (data: number) => {
       this.setState({ roomPlaybackRate: data });
@@ -819,7 +854,7 @@ export class App extends React.Component<AppProps, AppState> {
             const detectTorrentSubtitles = async () => {
               if (this.state.roomSubtitle || this.state.roomMedia !== currentMedia) return;
               const dataUrl = currentMedia.includes("/stream?")
-                ? currentMedia.replace("/stream?", "/data?")
+                ? (await withStreamKey(currentMedia.replace("/stream?", "/data?")))
                 : `${serverPath}/data?torrent=${encodeURIComponent(currentMedia)}`;
 
               for (let attempt = 0; attempt < 5; attempt++) {
@@ -995,36 +1030,70 @@ export class App extends React.Component<AppProps, AppState> {
           }
 
           // Clean up any lingering Hls/Dash instances from previous stream
-          if (window.watchparty?.hls) {
+          if (window.dipkri?.hls) {
             try {
-              window.watchparty.hls.destroy();
+              window.dipkri.hls.destroy();
             } catch {}
-            window.watchparty.hls = undefined;
+            window.dipkri.hls = undefined;
           }
-          if (window.watchparty?.dash) {
+          if (window.dipkri?.dash) {
             try {
-              window.watchparty.dash.destroy();
+              window.dipkri.dash.destroy();
             } catch {}
-            window.watchparty.dash = undefined;
+            window.dipkri.dash = undefined;
           }
 
           if (isMagnet(src) || src.includes("/stream?torrent=")) {
+            const bridge = getDesktopBridge();
+            const isApp = Boolean(bridge?.getSidecar);
+            const isAllowed = isApp || this.canStreamTorrent();
+
+            if (!isAllowed) {
+              // Non-admin visitor on web browser: suppress server torrent requests to maintain 0% server video load.
+              this.setLoadingFalse();
+              this.setState({
+                nonPlayableTorrentWeb: true,
+                isAppDownloadModalOpen: true,
+              });
+              return;
+            }
+            this.setState({ nonPlayableTorrentWeb: false });
+
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
-            const streamUrl = isMagnet(src)
+            let streamUrl = isMagnet(src)
               ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
               : (src.startsWith("/stream") ? `${serverPath}${src}` : src);
-            await this.Player().setSrcAndTime(streamUrl, time);
+
+            // Desktop app: the torrent runs on this machine, so the bytes come
+            // from 127.0.0.1 and the server only keeps the room in sync.
+            if (bridge?.getSidecar) {
+              try {
+                const sidecar = await bridge.getSidecar();
+                if (sidecar?.ready) {
+                  const local = buildLocalStreamUrl(src, sidecar);
+                  if (local) streamUrl = local;
+                }
+              } catch {}
+            }
+            await this.Player().setSrcAndTime(await withStreamKey(streamUrl), time);
+
+            // The player itself only knows "media error". Ask the API why, so a
+            // rate limit or a full disk is not shown as a silent stall.
+            const probe = this.HTMLInterface.getVideoEl();
+            if (probe) {
+              probe.addEventListener("error", () => void this.explainStreamFailure(streamUrl), { once: true });
+            }
           } else if (isDash(src)) {
             const Dash = await import("dashjs");
-            window.watchparty.dash = Dash.MediaPlayer().create();
-            window.watchparty.dash.on("streamInitialized", (_e: any) => {
+            window.dipkri.dash = Dash.MediaPlayer().create();
+            window.dipkri.dash.on("streamInitialized", (_e: any) => {
               const isLiveStream = this.Player().getDuration() >= Infinity;
               console.log("DASH stream initialized: isLive %s", isLiveStream);
               this.setState({
                 isLiveStream,
               });
             });
-            window.watchparty.dash.initialize(leftVideo, src);
+            window.dipkri.dash.initialize(leftVideo, src);
           } else if (isHls(src) && window.MediaSource) {
             // Prefer using hls.js if MediaSource Extensions are supported
             const Hls = (await import("hls.js")).default;
@@ -1038,7 +1107,7 @@ export class App extends React.Component<AppProps, AppState> {
                 enableWorker: true,
                 lowLatencyMode: true,
               });
-              window.watchparty.hls = hls;
+              window.dipkri.hls = hls;
 
               hls.on(Hls.Events.ERROR, (_e: any, hlsData: any) => {
                 if (hlsData.fatal) {
@@ -1054,7 +1123,7 @@ export class App extends React.Component<AppProps, AppState> {
                     default:
                       console.warn("[HLS] Fatal error, destroying instance:", hlsData);
                       hls.destroy();
-                      window.watchparty.hls = undefined;
+                      window.dipkri.hls = undefined;
                       if (leftVideo && leftVideo.canPlayType("application/vnd.apple.mpegurl")) {
                         leftVideo.src = src;
                       } else {
@@ -1088,7 +1157,7 @@ export class App extends React.Component<AppProps, AppState> {
               });
 
               hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-                window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+                window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
               });
 
               hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_: any, data: any) => {
@@ -1170,7 +1239,23 @@ export class App extends React.Component<AppProps, AppState> {
                   total: data.total,
                   speed: data.speed,
                   connections: data.connections,
+                  fileProgress:
+                    typeof data.fileProgress === "number" ? data.fileProgress : 0,
                 });
+
+                // A stream can have full metadata (duration, audio, subtitles)
+                // and still render black when the browser cannot decode its
+                // video codec (typically HEVC/x265 or 10-bit).
+                const mediaEl = this.HTMLInterface.getVideoEl();
+                if (mediaEl) {
+                  const stuck =
+                    mediaEl.duration > 0 &&
+                    mediaEl.currentTime > 1 &&
+                    mediaEl.videoWidth === 0;
+                  if (stuck !== this.state.videoDecodeIssue) {
+                    this.setState({ videoDecodeIssue: stuck });
+                  }
+                }
               } catch {
                 // ignore
               }
@@ -1291,15 +1376,20 @@ export class App extends React.Component<AppProps, AppState> {
         ) {
           const leader = this.getLeaderTime();
           const delta = leader - data[clientId];
-          // Set leader pbr to 1
           let pbr = 1;
-          // Add .01 pbr for each 100ms delay
+          // Symmetric drift correction with gentle nudging
           if (delta > 0.5) {
+            // Client is behind leader: gently speed up (max 1.1x)
             pbr += Number((delta / 10).toFixed(2));
             pbr = Math.min(pbr, 1.1);
+          } else if (delta < -0.5) {
+            // Client is ahead of leader: gently slow down (min 0.9x)
+            pbr += Number((delta / 10).toFixed(2));
+            pbr = Math.max(pbr, 0.9);
           }
-          // console.log(delta, pbr);
-          if (this.Player().getPlaybackRate() !== pbr) {
+          // Debounce rate changes to avoid audio pitch flutter (warble)
+          const currentPbr = this.Player().getPlaybackRate();
+          if (Math.abs(currentPbr - pbr) >= 0.02) {
             this.Player().setPlaybackRate(pbr);
           }
         }
@@ -1490,7 +1580,7 @@ export class App extends React.Component<AppProps, AppState> {
       const googleName = user.displayName || user.email?.split("@")[0];
       const customName =
         typeof window !== "undefined"
-          ? window.localStorage.getItem("watchparty-custom-name")
+          ? window.localStorage.getItem("dipkri-custom-name")
           : null;
       const activeName = customName || googleName;
       if (activeName) {
@@ -1521,6 +1611,15 @@ export class App extends React.Component<AppProps, AppState> {
             if (this.usingYoutube()) {
               console.log("requesting host data again after ytReady");
               this.socket.emit("CMD:askHost");
+            }
+          },
+          onError: (e: any) => {
+            const code = e?.data;
+            if (code === 101 || code === 150) {
+              this.setState({
+                overlayMsg:
+                  "This YouTube video blocks embedding. Open it on YouTube, or paste a different link.",
+              });
             }
           },
           onStateChange: (e) => {
@@ -1660,6 +1759,30 @@ export class App extends React.Component<AppProps, AppState> {
     this.transcoder = undefined;
     if (this.state.convertProgress !== undefined) {
       this.setState({ convertProgress: undefined });
+    }
+  };
+
+  // Maps the API's refusal (400/404/429/507) to a sentence the viewer can act on.
+  explainStreamFailure = async (streamUrl: string) => {
+    try {
+      const res = await fetch(streamUrl, { method: "HEAD", cache: "no-store" });
+      if (res.ok) return;
+
+      const message =
+        res.status === 401
+          ? "Please sign in with Google to watch this party."
+          : res.status === 429
+          ? "The server is busy right now — please try again in a minute."
+          : res.status === 507
+            ? "The server's storage is full, so this stream cannot start. Try another title or come back later."
+            : res.status === 404
+              ? "No playable video file was found in this torrent."
+              : res.status === 400
+                ? "This stream link is not valid."
+                : "";
+      if (message) this.setState({ overlayMsg: message });
+    } catch {
+      // offline / aborted: the player already shows its own error state
     }
   };
 
@@ -2446,6 +2569,11 @@ export class App extends React.Component<AppProps, AppState> {
           this.setState({ roomPaused: false });
         }
       } else if (evType === "seeked" && typeof curTime === "number") {
+        // A seek we applied from the host is not a user action.
+        if (this.isRemoteSyncing) {
+          this.isRemoteSyncing = false;
+          return;
+        }
         if (this.haveLock()) {
           this.socket.emit("CMD:seek", curTime);
         }
@@ -2455,6 +2583,31 @@ export class App extends React.Component<AppProps, AppState> {
 
   openMovieModal = () => {
     this.setState({ isMovieModalOpen: true });
+  };
+
+  pasteLinkFromClipboard = async () => {
+    // Reads the clipboard; if it holds a playable link, start it immediately.
+    // Otherwise focus the media input so the user can paste manually.
+    const focusSearch = () => {
+      const input = document.querySelector<HTMLInputElement>(
+        'input[placeholder*="Enter video file URL"]',
+      );
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    };
+    try {
+      const text = (await navigator.clipboard.readText())?.trim();
+      if (
+        text &&
+        (isHttp(text) || isMagnet(text) || text.startsWith("movie://"))
+      ) {
+        this.roomSetMedia(text);
+        return;
+      }
+    } catch {}
+    focusSearch();
   };
 
   closeMovieModal = () => {
@@ -2562,6 +2715,15 @@ export class App extends React.Component<AppProps, AppState> {
               await this.Player().playVideo();
             } catch {}
           }
+        }
+        // On Android Chrome, WebRTC shifts audio to earpiece — force back to
+        // the loudspeaker as soon as the user has already interacted with the
+        // page (required for setSinkId to succeed).
+        const video = this.HTMLInterface.getVideoEl();
+        if (video) {
+          import("../VideoChat/SpeakerHelper").then(({ ensureLoudspeaker }) =>
+            ensureLoudspeaker(video).catch(() => {}),
+          );
         }
       },
     );
@@ -2734,14 +2896,25 @@ export class App extends React.Component<AppProps, AppState> {
     this.localSetMute(!this.Player().isMuted());
   };
 
+  canStreamTorrent = (): boolean => {
+    return canStreamTorrents(this.context?.user?.email);
+  };
+
   roomSetMedia = (value: string) => {
     const resolved = resolveMediaUrl(value);
+    if (
+      (isMagnet(resolved) || resolved.includes("/stream?torrent=")) &&
+      !this.canStreamTorrent()
+    ) {
+      this.setState({ isAppDownloadModalOpen: true });
+      return;
+    }
     this.socket.emit("CMD:host", resolved);
   };
 
   setConvertEnabled = (convertEnabled: boolean) => {
     window.localStorage.setItem(
-      "watchparty-convert",
+      "dipkri-convert",
       convertEnabled ? "1" : "0",
     );
     this.setState({ convertEnabled });
@@ -2767,7 +2940,7 @@ export class App extends React.Component<AppProps, AppState> {
   updateName = (name: string) => {
     this.setState({ myName: name });
     this.socket.emit("CMD:name", name);
-    window.localStorage.setItem("watchparty-username", name);
+    window.localStorage.setItem("dipkri-username", name);
   };
 
   updatePicture = (url: string) => {
@@ -3059,47 +3232,6 @@ export class App extends React.Component<AppProps, AppState> {
             : undefined
         }
       >
-        {!this.state.isAutoPlayable && this.state.roomMedia && !this.state.roomPaused && !this.usingMovie() && this.Player().isMuted() && (
-          <div
-            className={styles.unmuteOverlay}
-            onClick={() => {
-              this.setState({ isAutoPlayable: true });
-              this.localSetMute(false);
-              this.localSetVolume(1);
-              this.Player().playVideo().catch(() => {});
-            }}
-            onTouchEnd={() => {
-              this.setState({ isAutoPlayable: true });
-              this.localSetMute(false);
-              this.localSetVolume(1);
-              this.Player().playVideo().catch(() => {});
-            }}
-          >
-            <div className={styles.unmuteCardWrapper}>
-              <div className={styles.unmutePulseRing} />
-              <div className={styles.unmutePulseRing2} />
-              <div className={styles.unmuteButtonPill}>
-                <div className={styles.unmuteIconBox}>
-                  <WPIconVolumeOff size={isMobileLayout ? 20 : 24} />
-                </div>
-                <div className={styles.unmuteContent}>
-                  <div className={styles.unmuteTitle}>
-                    <span>{isMobileLayout ? "Tap to Unmute" : "Click to Unmute"}</span>
-                    <div className={styles.unmuteSoundWaves}>
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                      <span className={styles.unmuteWaveBar} />
-                    </div>
-                  </div>
-                  <div className={styles.unmuteSubtext}>
-                    Click anywhere to enable audio
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {(this.state.loading ||
           !this.state.roomMedia ||
           this.state.nonPlayableMedia) &&
@@ -3138,14 +3270,75 @@ export class App extends React.Component<AppProps, AppState> {
                   )}
                 </div>
               )}
+              {!this.state.loading &&
+                !this.state.nonPlayableMedia &&
+                this.state.roomMedia &&
+                (isMagnet(this.state.roomMedia) ||
+                  this.state.roomMedia.includes("torrent=")) &&
+                !this.state.isLiveStream &&
+                !this.state.roomPaused &&
+                this.Player().getDuration() === 0 && (
+                  <div className={styles.bufferingOverlay}>
+                    <Loader size="md" color="indigo" />
+                    <div className={styles.bufferingTitle}>Buffering pieces…</div>
+                    <div className={styles.bufferingMeta}>
+                      {this.state.total
+                        ? `${this.getDownloadPercent().toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
+                        : "Connecting to peers…"}
+                    </div>
+                    <div className={styles.bufferingHint}>
+                      Slow torrent? Pick a stream with more seeders.
+                    </div>
+                    {this.state.total > 0 &&
+                      this.state.downloaded === 0 &&
+                      this.state.connections === 0 && (
+                        <div
+                          className={styles.bufferingHint}
+                          style={{ color: "#f87171", fontWeight: 700 }}
+                        >
+                          No seeders responding — pick another stream.
+                        </div>
+                      )}
+                  </div>
+                )}
+              {this.state.videoDecodeIssue && !this.state.roomPaused && (
+                <div className={styles.bufferingOverlay}>
+                  <div className={styles.bufferingTitle}>Video can't be decoded</div>
+                  <div className={styles.bufferingMeta}>
+                    Audio and subtitles work, but this codec (likely HEVC/x265 or
+                    10-bit) has no browser decoder.
+                  </div>
+                  <div className={styles.bufferingHint} style={{ color: "#f87171" }}>
+                    Pick a stream whose badge says x264 — those play everywhere.
+                  </div>
+                </div>
+              )}
               {!this.state.loading && !this.state.roomMedia && (
                 <Alert
                   color="yellow"
                   title="You're not watching anything!"
                 >
-                  {isMobileLayout
-                    ? "Tap Media tab below to select a video."
-                    : "Pick something to watch above."}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button
+                        size="compact-sm"
+                        color="indigo"
+                        leftSection={<WPIconPlay size={14} />}
+                        onClick={() => this.openMovieModal()}
+                      >
+                        Select Movie
+                      </Button>
+                      <Button
+                        size="compact-sm"
+                        variant="light"
+                        color="indigo"
+                        leftSection={<WPIconFile size={14} />}
+                        onClick={this.pasteLinkFromClipboard}
+                      >
+                        Paste Link
+                      </Button>
+                    </div>
+                  </div>
                 </Alert>
               )}
               {!this.state.loading &&
@@ -3304,9 +3497,7 @@ export class App extends React.Component<AppProps, AppState> {
             )}
           </div>
         )}
-        {this.playingVBrowser() &&
-        this.getVBrowserPass() &&
-        this.getVBrowserHost() ? (
+        {false ? (
           <VBrowser
             username={clientId}
             password={this.getVBrowserPass()}
@@ -3363,6 +3554,53 @@ export class App extends React.Component<AppProps, AppState> {
             onClick={this.roomTogglePlay}
           ></video>
         )}
+        {this.state.nonPlayableTorrentWeb && (
+          <div className={styles.torrentWebNoticeOverlay}>
+            <div className={styles.torrentWebNoticeBox}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🧲</div>
+              <h3
+                style={{
+                  margin: "0 0 8px 0",
+                  color: "#f8fafc",
+                  fontSize: 18,
+                  fontWeight: 700,
+                }}
+              >
+                P2P Swarm Stream Active
+              </h3>
+              <p
+                style={{
+                  margin: "0 0 16px 0",
+                  color: "#94a3b8",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: 380,
+                }}
+              >
+                High-speed torrent streaming runs directly on your device via P2P swarm.
+                Download the Dipkri Android APK or Desktop App for instant zero-buffer 4K playback.
+              </p>
+              <button
+                type="button"
+                onClick={() => this.setState({ isAppDownloadModalOpen: true })}
+                style={{
+                  background:
+                    "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "10px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 14px rgba(79, 70, 229, 0.4)",
+                }}
+              >
+                Get Dipkri App
+              </button>
+            </div>
+          </div>
+        )}
         {Boolean(
           this.state.total ||
           this.state.convertProgress !== undefined ||
@@ -3372,14 +3610,11 @@ export class App extends React.Component<AppProps, AppState> {
           <div className={styles.torrentStatsBadge}>
             <span style={{ fontSize: 13 }}>🧲</span>
             {[
-              this.state.total
-                ? Math.min(
-                    (this.state.downloaded / this.state.total) * 100,
-                    100,
-                  ).toFixed(1) + "%"
+              this.state.total || this.state.fileProgress > 0
+                ? `${this.getDownloadPercent().toFixed(1)}%`
                 : isMobileLayout
-                ? "Connecting..."
-                : "Connecting to peers...",
+                  ? "Connecting..."
+                  : "Connecting to peers...",
               Boolean(this.state.total) && formatSpeed(this.state.speed),
               Boolean(this.state.total) &&
                 (isMobileLayout ? `${this.state.connections}p` : `${this.state.connections} peers`),
@@ -3501,6 +3736,11 @@ export class App extends React.Component<AppProps, AppState> {
           onClose={this.closeMovieModal}
           onPlay={this.roomSetMedia}
           onQueue={this.roomPlaylistAdd}
+        />
+        <AppDownloadModal
+          isOpen={this.state.isAppDownloadModalOpen}
+          onClose={() => this.setState({ isAppDownloadModalOpen: false })}
+          mediaTitle={this.state.detectedMediaName || this.state.roomMedia}
         />
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>
@@ -3844,7 +4084,7 @@ export class App extends React.Component<AppProps, AppState> {
                     </div>
                     {playlist.length === 0 ? (
                       <div className={styles.emptyQueueNotice}>
-                        No videos in queue. Enter a link above to add items!
+                        Queue is empty
                       </div>
                     ) : (
                       <div className={styles.queueList}>
@@ -4215,7 +4455,7 @@ export class App extends React.Component<AppProps, AppState> {
                             unreadCount: newVal ? 0 : this.state.unreadCount,
                           });
                           window.localStorage.setItem(
-                            "watchparty-showchatcolumn",
+                            "dipkri-showchatcolumn",
                             Number(newVal).toString(),
                           );
                         }}

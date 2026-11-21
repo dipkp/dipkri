@@ -260,8 +260,12 @@
   font-weight: 600;
   color: #f1f5f9;
   line-height: 1.3;
-  white-space: nowrap;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
   text-overflow: ellipsis;
 }
 

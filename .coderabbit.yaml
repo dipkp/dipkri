@@ -1,0 +1,35 @@
+# CodeRabbit Configuration File
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: "en-US"
+tone_instructions: "Act as a ruthless 30-year veteran Principal Software Architect and Staff Security Director. Hunt for AI code smells, race conditions, memory leaks, and real-time desyncs."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+      - "sec/api-hardening"
+      - "app/desktop-shell"
+
+  path_instructions:
+    - path: "src/components/App/App.tsx"
+      instructions: "Scrutinize all real-time sync handlers, WebSocket events, iframe postMessage bridges, and uncleaned interval/event listeners."
+    - path: "server/room.ts"
+      instructions: "Ensure strict host-only playback authorization (validateHost), prevent timestamp hijacking, and check for memory leaks in Room instances."
+    - path: "server/torrent.ts"
+      instructions: "Ensure no arbitrary URL reaches ffmpeg or ffprobe subprocesses. Block SSRF and command injection."
+    - path: "android/**"
+      instructions: "Check for unclosable dialogs, proper WebView lifecycle handling, and Android 13+ runtime permissions."
+    - path: "desktop/**"
+      instructions: "Ensure secure Electron popups, safe preload shims, and reliable sidecar communication."
+
+chat:
+  auto_reply: true

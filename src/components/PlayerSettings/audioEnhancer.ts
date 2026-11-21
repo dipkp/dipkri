@@ -1,5 +1,6 @@
 import { DualAudioMode, getPlayerSettings } from "./playerSettings";
 import { serverPath } from "../../utils/utils";
+import { stripWebsiteWatermarks } from "../../utils/regex";
 
 const LANG_MAP: Record<string, string> = {
   hin: "Hindi",
@@ -68,10 +69,7 @@ export const formatAudioLanguageLabel = (
   rawLang?: string,
   index: number = 0,
 ): string => {
-  let cleanRaw = (rawLabel || "").trim();
-  cleanRaw = cleanRaw.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
-  cleanRaw = cleanRaw.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital|www)\b\s*[-_–—:]*\s*/gi, "");
-  cleanRaw = cleanRaw.replace(/^[-–—:\s]+|[-–—:\s]+$/g, "").trim();
+  let cleanRaw = stripWebsiteWatermarks(rawLabel || "").replace(/^[-–—:\s]+|[-–—:\s]+$/g, "").trim();
 
   const normLang = (rawLang || "").toLowerCase().trim();
   const normLabel = cleanRaw.toLowerCase();
@@ -539,7 +537,7 @@ class AudioEnhancerManager {
     }
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+      window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
     }
   }
 
@@ -567,7 +565,7 @@ class AudioEnhancerManager {
           this.detectedSubtitleTracks = data.subtitleTracks;
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("watchparty-subtitles-updated", { detail: data.subtitleTracks })
+              new CustomEvent("dipkri-subtitles-updated", { detail: data.subtitleTracks })
             );
           }
         }
@@ -600,7 +598,7 @@ class AudioEnhancerManager {
           }
 
           if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+            window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
           }
         }
       }
@@ -747,8 +745,8 @@ class AudioEnhancerManager {
     }
     if (
       typeof window !== "undefined" &&
-      window.watchparty?.hls?.audioTracks &&
-      window.watchparty.hls.audioTracks.length > 1
+      window.dipkri?.hls?.audioTracks &&
+      window.dipkri.hls.audioTracks.length > 1
     ) {
       return true;
     }
@@ -797,12 +795,12 @@ class AudioEnhancerManager {
     // 2. HLS.js audio tracks
     if (
       typeof window !== "undefined" &&
-      window.watchparty?.hls?.audioTracks &&
-      window.watchparty.hls.audioTracks.length > 0
+      window.dipkri?.hls?.audioTracks &&
+      window.dipkri.hls.audioTracks.length > 0
     ) {
-      const hlsTracks = window.watchparty.hls.audioTracks;
-      const currentTrack = window.watchparty.hls.audioTrack;
-      hlsTracks.forEach((t, idx) => {
+      const hlsTracks = window.dipkri.hls.audioTracks;
+      const currentTrack = window.dipkri.hls.audioTrack;
+      hlsTracks.forEach((t: any, idx: number) => {
         tracks.push({
           id: idx,
           label: formatAudioLanguageLabel(t.name, t.lang, idx),
@@ -858,12 +856,12 @@ class AudioEnhancerManager {
     }
 
     // 2. HLS.js audio track
-    if (typeof window !== "undefined" && window.watchparty?.hls) {
+    if (typeof window !== "undefined" && window.dipkri?.hls) {
       if (
-        window.watchparty.hls.audioTracks &&
-        window.watchparty.hls.audioTracks.length > 0
+        window.dipkri.hls.audioTracks &&
+        window.dipkri.hls.audioTracks.length > 0
       ) {
-        window.watchparty.hls.audioTrack = index;
+        window.dipkri.hls.audioTrack = index;
         nativeHandled = true;
       }
     }
@@ -882,7 +880,7 @@ class AudioEnhancerManager {
     }
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("watchparty-audio-tracks-updated"));
+      window.dispatchEvent(new CustomEvent("dipkri-audio-tracks-updated"));
     }
   }
 
@@ -918,12 +916,12 @@ class AudioEnhancerManager {
 
     if (!this.auxAudio) {
       this.auxAudio = document.createElement("audio");
-      this.auxAudio.id = "watchpartyAuxAudio";
+      this.auxAudio.id = "dipkriAuxAudio";
       this.auxAudio.style.display = "none";
       this.auxAudio.preload = "auto";
 
       this.auxAudio.onerror = (e) => {
-        console.warn("[WatchParty AudioTrack] Aux audio error", e);
+        console.warn("[dipkri AudioTrack] Aux audio error", e);
         if (el && this.selectedTrackIndex === 0 && !this.requiresTranscoding) el.muted = false;
       };
 
@@ -1114,5 +1112,5 @@ class AudioEnhancerManager {
 
 export const audioEnhancer = new AudioEnhancerManager();
 if (typeof window !== "undefined") {
-  (window as any).watchpartyAudioEnhancer = audioEnhancer;
+  (window as any).dipkriAudioEnhancer = audioEnhancer;
 }

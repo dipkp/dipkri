@@ -121,6 +121,8 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
     ),
     isShowingSubtitles: this.props.getSubtitleMode() === "showing",
     selectedLanguage: "ALL",
+    season: 1,
+    episode: 1,
     showUrlInput: !!this.props.roomSubtitle,
   };
 
@@ -190,16 +192,42 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
     if (!this.state.titleQuery.trim()) return;
     this.setState({ loading: true, hasSearched: true, selectedLanguage: "ALL" });
     try {
-      const resp = await fetch(
-        serverPath +
-          "/searchSubtitles?title=" +
-          encodeURIComponent(this.state.titleQuery.trim()),
-      );
-      const json = await resp.json();
-      this.setState({
-        searchResults: Array.isArray(json) ? json : [],
-        loading: false,
+      const params = new URLSearchParams({
+        title: this.state.titleQuery.trim(),
+        lang: this.state.selectedLanguage === "ALL" ? "all" : this.state.selectedLanguage.toLowerCase(),
       });
+      if (this.state.season > 0 && this.state.episode > 0) {
+        params.set("season", String(this.state.season));
+        params.set("episode", String(this.state.episode));
+      }
+      const resp = await fetch(serverPath + "/searchSubtitles?" + params.toString());
+      const json = await resp.json();
+      const list: SubtitleResult[] = Array.isArray(json) ? json : [];
+
+      // Dedupe + prefer releases that name the requested episode.
+      const seen = new Set<string>();
+      const unique = list.filter((r) => {
+        const key = String(r.id || r.attributes?.files?.[0]?.file_id || r.attributes?.release || "");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const s = this.state.season;
+      const e = this.state.episode;
+      const epPattern = new RegExp(
+        `(s0?${s}[\s._-]*e0?${e}\b|\b${s}x0?${e}\b|episode[\s._-]*0?${e}\b)`,
+        "i",
+      );
+      unique.sort((a, b) => {
+        const aName = a.attributes?.release || a.attributes?.files?.[0]?.file_name || "";
+        const bName = b.attributes?.release || b.attributes?.files?.[0]?.file_name || "";
+        const aMatch = epPattern.test(aName) ? 1 : 0;
+        const bMatch = epPattern.test(bName) ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
+        return 0;
+      });
+
+      this.setState({ searchResults: unique, loading: false });
     } catch (e) {
       console.warn("Subtitle search by title error:", e);
       this.setState({ searchResults: [], loading: false });
@@ -382,6 +410,30 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
                     this.searchByTitle();
                   }
                 }}
+                disabled={!canControl}
+              />
+              <TextInput
+                type="number"
+                aria-label="Season"
+                title="Season"
+                style={{ width: 62 }}
+                placeholder="S"
+                value={String(this.state.season)}
+                onChange={(e) =>
+                  this.setState({ season: Math.max(0, Number(e.target.value) || 0) })
+                }
+                disabled={!canControl}
+              />
+              <TextInput
+                type="number"
+                aria-label="Episode"
+                title="Episode"
+                style={{ width: 62 }}
+                placeholder="E"
+                value={String(this.state.episode)}
+                onChange={(e) =>
+                  this.setState({ episode: Math.max(0, Number(e.target.value) || 0) })
+                }
                 disabled={!canControl}
               />
               <Button

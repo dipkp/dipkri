@@ -4,6 +4,16 @@ import express, { type Response } from "express";
 import bodyParser from "body-parser";
 import compression from "compression";
 import cors from "cors";
+import {
+  apiErrorHandler,
+  corsOrigin,
+  isMagnet,
+  rateLimit,
+  RATE_LIMITS,
+  securityHeaders,
+  streamKeyGuard,
+  mintStreamKey,
+} from "./security.ts";
 import https from "node:https";
 import http from "node:http";
 import { Server } from "socket.io";
@@ -16,7 +26,7 @@ import {
   getIsSubscriberByUid,
   stripe,
 } from "./utils/stripe.ts";
-import { deleteUser, validateUserToken } from "./utils/firebase.ts";
+import { deleteUser, validateUserToken, verifyIdTokenOnly } from "./utils/firebase.ts";
 import path from "node:path";
 import { getStartOfDay } from "./utils/time.ts";
 import { getSessionLimitSeconds } from "./vm/utils.ts";
@@ -132,7 +142,11 @@ if (process.env.NODE_ENV === "development") {
   }
 }
 
-app.use(cors());
+app.set("trust proxy", "loopback"); // real client IP comes from our own nginx
+app.disable("x-powered-by");
+app.use(securityHeaders);
+app.use(cors({ origin: corsOrigin, methods: ["GET", "POST", "OPTIONS"] }));
+app.use(rateLimit(RATE_LIMITS.global));
 app.use(bodyParser.json());
 app.use(bodyParser.raw({ type: "text/plain", limit: 1000000 }));
 app.use("/api/movies", movieRouter);
@@ -141,8 +155,32 @@ app.get("/ping", (_req, res) => {
   res.json("pong");
 });
 
-// In-memory fallback cache for subtitles when Redis is not available
+// In-memory fallback cache for subtitles when Redis is not available.
+// Bounded: every entry can be ~1 MB, and the box only has 1 GB of RAM.
+const SUBTITLE_CACHE_MAX = Number(process.env.SUBTITLE_CACHE_MAX || 150);
 const memorySubtitleCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
+const roomHosts = new Map<string, string>();
+const MAX_ROOMS = Number(process.env.MAX_ROOMS || 200);
+
+function cacheSubtitle(hash: string, buffer: Buffer, ttlMs: number): void {
+  memorySubtitleCache.delete(hash); // re-insert so Map order stays LRU-ish
+  memorySubtitleCache.set(hash, { buffer, expiresAt: Date.now() + ttlMs });
+  while (memorySubtitleCache.size > SUBTITLE_CACHE_MAX) {
+    const oldest = memorySubtitleCache.keys().next().value;
+    if (oldest === undefined) break;
+    memorySubtitleCache.delete(oldest);
+  }
+}
+
+function readSubtitle(hash: string): Buffer | undefined {
+  const cached = memorySubtitleCache.get(hash);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    memorySubtitleCache.delete(hash);
+    return undefined;
+  }
+  return cached.buffer;
+}
 
 // Data's already compressed so go before the compression middleware
 app.get("/subtitle/:hash", async (req, res) => {
@@ -150,10 +188,7 @@ app.get("/subtitle/:hash", async (req, res) => {
   const key = "subtitle:" + hash;
   let buf = await redis?.getBuffer(key);
   if (!buf) {
-    const cached = memorySubtitleCache.get(hash);
-    if (cached && cached.expiresAt > Date.now()) {
-      buf = cached.buffer;
-    }
+    buf = readSubtitle(hash);
   }
   if (!buf) {
     res.status(404).end("not found");
@@ -183,10 +218,7 @@ app.post("/subtitle", async (req, res) => {
   if (redis) {
     await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
   } else {
-    memorySubtitleCache.set(hash, {
-      buffer: gzipData,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    });
+    cacheSubtitle(hash, gzipData, 24 * 60 * 60 * 1000);
   }
   redisCount("subUploads");
   res.json({ hash });
@@ -249,10 +281,7 @@ app.get("/downloadSubtitles", async (req, res) => {
     if (redis) {
       await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
     } else {
-      memorySubtitleCache.set(hash, {
-        buffer: gzipData,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      });
+      cacheSubtitle(hash, gzipData, 24 * 60 * 60 * 1000);
     }
 
     redisCount("subDownloadsOS");
@@ -273,6 +302,9 @@ app.get("/searchSubtitles", async (req, res) => {
         ? String(req.query.query).trim()
         : "";
     const url = req.query.url ? String(req.query.url).trim() : "";
+    const seasonNum = Number(req.query.season) || 0;
+    const episodeNum = Number(req.query.episode) || 0;
+    const hasEpisode = seasonNum > 0 && episodeNum > 0;
     const reqLang = req.query.lang ? String(req.query.lang).trim() : "en";
     const subLangs = reqLang === "all" ? "en,hi,es" : reqLang === "hi" ? "hi,en" : reqLang;
 
@@ -319,7 +351,12 @@ app.get("/searchSubtitles", async (req, res) => {
           let hash = computeOpenSubtitlesHash(start, end, size);
           subUrl = `https://api.opensubtitles.com/api/v1/subtitles?moviehash=${hash}&languages=${encodeURIComponent(subLangs)}`;
         } else if (title) {
-          subUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=${encodeURIComponent(subLangs)}`;
+          subUrl =
+            `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}` +
+            `&languages=${encodeURIComponent(subLangs)}` +
+            (hasEpisode
+              ? `&season_number=${seasonNum}&episode_number=${episodeNum}`
+              : "");
         }
         if (subUrl) {
           const response = await axios.get(subUrl, {
@@ -371,7 +408,8 @@ app.get("/searchSubtitles", async (req, res) => {
       try {
         let cleanTitle = title.replace(/\.(mp4|mkv|avi|webm|mov|flv|ts)$/i, "");
         // Strip pirate sites, domains, release group watermarks e.g. www.1TamilMV.capital, TamilBlasters, etc.
-        cleanTitle = cleanTitle.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
+        // eslint-disable-next-line security/detect-unsafe-regex -- bounded: label <=63 chars, <=4 labels
+        cleanTitle = cleanTitle.replace(/^(?:\[[^\]]{1,100}\]|\([^\)]{1,100}\)|(?:www\.)?[a-z0-9-]{1,63}(?:\.[a-z]{2,8}){1,4})\s*[-_–—:]*\s*/gi, "");
         cleanTitle = cleanTitle.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
         cleanTitle = cleanTitle.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -380,17 +418,20 @@ app.get("/searchSubtitles", async (req, res) => {
           cleanTitle = cleanTitle.slice(0, yearMatch.index + yearMatch[0].length).trim();
         }
 
-        const movieSearch = await axios.get(
-          `https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(cleanTitle)}.json`,
-          { timeout: 5000 }
-        );
-        imdbId = movieSearch.data?.metas?.[0]?.imdb_id || movieSearch.data?.metas?.[0]?.id || "";
-        if (!imdbId) {
-          const seriesSearch = await axios.get(
-            `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(cleanTitle)}.json`,
-            { timeout: 5000 }
-          );
-          imdbId = seriesSearch.data?.metas?.[0]?.imdb_id || seriesSearch.data?.metas?.[0]?.id || "";
+        // Episode requests must resolve a *series* id; searching movies first
+        // returns the film with the same name and every subtitle lookup misses.
+        const catalogOrder = hasEpisode ? ["series", "movie"] : ["movie", "series"];
+        for (const kind of catalogOrder) {
+          if (imdbId) break;
+          try {
+            const found = await axios.get(
+              `https://v3-cinemeta.strem.io/catalog/${kind}/top/search=${encodeURIComponent(cleanTitle)}.json`,
+              { timeout: 5000 }
+            );
+            imdbId = found.data?.metas?.[0]?.imdb_id || found.data?.metas?.[0]?.id || "";
+          } catch (err: any) {
+            console.warn(`Cinemeta ${kind} lookup error:`, err.message);
+          }
         }
       } catch (err: any) {
         console.warn("Cinemeta lookup error:", err.message);
@@ -398,10 +439,10 @@ app.get("/searchSubtitles", async (req, res) => {
 
       if (imdbId) {
         try {
-          const subsResp = await axios.get(
-            `https://opensubtitles-v3.strem.io/subtitles/movie/${imdbId}.json`,
-            { timeout: 7000 }
-          );
+          const subsUrl = hasEpisode
+            ? `https://opensubtitles-v3.strem.io/subtitles/series/${imdbId}:${seasonNum}:${episodeNum}.json`
+            : `https://opensubtitles-v3.strem.io/subtitles/movie/${imdbId}.json`;
+          const subsResp = await axios.get(subsUrl, { timeout: 7000 });
           const list = subsResp.data?.subtitles || [];
           if (Array.isArray(list) && list.length > 0) {
             const sortedList = [...list].sort((a: any, b: any) => {
@@ -510,10 +551,34 @@ app.get("/youtubePlaylist/:playlistId", async (req, res) => {
   }
 });
 
-app.post("/createRoom", async (req, res) => {
+// Socket.IO has no public "remove namespace" API. Keep the private access in
+// one guarded place so an upgrade fails soft instead of throwing mid-request.
+function dropNamespace(key: string): void {
+  try {
+    const nsps = (io as any)._nsps;
+    if (nsps && typeof nsps.delete === "function") nsps.delete(key);
+  } catch (e) {
+    console.warn("[namespace] could not drop", key, (e as Error)?.message);
+  }
+}
+
+app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
   const genName = () => "/" + makeRoomName(config.SHARD);
   let name = genName();
   console.log("createRoom: ", name);
+
+  // Validate before allocating: a Room starts a 1 s interval and a socket.io
+  // namespace, so rejecting after construction leaked one per 401/503.
+  const decodedEarly = await validateUserToken(req.body?.uid, req.body?.token);
+  if (config.FIREBASE_ADMIN_SDK_CONFIG && !decodedEarly) {
+    res.status(401).json({ error: "Please sign in to start a party." });
+    return;
+  }
+  if (rooms.size >= MAX_ROOMS) {
+    res.status(503).json({ error: "Server is at capacity, please try again in a minute." });
+    return;
+  }
+
   const newRoom = new Room(io, name);
   if (postgres) {
     const now = new Date();
@@ -529,8 +594,9 @@ app.post("/createRoom", async (req, res) => {
       throw e;
     }
   }
-  const decoded = await validateUserToken(req.body?.uid, req.body?.token);
+  const decoded = decodedEarly;
   newRoom.creator = decoded?.email;
+  newRoom.creatorUid = decoded?.uid;
   const preload = (req.body?.video || "").slice(0, 20000);
   if (preload) {
     redisCount("createRoomPreload");
@@ -544,8 +610,10 @@ app.post("/createRoom", async (req, res) => {
       newRoom.playlistAdd(null, item);
     }
   }
+  const hostToken = crypto.randomBytes(24).toString("hex");
   rooms.set(name, newRoom);
-  res.json({ name });
+  roomHosts.set(name, hostToken);
+  res.json({ name, hostToken });
 });
 
 app.post("/terminateRoom", async (req, res) => {
@@ -557,6 +625,14 @@ app.post("/terminateRoom", async (req, res) => {
   const cleanId = String(roomId).replace(/^\//, "");
   const key = "/" + cleanId;
   const room = rooms.get(key);
+
+  // Only the host that created the room may end it.
+  const expectedHost = roomHosts.get(key);
+  const providedHost = String(req.body?.hostToken || "");
+  if (room && expectedHost && providedHost !== expectedHost) {
+    res.status(403).json({ error: "only the host can terminate this room" });
+    return;
+  }
   if (room) {
     try {
       console.log("[TERMINATE_ROOM] Terminating room %s", key);
@@ -569,7 +645,8 @@ app.post("/terminateRoom", async (req, res) => {
       } catch {}
       room.destroy();
       rooms.delete(key);
-      io._nsps.delete(key);
+      roomHosts.delete(key);
+      dropNamespace(key);
       if (postgres) {
         await postgres.query(`DELETE FROM room WHERE "roomId" = $1`, [key]).catch(() => {});
       }
@@ -677,16 +754,7 @@ app.get("/metadata", async (req, res) => {
   let isSubscriber = await getIsSubscriberByUid(decoded?.uid);
   // Has the user ever been a subscriber?
   // const customer = await getCustomerByUid(decoded.uid);
-  let isFreePoolFull = false;
-  try {
-    isFreePoolFull = (
-      await axios.get(
-        "http://localhost:" + config.VMWORKER_PORT + "/isFreePoolFull",
-      )
-    ).data.isFull;
-  } catch (e: any) {
-    console.warn("[WARNING]: free pool check failed: %s", e.code);
-  }
+  const isFreePoolFull = false;
   const beta =
     decoded?.email != null &&
     Boolean(config.BETA_USER_EMAILS.split(",").includes(decoded?.email));
@@ -710,7 +778,128 @@ app.get("/metadata", async (req, res) => {
   });
 });
 
-// Direct torrent streaming endpoints for BitTorrent magnet links
+// Identity for the stream itself. Off until a Firebase admin key exists, so
+// nothing changes for viewers in the meantime.
+// Adding the admin key must not lock out guests on its own: enforcement is a
+// deliberate flip (SEC_STREAM_AUTH=on) after the guest story is decided.
+const STREAM_AUTH_CONFIGURED = Boolean(config.FIREBASE_ADMIN_SDK_CONFIG);
+const STREAM_AUTH_ON = STREAM_AUTH_CONFIGURED && process.env.SEC_STREAM_AUTH === "on";
+
+function isEmailAdmin(email?: string): boolean {
+  if (!email) return false;
+  const adminList = (config.ADMIN_USER_EMAILS || "")
+    .split(",")
+    .map((s: string) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (adminList.length === 0) return false;
+  return adminList.includes(email.trim().toLowerCase());
+}
+
+app.post("/api/user-role", async (req, res) => {
+  const token = String(req.body?.token || "");
+  const decoded = await verifyIdTokenOnly(token);
+  const email = decoded?.email;
+  const isAdmin = isEmailAdmin(email);
+  res.json({ isAdmin, email: email || null });
+});
+
+app.get("/download/android", (req, res) => {
+  const candidates = [
+    path.resolve(__dirname, "../android/app/build/outputs/apk/debug/app-debug.apk"),
+    path.resolve(process.cwd(), "android/app/build/outputs/apk/debug/app-debug.apk"),
+    path.resolve(__dirname, "../public/downloads/dipkri.apk"),
+    path.resolve(process.cwd(), "public/downloads/dipkri.apk"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      return res.download(candidate, "Dipkri-WatchParty.apk");
+    }
+  }
+
+  res.status(404).send(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:40px;text-align:center;">
+    <h2>Dipkri Android APK</h2>
+    <p>The Android APK build file is being prepared. Run <code>cd android && ./gradlew assembleDebug</code> to generate the APK.</p>
+    </body></html>`
+  );
+});
+
+app.get("/download/desktop", (req, res) => {
+  const candidates = [
+    path.resolve(__dirname, "../desktop/dist/Dipkri-Setup.exe"),
+    path.resolve(process.cwd(), "desktop/dist/Dipkri-Setup.exe"),
+    path.resolve(__dirname, "../public/downloads/dipkri-desktop.exe"),
+    path.resolve(process.cwd(), "public/downloads/dipkri-desktop.exe"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return res.download(candidate, "Dipkri-Desktop.exe");
+    }
+  }
+
+  res.status(404).send(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:40px;text-align:center;">
+    <h2>Dipkri Desktop App</h2>
+    <p>The Desktop installer is being packaged. Run <code>npm run dist:desktop</code> inside the desktop folder to build the installer.</p>
+    </body></html>`
+  );
+});
+
+app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
+  const isLocalhost = req.ip === "127.0.0.1" || req.ip === "::1" || req.ip === "::ffff:127.0.0.1";
+  const token = String(req.body?.token || "");
+  const decoded = await verifyIdTokenOnly(token);
+  const userEmail = decoded?.email;
+  const userIsAdmin = isEmailAdmin(userEmail);
+
+  // If user is admin or request is from local sidecar on 127.0.0.1
+  if (userIsAdmin || isLocalhost) {
+    const uid = decoded?.uid || "admin";
+    res.json({ key: mintStreamKey(uid), required: true, configured: true, isAdmin: true, allowed: true });
+    return;
+  }
+
+  // If ADMIN_USER_EMAILS is configured and user is NOT an admin, restrict server torrent streaming
+  if (config.ADMIN_USER_EMAILS) {
+    res.status(403).json({
+      error: "Web torrent streaming is restricted to admin personal use. Please use Dipkri Android or Desktop app for direct P2P streaming.",
+      key: "",
+      required: true,
+      configured: true,
+      allowed: false,
+      isAdmin: false,
+    });
+    return;
+  }
+
+  if (!STREAM_AUTH_CONFIGURED) {
+    res.json({ key: "", required: false, configured: false, allowed: true });
+    return;
+  }
+  if (!STREAM_AUTH_ON) {
+    res.json({ key: "", required: false, configured: true, allowed: true });
+    return;
+  }
+  if (!decoded) {
+    res.status(401).json({ error: "sign in required" });
+    return;
+  }
+  res.json({ key: mintStreamKey(decoded.uid), required: true, configured: true, allowed: true });
+});
+
+app.use(
+  ["/data", "/stream", "/streamAudio", "/streamInfo", "/streamSubtitle"],
+  streamKeyGuard(STREAM_AUTH_ON),
+);
+
+// Direct torrent streaming endpoints for BitTorrent magnet links.
+// A player issues many range requests, so these get their own, higher budget.
+app.use(["/data", "/stream", "/streamAudio", "/streamInfo", "/streamSubtitle"],
+  rateLimit(RATE_LIMITS.stream));
+
 app.get("/data", handleTorrentData);
 app.get("/stream", handleTorrentStream);
 app.get("/progress", handleTorrentProgress);
@@ -1031,7 +1220,7 @@ async function saveRooms() {
         rooms.delete(key);
         saveCount += 1;
         // Unregister the namespace to avoid dupes on reload
-        io._nsps.delete(key);
+        dropNamespace(key);
       } else if (room.roster.length) {
         room.lastUpdateTime = new Date();
         await room.saveRoom();
@@ -1167,3 +1356,37 @@ function computeOpenSubtitlesHash(first: Buffer, last: Buffer, size: number) {
     }
   }
 }
+
+app.use(apiErrorHandler);
+
+// A deploy or `pm2 restart` kills every in-memory room. Say so before leaving
+// instead of dropping sockets with no explanation.
+let shuttingDown = false;
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal}: closing ${rooms.size} room(s)`);
+
+  for (const [key, room] of rooms) {
+    try {
+      io.of(key).emit("REC:chat", {
+        system: true,
+        text: "The server is restarting. The party will be back in a few seconds.",
+      });
+      io.of(key).disconnectSockets(true);
+    } catch (e) {
+      // a broken namespace must not block the shutdown
+    }
+    try {
+      room.destroy();
+    } catch (e) {}
+  }
+  rooms.clear();
+  roomHosts.clear();
+
+  setTimeout(() => process.exit(0), 900);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));

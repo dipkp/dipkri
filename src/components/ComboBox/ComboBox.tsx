@@ -214,9 +214,9 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
     };
     const hasInput = Boolean(this.state.inputMedia && this.state.inputMedia.trim());
     return (
-      <div className="watchparty-combobox-wrapper" style={{ width: "100%", position: "relative" }}>
+      <div className="dipkri-combobox-wrapper" style={{ width: "100%", position: "relative" }}>
         <Autocomplete
-          className="watchparty-media-combobox"
+          className="dipkri-media-combobox"
           maxDropdownHeight={400}
           style={{
             width: "100%",
@@ -230,7 +230,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             hasInput ? (
               <React.Fragment>
                 {/* Desktop Action Buttons: 100% opaque solid background so no scrolled text bleeds through */}
-                <div className="watchparty-combobox-desktop-actions">
+                <div className="dipkri-combobox-desktop-actions">
                   <button
                     type="button"
                     onMouseDown={(e) => {
@@ -245,7 +245,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                         this.setState({ inputMedia: undefined, items: [] });
                       }
                     }}
-                    className="watchparty-combobox-pill-queue"
+                    className="dipkri-combobox-pill-queue"
                     title="Add link to queue"
                   >
                     + Queue
@@ -262,7 +262,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                         this.setMediaAndClose(this.state.inputMedia.trim());
                       }
                     }}
-                    className="watchparty-combobox-pill-play"
+                    className="dipkri-combobox-pill-play"
                     title="Play immediately"
                   >
                     ▶ Play
@@ -272,7 +272,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                 {/* Mobile Clear Button: Compact icon inside input on mobile */}
                 <button
                   type="button"
-                  className="watchparty-combobox-mobile-clear"
+                  className="dipkri-combobox-mobile-clear"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -367,7 +367,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
 
         {/* Mobile Action Bar: Thumb-friendly buttons below input on mobile when user types/pastes */}
         {hasInput && (
-          <div className="watchparty-combobox-mobile-actions">
+          <div className="dipkri-combobox-mobile-actions">
             <button
               type="button"
               onMouseDown={(e) => {
@@ -385,7 +385,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                   this.setState({ inputMedia: undefined, items: [] });
                 }
               }}
-              className="watchparty-combobox-mobile-btn-queue"
+              className="dipkri-combobox-mobile-btn-queue"
               title="Add link to playlist queue"
             >
               + Add to Queue
@@ -405,7 +405,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
                   this.setMediaAndClose(this.state.inputMedia.trim());
                 }
               }}
-              className="watchparty-combobox-mobile-btn-play"
+              className="dipkri-combobox-mobile-btn-play"
               title="Play immediately"
             >
               ▶ Play Now

@@ -41,7 +41,7 @@ const defaults = {
   SSL_KEY_FILE: "", // Optional, Filename of SSL key (to use https)
   SSL_CRT_FILE: "", // Optional, Filename of SSL cert (to use https)
   PORT: 8080, // Port to use for server
-  HOST: "0.0.0.0", // Host interface to bind server to
+  HOST: "127.0.0.1", // Loopback only: nginx is the public entry point
   STATS_KEY: "", // Secret string to validate viewing stats
   BETA_USER_EMAILS: "", // Comma-delimited list of user emails to include in the beta
   CUSTOM_SETTINGS_HOSTNAME: "", // Hostname to send different config settings to client
@@ -55,15 +55,16 @@ const defaults = {
   SUBSCRIBER_ROOM_LIMIT: 20, // The maximum number of rooms a subscriber can have
   VMWORKER_PORT: 3100, // Port to use for the vmWorker HTTP server
   VM_ASSIGNMENT_TIMEOUT: 75, // Number of seconds to wait for a VM before failing
-  DISCORD_BOT_TOKEN: "", // Token for the Discord bot that generates WatchParty links
+  DISCORD_BOT_TOKEN: "", // Optional token for the Discord bot that creates room links
   DISCORD_ADMIN_BOT_TOKEN: "", // Optional, for Discord bot to set subscriber roles
-  DISCORD_ADMIN_BOT_SERVER_ID: "708181150220156929", // Optional, ID of the Discord server
-  DISCORD_ADMIN_BOT_SUB_ROLE_ID: "722202622345609246", // Optional, ID of subscriber role
+  DISCORD_ADMIN_BOT_SERVER_ID: "", // Optional, ID of the Discord server
+  DISCORD_ADMIN_BOT_SUB_ROLE_ID: "", // Optional, ID of subscriber role
   MEDIASOUP_SERVER: "", // Optional, URL of the MediaSoup server to broadcast to for larger screen/file shares
   TWITCH_PROXY_PATH: "", // Optional, URL of the server that can proxy twitch HLS stream playlists and segments
   VBROWSER_ADMIN_KEY: "", // Optional, the key to hit admin endpoints on the vbrowser
   OPENSUBTITLES_KEY: "", // Optional, key to OpenSubtitles API
-  TMDB_API_KEY: "4e44d9029b1270a757cddc766a1bcb63", // TMDB API key for Movie and TV series discovery
+  TMDB_API_KEY: "", // TMDB API key for Movie and TV series discovery — set via TMDB_API_KEY env var
+  ADMIN_USER_EMAILS: "", // Comma-separated list of admin emails allowed for server-side web streaming
 };
 
 export default {
