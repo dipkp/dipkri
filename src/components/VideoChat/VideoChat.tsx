@@ -53,7 +53,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
   retryAttempts = new Map<string, number>();
 
   // Shared peer connection cleanup helper - nullifies handlers before closing
-  cleanupPeerConnection = (id: string) => {
+  cleanupPeerConnection = (id: string, keepRetry = false) => {
     const pc = window.dipkri.videoPCs[id];
     if (!pc) return;
 
@@ -85,7 +85,9 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
     // Clean up maps
     delete window.dipkri.videoPCs[id];
-    this.retryAttempts.delete(id);
+    if (!keepRetry) {
+      this.retryAttempts.delete(id);
+    }
   };
 
   componentWillUnmount() {
@@ -436,7 +438,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState !== "failed") return;
-      this.cleanupPeerConnection(id);
+      this.cleanupPeerConnection(id, true);
       const attempt = (this.retryAttempts.get(id) || 0) + 1;
       this.retryAttempts.set(id, attempt);
       if (attempt > 4) return; // give up quietly rather than looping forever
