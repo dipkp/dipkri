@@ -52,6 +52,42 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
   retryAttempts = new Map<string, number>();
 
+  // Shared peer connection cleanup helper - nullifies handlers before closing
+  cleanupPeerConnection = (id: string) => {
+    const pc = window.dipkri.videoPCs[id];
+    if (!pc) return;
+
+    // Nullify all handlers BEFORE closing to prevent firing during teardown
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.onnegotiationneeded = null;
+    pc.oniceconnectionstatechange = null;
+    pc.onsignalingstatechange = null;
+
+    // Stop all remote stream tracks
+    const remoteStreams = window.dipkri.remoteStreams || {};
+    const remoteStream = remoteStreams[id];
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((track) => track.stop());
+      delete (window.dipkri.remoteStreams || {})[id];
+    }
+
+    // Clear video ref srcObject
+    if (window.dipkri.videoRefs?.[id]) {
+      window.dipkri.videoRefs[id].srcObject = null;
+      delete window.dipkri.videoRefs[id];
+    }
+
+    // Close the peer connection
+    try {
+      pc.close();
+    } catch {}
+
+    // Clean up maps
+    delete window.dipkri.videoPCs[id];
+    this.retryAttempts.delete(id);
+  };
+
   componentWillUnmount() {
     this.socket.off("signal", this.handleSignal);
     if (typeof window !== "undefined") {
@@ -67,16 +103,12 @@ export class VideoChat extends React.Component<VideoChatProps> {
         this.socket.emit("CMD:leaveVideo");
       } catch {}
     }
+    // Clean up all peer connections using shared helper
     Object.keys(window.dipkri.videoPCs).forEach((key) => {
-      try {
-        window.dipkri.videoPCs[key].close();
-      } catch {}
-      delete window.dipkri.videoPCs[key];
+      this.cleanupPeerConnection(key);
     });
     if (window.dipkri.remoteStreams) {
-      Object.keys(window.dipkri.remoteStreams).forEach((key) => {
-        delete window.dipkri.remoteStreams![key];
-      });
+      window.dipkri.remoteStreams = {};
     }
   }
 
@@ -404,10 +436,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
 
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState !== "failed") return;
-      try {
-        pc.close();
-      } catch {}
-      delete videoPCs[id];
+      this.cleanupPeerConnection(id);
       const attempt = (this.retryAttempts.get(id) || 0) + 1;
       this.retryAttempts.set(id, attempt);
       if (attempt > 4) return; // give up quietly rather than looping forever
@@ -432,13 +461,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
     );
     Object.entries(videoPCs).forEach(([key, value]) => {
       if (!clientIds.has(key)) {
-        try {
-          value.close();
-        } catch {}
-        delete videoPCs[key];
-        if (window.dipkri.remoteStreams) {
-          delete window.dipkri.remoteStreams[key];
-        }
+        this.cleanupPeerConnection(key);
       }
     });
 

@@ -608,7 +608,10 @@ export class App extends React.Component<AppProps, AppState> {
     window.clearInterval(this.heartbeat);
     window.clearInterval(this.tsInterval);
     window.clearInterval(this.progressUpdater);
+    // Clean up screen/file share WebRTC connections
+    this.stopPublishingLocalStream();
     try {
+      this.socket?.removeAllListeners();
       this.socket?.disconnect();
     } catch {}
   }
@@ -670,6 +673,11 @@ export class App extends React.Component<AppProps, AppState> {
     (window as any).dipkri = (window as any).dipkri || {};
     (window as any).dipkri.socket = socket;
     (window as any).dipkri.app = this;
+
+    // Clear any existing intervals from previous connections
+    if (this.tsInterval) window.clearInterval(this.tsInterval);
+    if (this.progressUpdater) window.clearInterval(this.progressUpdater);
+
     socket.on("connect", async () => {
       this.setState({
         state: "connected",

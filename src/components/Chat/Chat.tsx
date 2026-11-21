@@ -188,13 +188,22 @@ export class Chat extends React.Component<ChatProps> {
         this.scrollToBottom();
       }
     }
+    // Track if chat was previously visible
+    const wasChatVisible = !prevProps.hide && (prevProps.scrollTimestamp > 0 || prevProps.isKeyboardOpen);
+    const isChatVisible = !this.props.hide && (this.props.scrollTimestamp > 0 || this.props.isKeyboardOpen);
+
     if (this.props.hide !== prevProps.hide) {
       this.scrollToBottom();
       if (!this.props.hide) {
         this.props.socket?.emit("CMD:chatSeen");
       }
     }
-    if (this.props.chat.length !== prevProps.chat.length && !this.props.hide) {
+    // Only emit chatSeen when chat becomes visible or new messages arrive while actively viewing
+    if (isChatVisible && !wasChatVisible) {
+      // Chat became visible (e.g., user switched to chat tab)
+      this.props.socket?.emit("CMD:chatSeen");
+    } else if (this.props.chat.length !== prevProps.chat.length && isChatVisible) {
+      // New message arrived while chat is already visible
       this.props.socket?.emit("CMD:chatSeen");
     }
     if (!prevProps.isKeyboardOpen && this.props.isKeyboardOpen) {

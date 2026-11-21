@@ -301,13 +301,9 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
       setStreamVersion((v) => v + 1);
     };
     window.addEventListener("dipkri-stream-update", handleStreamUpdate);
-    const interval = setInterval(() => {
-      setStreamVersion((v) => v + 1);
-    }, 1500);
 
     return () => {
       window.removeEventListener("dipkri-stream-update", handleStreamUpdate);
-      clearInterval(interval);
     };
   }, []);
 
@@ -441,20 +437,7 @@ export const FloatingWebcamBubbles: React.FC<FloatingWebcamBubblesProps> = ({
   };
 
   const handleLeaveVideo = () => {
-    const ourStream = window.dipkri?.ourStream;
-    const videoPCs = window.dipkri?.videoPCs;
-    if (ourStream) {
-      ourStream.getTracks().forEach((track) => track.stop());
-      window.dipkri.ourStream = undefined;
-    }
-    if (videoPCs) {
-      Object.keys(videoPCs).forEach((k) => {
-        try {
-          videoPCs[k].close();
-        } catch {}
-        delete videoPCs[k];
-      });
-    }
+    // Delegate to centralized cleanup via callback
     socket?.emit("CMD:leaveVideo");
 
     if (onLeaveVideo) {
