@@ -3318,6 +3318,7 @@ export class App extends React.Component<AppProps, AppState> {
         getMediaDisplayName={this.getMediaDisplayName}
         isChatDisabled={this.state.isChatDisabled}
         owner={this.state.owner}
+        roomLock={this.state.roomLock}
         chatRef={this.chatRef}
         onOpenSettings={() => this.setState({ settingsModalOpen: true })}
         showChatColumn={this.state.showChatColumn}
@@ -4077,6 +4078,7 @@ export class App extends React.Component<AppProps, AppState> {
                   getMediaDisplayName={this.getMediaDisplayName}
                   isChatDisabled={this.state.isChatDisabled}
                   owner={this.state.owner}
+                  roomLock={this.state.roomLock}
                   ref={this.chatRef}
                   hide={this.state.currentTab !== "chat"}
                   videoPaused={this.state.roomPaused}
@@ -4761,6 +4763,7 @@ export class App extends React.Component<AppProps, AppState> {
                       getMediaDisplayName={this.getMediaDisplayName}
                       isChatDisabled={this.state.isChatDisabled}
                       owner={this.state.owner}
+                      roomLock={this.state.roomLock}
                       ref={this.chatRef}
                       hide={!this.state.showChatColumn}
                       videoPaused={this.state.roomPaused}

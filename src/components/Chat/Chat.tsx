@@ -135,6 +135,7 @@ interface ChatProps {
   hide?: boolean;
   isChatDisabled?: boolean;
   owner: string | undefined;
+  roomLock?: string;
   ref: RefObject<Chat>;
   videoPaused?: boolean;
   isKeyboardOpen?: boolean;
@@ -165,6 +166,13 @@ export class Chat extends React.Component<ChatProps> {
   lastSendTime = 0;
   blurTimeout: any = null;
   isSending = false;
+
+  haveLock = () => {
+    if (!this.props.roomLock) {
+      return true;
+    }
+    return this.context.user?.uid === this.props.roomLock;
+  };
 
   async componentDidMount() {
     this.scrollToBottom();
@@ -461,6 +469,7 @@ export class Chat extends React.Component<ChatProps> {
                   nameMap={this.props.nameMap}
                   formatMessage={this.formatMessage}
                   owner={this.props.owner}
+                  canControl={this.haveLock()}
                   socket={this.props.socket}
                   isChatDisabled={this.props.isChatDisabled}
                   isReactionMenuOpen={
@@ -583,6 +592,15 @@ export class Chat extends React.Component<ChatProps> {
           </div>
         )}
 
+        {/* Empty State */}
+        {this.props.chat.length === 0 && (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyStateIcon}>💬</div>
+            <div className={styles.emptyStateText}>No messages yet — say hi to the room</div>
+            <div className={styles.emptyStateSubtext}>Start the conversation</div>
+          </div>
+        )}
+
         {/* Authentic WhatsApp Composer Bar */}
         <div
           className={`${styles.whatsappComposer} ${
@@ -692,6 +710,7 @@ const ChatMessageItem = ({
   formatMessage,
   socket,
   owner,
+  canControl,
   isChatDisabled,
   isReactionMenuOpen,
   setReactionMenu,
@@ -705,6 +724,7 @@ const ChatMessageItem = ({
   formatMessage: (cmd: string, author: string, msg?: string) => React.ReactNode;
   socket: Socket;
   owner: string | undefined;
+  canControl: boolean;
   isChatDisabled: boolean | undefined;
   isReactionMenuOpen?: boolean;
   setReactionMenu: (
@@ -1057,11 +1077,12 @@ const ChatMessageItem = ({
                 <button
                   type="button"
                   className={styles.videoLinkBtn}
+                  disabled={!canControl}
                   onClick={(e) => {
                     e.stopPropagation();
                     socket.emit("CMD:host", `https://www.youtube.com/watch?v=${ytVideoId}`);
                   }}
-                  title="Play this video for the whole room"
+                  title={canControl ? "Play this video for the whole room" : "Only host can change video"}
                 >
                   <WPIconPlay size={12} />
                   <span>Play in Room</span>
