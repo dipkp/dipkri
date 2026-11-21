@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styles from "./MovieModal.module.css";
 import {
   type MovieSearchResult,
@@ -10,6 +10,8 @@ import {
   buildMovieEmbedUrl,
 } from "../../utils/utils";
 import { Loader } from "@mantine/core";
+import firebase from "firebase/compat/app";
+import { canStreamTorrents } from "../../utils/streamAuth";
 import {
   tmdbDetails,
   tmdbSearch,
@@ -115,6 +117,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
   // player does not spend its first minute waiting for peers.
   const prewarmStream = (magnet: string) => {
     if (!magnet || prewarmedRef.current.has(magnet)) return;
+    if (!canStreamTorrents(firebase.auth().currentUser?.email)) return;
     prewarmedRef.current.add(magnet);
     const url = `/stream?torrent=${encodeURIComponent(magnet)}`;
     // Metadata

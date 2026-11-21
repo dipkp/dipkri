@@ -21,19 +21,37 @@ function Write-Log($msg) {
 }
 
 function Get-File($url, $out) {
-    if (Test-Path $out) {
+    if (Test-Path "$out.done") {
         Write-Log "cached: $(Split-Path $out -Leaf)"
         return
     }
-    Write-Log "downloading $(Split-Path $out -Leaf)"
-    for ($i = 1; $i -le 3; $i++) {
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -TimeoutSec 3600
-            return
-        } catch {
-            Write-Log "attempt $i failed: $($_.Exception.Message)"
-            Start-Sleep -Seconds 5
+    if (Test-Path $out) {
+        Write-Log "partial file found, resuming: $(Split-Path $out -Leaf)"
+    }
+    Write-Log "downloading $(Split-Path $out -Leaf) (resumable, progress bar below)"
+    for ($i = 1; $i -le 200; $i++) {
+        if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+            # -C - resumes a partial file, --progress-bar shows live speed
+            # --retry* survives dropped connections; speed guard aborts a stalled
+            # transfer so the next attempt resumes instead of hanging.
+            & curl.exe -L --fail -C - --progress-bar `
+                --retry 20 --retry-all-errors --retry-delay 5 `
+                --speed-time 60 --speed-limit 2000 `
+                -o $out $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $out)) {
+                Set-Content -Path "$out.done" -Value "ok"
+                return
+            }
+            Write-Log "curl attempt $i failed (exit $LASTEXITCODE), retrying in 5s"
+        } else {
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -TimeoutSec 3600
+                return
+            } catch {
+                Write-Log "attempt $i failed: $($_.Exception.Message)"
+            }
         }
+        Start-Sleep -Seconds 5
     }
     throw "could not download $url"
 }
@@ -62,8 +80,9 @@ if (-not (Test-Path $sdkManager)) {
     $tmp = Join-Path $env:TEMP "dipkri-cmdtools"
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $cmdZip -DestinationPath $tmp -Force
-    New-Item -ItemType Directory -Force -Path (Split-Path $sdkManager) | Out-Null
-    Move-Item (Join-Path $tmp "cmdline-tools\*") (Split-Path $sdkManager) -Force
+    $latest = Join-Path $Sdk "cmdline-tools\latest"
+    New-Item -ItemType Directory -Force -Path $latest | Out-Null
+    Move-Item (Join-Path $tmp "cmdline-tools\*") $latest -Force
 }
 
 # 3. SDK packages (licenses accepted non-interactively)

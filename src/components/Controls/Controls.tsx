@@ -9,7 +9,8 @@ import {
   type MovieServer,
   isMovie,
 } from "../../utils/utils";
-import styles from "./Controls.module.css";
+import styles from "./Controls.module.css";
+import { stripWebsiteWatermarks } from "../../utils/regex";
 import {
   WPIconPlay,
   WPIconPause,
@@ -95,8 +96,8 @@ export const cleanMovieTitle = (raw: string): { title: string; meta: string } =>
   name = name.replace(/\.(mkv|mp4|webm|avi|mov|flv|m4v|ts)$/i, "");
 
   // Strip website watermarks / domains e.g. www.1TamilMV.capital, [1TamilMV.org], etc.
-  name = name.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
-  name = name.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital)\b\s*[-_–—:]*\s*/gi, "");
+  name = stripWebsiteWatermarks(name);
+
 
   name = name.replace(/[\._\-]/g, " ").replace(/\s+/g, " ").trim();
 

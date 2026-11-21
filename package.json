@@ -1,6 +1,6 @@
 {
   "name": "dipkri",
-  "description": "dipkri \u2014 Real-time synced streaming and watch party platform",
+  "description": "dipkri — Real-time synced streaming and watch party platform",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -24,6 +24,10 @@
     "lint:security": "eslint \"server/**/*.ts\" \"src/**/*.{ts,tsx}\"",
     "audit:ci": "audit-ci --high",
     "secrets:scan": "secretlint \"**/*\"",
+    "clean:check": "knip",
+    "clean:fix": "knip --fix",
+    "sec:semgrep": "npx semgrep --config auto",
+    "audit:full": "npm run check && npm run lint:security && npm run secrets:scan && npm run clean:check",
     "sec": "npm run lint:security && npm run audit:ci && npm run secrets:scan"
   },
   "dependencies": {
@@ -72,6 +76,7 @@
     "eventemitter3": "^4.0.7",
     "firebase": "^9.23.0",
     "hls.js": "^1.6.15",
+    "knip": "^6.47.0",
     "mediasoup-client": "^3.18.1",
     "react": "^18.3.1",
     "react-colorful": "^5.6.1",

@@ -852,14 +852,14 @@ export async function handleTorrentInfo(req: any, res: any) {
   }
 
   try {
+    if (!magnetUri.startsWith("magnet:?") && !magnetUri.startsWith("/")) {
+      return res.status(400).json({ error: "Only magnet links and local paths are accepted" });
+    }
     const streamPort = config.PORT || process.env.PORT || 8080;
     const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
-    let streamUrl = magnetUri;
-    if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
-    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
-    }
+    const streamUrl = magnetUri.startsWith("/")
+      ? `http://127.0.0.1:${streamPort}${magnetUri}`
+      : `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
 
     execFile(
       getFfprobePath(),
@@ -1112,14 +1112,14 @@ export async function handleTorrentSubtitle(req: any, res: any) {
   const episode = extractEpisodeFromRequest(req);
 
   try {
+    if (!magnetUri.startsWith("magnet:?") && !magnetUri.startsWith("/")) {
+      return res.status(400).json({ error: "Only magnet links and local paths are accepted" });
+    }
     const streamPort = config.PORT || process.env.PORT || 8080;
     const seasonEpParam = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
-    let streamUrl = magnetUri;
-    if (magnetUri.startsWith("/")) {
-      streamUrl = `http://127.0.0.1:${streamPort}${magnetUri}`;
-    } else if (!magnetUri.startsWith("http://") && !magnetUri.startsWith("https://")) {
-      streamUrl = `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
-    }
+    const streamUrl = magnetUri.startsWith("/")
+      ? `http://127.0.0.1:${streamPort}${magnetUri}`
+      : `http://127.0.0.1:${streamPort}/stream?torrent=${encodeURIComponent(magnetUri)}${fileIndex != null ? `&fileIndex=${fileIndex}` : ""}${seasonEpParam}`;
 
     const args: string[] = [
       "-nostdin",

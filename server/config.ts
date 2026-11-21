@@ -57,13 +57,14 @@ const defaults = {
   VM_ASSIGNMENT_TIMEOUT: 75, // Number of seconds to wait for a VM before failing
   DISCORD_BOT_TOKEN: "", // Optional token for the Discord bot that creates room links
   DISCORD_ADMIN_BOT_TOKEN: "", // Optional, for Discord bot to set subscriber roles
-  DISCORD_ADMIN_BOT_SERVER_ID: "708181150220156929", // Optional, ID of the Discord server
-  DISCORD_ADMIN_BOT_SUB_ROLE_ID: "722202622345609246", // Optional, ID of subscriber role
+  DISCORD_ADMIN_BOT_SERVER_ID: "", // Optional, ID of the Discord server
+  DISCORD_ADMIN_BOT_SUB_ROLE_ID: "", // Optional, ID of subscriber role
   MEDIASOUP_SERVER: "", // Optional, URL of the MediaSoup server to broadcast to for larger screen/file shares
   TWITCH_PROXY_PATH: "", // Optional, URL of the server that can proxy twitch HLS stream playlists and segments
   VBROWSER_ADMIN_KEY: "", // Optional, the key to hit admin endpoints on the vbrowser
   OPENSUBTITLES_KEY: "", // Optional, key to OpenSubtitles API
-  TMDB_API_KEY: "4e44d9029b1270a757cddc766a1bcb63", // TMDB API key for Movie and TV series discovery
+  TMDB_API_KEY: "", // TMDB API key for Movie and TV series discovery — set via TMDB_API_KEY env var
+  ADMIN_USER_EMAILS: "", // Comma-separated list of admin emails allowed for server-side web streaming
 };
 
 export default {

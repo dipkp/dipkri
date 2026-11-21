@@ -28,6 +28,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private val bridge = Bridge()
 
+    // The OAuth popup, so the back button can close it instead of navigating
+    // the room behind it.
+    private var authDialog: Dialog? = null
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,16 +72,39 @@ class MainActivity : AppCompatActivity() {
                 }
                 CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true)
 
-                val dialog = Dialog(this@MainActivity).apply {
-                    setContentView(
-                        popup,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        ),
-                    )
-                    setOnDismissListener { popup.destroy() }
+                // A close row, otherwise a stuck OAuth flow traps the user.
+                val root = android.widget.LinearLayout(this@MainActivity).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setBackgroundColor(0xFF0B0B12.toInt())
                 }
+                val bar = android.widget.LinearLayout(this@MainActivity).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    setPadding(16, 12, 16, 12)
+                }
+                val title = android.widget.TextView(this@MainActivity).apply {
+                    text = "Sign in"
+                    setTextColor(0xFFE5E7EB.toInt())
+                    textSize = 15f
+                }
+                val close = android.widget.TextView(this@MainActivity).apply {
+                    text = "Close"
+                    setTextColor(0xFFF87171.toInt())
+                    textSize = 15f
+                    setPadding(24, 0, 0, 0)
+                }
+                bar.addView(title, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                bar.addView(close, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                root.addView(bar)
+                root.addView(popup, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+                val dialog = Dialog(this@MainActivity).apply {
+                    setContentView(root)
+                    setOnDismissListener {
+                        popup.destroy()
+                        authDialog = null
+                    }
+                }
+                close.setOnClickListener { dialog.dismiss() }
 
                 popup.webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
@@ -100,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                authDialog = dialog
                 dialog.show()
                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
                 transport.webView = popup
@@ -167,7 +195,13 @@ class MainActivity : AppCompatActivity() {
         fun getSidecar(): String = TorrentService.sidecarJson()
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        val dialog = authDialog
+        if (dialog != null && dialog.isShowing) {
+            dialog.dismiss()
+            return
+        }
         if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
     }
 

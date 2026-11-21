@@ -785,21 +785,109 @@ app.get("/metadata", async (req, res) => {
 const STREAM_AUTH_CONFIGURED = Boolean(config.FIREBASE_ADMIN_SDK_CONFIG);
 const STREAM_AUTH_ON = STREAM_AUTH_CONFIGURED && process.env.SEC_STREAM_AUTH === "on";
 
+function isEmailAdmin(email?: string): boolean {
+  if (!email) return false;
+  const adminList = (config.ADMIN_USER_EMAILS || "")
+    .split(",")
+    .map((s: string) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (adminList.length === 0) return false;
+  return adminList.includes(email.trim().toLowerCase());
+}
+
+app.post("/api/user-role", async (req, res) => {
+  const token = String(req.body?.token || "");
+  const decoded = await verifyIdTokenOnly(token);
+  const email = decoded?.email;
+  const isAdmin = isEmailAdmin(email);
+  res.json({ isAdmin, email: email || null });
+});
+
+app.get("/download/android", (req, res) => {
+  const candidates = [
+    path.resolve(__dirname, "../android/app/build/outputs/apk/debug/app-debug.apk"),
+    path.resolve(process.cwd(), "android/app/build/outputs/apk/debug/app-debug.apk"),
+    path.resolve(__dirname, "../public/downloads/dipkri.apk"),
+    path.resolve(process.cwd(), "public/downloads/dipkri.apk"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      return res.download(candidate, "Dipkri-WatchParty.apk");
+    }
+  }
+
+  res.status(404).send(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:40px;text-align:center;">
+    <h2>Dipkri Android APK</h2>
+    <p>The Android APK build file is being prepared. Run <code>cd android && ./gradlew assembleDebug</code> to generate the APK.</p>
+    </body></html>`
+  );
+});
+
+app.get("/download/desktop", (req, res) => {
+  const candidates = [
+    path.resolve(__dirname, "../desktop/dist/Dipkri-Setup.exe"),
+    path.resolve(process.cwd(), "desktop/dist/Dipkri-Setup.exe"),
+    path.resolve(__dirname, "../public/downloads/dipkri-desktop.exe"),
+    path.resolve(process.cwd(), "public/downloads/dipkri-desktop.exe"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return res.download(candidate, "Dipkri-Desktop.exe");
+    }
+  }
+
+  res.status(404).send(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:40px;text-align:center;">
+    <h2>Dipkri Desktop App</h2>
+    <p>The Desktop installer is being packaged. Run <code>npm run dist:desktop</code> inside the desktop folder to build the installer.</p>
+    </body></html>`
+  );
+});
+
 app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
+  const isLocalhost = req.ip === "127.0.0.1" || req.ip === "::1" || req.ip === "::ffff:127.0.0.1";
+  const token = String(req.body?.token || "");
+  const decoded = await verifyIdTokenOnly(token);
+  const userEmail = decoded?.email;
+  const userIsAdmin = isEmailAdmin(userEmail);
+
+  // If user is admin or request is from local sidecar on 127.0.0.1
+  if (userIsAdmin || isLocalhost) {
+    const uid = decoded?.uid || "admin";
+    res.json({ key: mintStreamKey(uid), required: true, configured: true, isAdmin: true, allowed: true });
+    return;
+  }
+
+  // If ADMIN_USER_EMAILS is configured and user is NOT an admin, restrict server torrent streaming
+  if (config.ADMIN_USER_EMAILS) {
+    res.status(403).json({
+      error: "Web torrent streaming is restricted to admin personal use. Please use Dipkri Android or Desktop app for direct P2P streaming.",
+      key: "",
+      required: true,
+      configured: true,
+      allowed: false,
+      isAdmin: false,
+    });
+    return;
+  }
+
   if (!STREAM_AUTH_CONFIGURED) {
-    res.json({ key: "", required: false, configured: false });
+    res.json({ key: "", required: false, configured: false, allowed: true });
     return;
   }
   if (!STREAM_AUTH_ON) {
-    res.json({ key: "", required: false, configured: true });
+    res.json({ key: "", required: false, configured: true, allowed: true });
     return;
   }
-  const decoded = await verifyIdTokenOnly(String(req.body?.token || ""));
   if (!decoded) {
     res.status(401).json({ error: "sign in required" });
     return;
   }
-  res.json({ key: mintStreamKey(decoded.uid), required: true, configured: true });
+  res.json({ key: mintStreamKey(decoded.uid), required: true, configured: true, allowed: true });
 });
 
 app.use(

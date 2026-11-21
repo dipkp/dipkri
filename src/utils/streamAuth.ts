@@ -1,4 +1,6 @@
 import firebase from "firebase/compat/app";
+import { getDesktopBridge } from "./desktopStream";
+import clientConfig from "../config";
 
 /**
  * Stream keys.
@@ -64,3 +66,26 @@ export async function withStreamKey(url: string): Promise<string> {
 export function forgetStreamKey(): void {
   cached = null;
 }
+
+/** Check if running inside Android APK or Electron Desktop shell with local sidecar */
+export function isNativeApp(): boolean {
+  return Boolean(getDesktopBridge()?.getSidecar);
+}
+
+/** Check if current user email matches configured admin list */
+export function isUserAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  const configured = clientConfig.VITE_ADMIN_EMAILS || "";
+  const list = configured
+    .split(",")
+    .map((s: string) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (list.length === 0) return false;
+  return list.includes(email.trim().toLowerCase());
+}
+
+/** Determines if the current client is allowed to stream torrents */
+export function canStreamTorrents(email?: string | null): boolean {
+  return isNativeApp() || isUserAdmin(email);
+}
+

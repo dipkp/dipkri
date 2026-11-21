@@ -47,6 +47,7 @@ import { ComboBox } from "../ComboBox/ComboBox";
 import { SearchComponent } from "../SearchComponent/SearchComponent";
 import { Controls } from "../Controls/Controls";
 import { MovieModal } from "../MovieModal/MovieModal";
+import { AppDownloadModal } from "../AppDownloadModal/AppDownloadModal";
 import { SettingsModal } from "../Settings/SettingsModal";
 import { ErrorModal } from "../Modal/ErrorModal";
 import { PasswordModal } from "../Modal/PasswordModal";
@@ -57,7 +58,7 @@ import {
   isClientTranscodeSupported,
 } from "../../utils/clientTranscode";
 import firebase from "firebase/compat/app";
-import { withStreamKey } from "../../utils/streamAuth";
+import { withStreamKey, canStreamTorrents } from "../../utils/streamAuth";
 import { desktopRoomEnd } from "../../utils/desktopStream";
 import { buildLocalStreamUrl, getDesktopBridge } from "../../utils/desktopStream";
 import { SubtitleModal, cleanMovieTitle } from "../Modal/SubtitleModal";
@@ -99,7 +100,6 @@ import {
 } from "../Icons/CustomIcons";
 import {
   MobileFloatingReactions,
-  MobileTabBar,
 } from "../Mobile/MobileEnhancements";
 import { LiveCaptions } from "../LiveCaptions/LiveCaptions";
 import { audioEnhancer } from "../PlayerSettings/audioEnhancer";
@@ -177,8 +177,6 @@ interface AppState {
   isVBrowserLarge: boolean;
   nonPlayableMedia: boolean;
   currentTab: string;
-  isSubscribeModalOpen: boolean;
-  isVBrowserModalOpen: boolean;
   isScreenShareModalOpen: boolean;
   isFileShareModalOpen: boolean;
   isSubtitleModalOpen: boolean;
@@ -215,6 +213,8 @@ interface AppState {
   copiedLink: boolean;
   quickQueueUrl: string;
   isMovieModalOpen: boolean;
+  isAppDownloadModalOpen: boolean;
+  nonPlayableTorrentWeb: boolean;
 }
 
 const checkIsMobileDevice = () => {
@@ -293,13 +293,13 @@ export class App extends React.Component<AppProps, AppState> {
     nonPlayableMedia: false,
     currentTab:
       new URLSearchParams(window.location.search).get("tab") ?? "chat",
-    isSubscribeModalOpen: false,
-    isVBrowserModalOpen: false,
     isScreenShareModalOpen: false,
     isFileShareModalOpen: false,
     isSubtitleModalOpen: false,
     isMultiSelectModalOpen: false,
     isMovieModalOpen: false,
+    isAppDownloadModalOpen: false,
+    nonPlayableTorrentWeb: false,
     roomLock: "",
     controller: "",
     roomId: "",
@@ -352,6 +352,9 @@ export class App extends React.Component<AppProps, AppState> {
   heartbeat: number | undefined = undefined;
   tsInterval: number | undefined = undefined;
   movieCurrentTime = 0;
+  // True while a remote seek is being applied; the iframe's echo must not be
+  // sent back as CMD:seek or the room ping-pongs forever.
+  isRemoteSyncing = false;
   movieStartAt = 0;
   movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
@@ -592,6 +595,10 @@ export class App extends React.Component<AppProps, AppState> {
     }
     window.clearInterval(this.heartbeat);
     window.clearInterval(this.tsInterval);
+    window.clearInterval(this.progressUpdater);
+    try {
+      this.socket?.disconnect();
+    } catch {}
   }
 
   handleResize = () => {
@@ -679,20 +686,13 @@ export class App extends React.Component<AppProps, AppState> {
     socket.on("connect_error", async (err: any) => {
       console.warn("Socket connect_error (will retry):", err);
       if (err?.message === "Invalid namespace") {
-        // If room is missing on reconnect (e.g. server restarted), ask server to initialize it and reconnect smoothly
-        try {
-          const targetRoom = this.state.roomId?.replace(/^\//, "");
-          if (targetRoom) {
-            await fetch(serverPath + "/createRoom", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ roomId: targetRoom }),
-            });
-            this.socket?.connect();
-            return;
-          }
-        } catch {}
-        this.setState({ warningMessage: "Reconnecting to room..." });
+        // /createRoom ignores the roomId it is given, so the old "recreate and
+        // reconnect" path looped forever against a namespace that cannot come
+        // back (rooms are in memory). Say so and stop retrying.
+        this.setState({
+          overlayMsg: "This room is no longer active. Please create a new one.",
+        });
+        this.socket?.disconnect();
       } else if (err?.message === "password") {
         this.setState({ isErrorAuth: true });
       } else {
@@ -732,7 +732,11 @@ export class App extends React.Component<AppProps, AppState> {
       this.localPause();
     });
     socket.on("REC:seek", (data: number) => {
+      this.isRemoteSyncing = true;
       this.localSeek(data);
+      window.setTimeout(() => {
+        this.isRemoteSyncing = false;
+      }, 600);
     });
     socket.on("REC:playbackRate", (data: number) => {
       this.setState({ roomPlaybackRate: data });
@@ -1035,6 +1039,21 @@ export class App extends React.Component<AppProps, AppState> {
           }
 
           if (isMagnet(src) || src.includes("/stream?torrent=")) {
+            const bridge = getDesktopBridge();
+            const isApp = Boolean(bridge?.getSidecar);
+            const isAllowed = isApp || this.canStreamTorrent();
+
+            if (!isAllowed) {
+              // Non-admin visitor on web browser: suppress server torrent requests to maintain 0% server video load.
+              this.setLoadingFalse();
+              this.setState({
+                nonPlayableTorrentWeb: true,
+                isAppDownloadModalOpen: true,
+              });
+              return;
+            }
+            this.setState({ nonPlayableTorrentWeb: false });
+
             // Direct streaming via server endpoint (supports public BitTorrent swarms, UDP trackers, and DHT)
             let streamUrl = isMagnet(src)
               ? `${serverPath}/stream?torrent=${encodeURIComponent(src)}`
@@ -1042,7 +1061,6 @@ export class App extends React.Component<AppProps, AppState> {
 
             // Desktop app: the torrent runs on this machine, so the bytes come
             // from 127.0.0.1 and the server only keeps the room in sync.
-            const bridge = getDesktopBridge();
             if (bridge?.getSidecar) {
               try {
                 const sidecar = await bridge.getSidecar();
@@ -1353,15 +1371,20 @@ export class App extends React.Component<AppProps, AppState> {
         ) {
           const leader = this.getLeaderTime();
           const delta = leader - data[clientId];
-          // Set leader pbr to 1
           let pbr = 1;
-          // Add .01 pbr for each 100ms delay
+          // Symmetric drift correction with gentle nudging
           if (delta > 0.5) {
+            // Client is behind leader: gently speed up (max 1.1x)
             pbr += Number((delta / 10).toFixed(2));
             pbr = Math.min(pbr, 1.1);
+          } else if (delta < -0.5) {
+            // Client is ahead of leader: gently slow down (min 0.9x)
+            pbr += Number((delta / 10).toFixed(2));
+            pbr = Math.max(pbr, 0.9);
           }
-          // console.log(delta, pbr);
-          if (this.Player().getPlaybackRate() !== pbr) {
+          // Debounce rate changes to avoid audio pitch flutter (warble)
+          const currentPbr = this.Player().getPlaybackRate();
+          if (Math.abs(currentPbr - pbr) >= 0.02) {
             this.Player().setPlaybackRate(pbr);
           }
         }
@@ -2541,6 +2564,11 @@ export class App extends React.Component<AppProps, AppState> {
           this.setState({ roomPaused: false });
         }
       } else if (evType === "seeked" && typeof curTime === "number") {
+        // A seek we applied from the host is not a user action.
+        if (this.isRemoteSyncing) {
+          this.isRemoteSyncing = false;
+          return;
+        }
         if (this.haveLock()) {
           this.socket.emit("CMD:seek", curTime);
         }
@@ -2863,8 +2891,19 @@ export class App extends React.Component<AppProps, AppState> {
     this.localSetMute(!this.Player().isMuted());
   };
 
+  canStreamTorrent = (): boolean => {
+    return canStreamTorrents(this.context?.user?.email);
+  };
+
   roomSetMedia = (value: string) => {
     const resolved = resolveMediaUrl(value);
+    if (
+      (isMagnet(resolved) || resolved.includes("/stream?torrent=")) &&
+      !this.canStreamTorrent()
+    ) {
+      this.setState({ isAppDownloadModalOpen: true });
+      return;
+    }
     this.socket.emit("CMD:host", resolved);
   };
 
@@ -3510,6 +3549,53 @@ export class App extends React.Component<AppProps, AppState> {
             onClick={this.roomTogglePlay}
           ></video>
         )}
+        {this.state.nonPlayableTorrentWeb && (
+          <div className={styles.torrentWebNoticeOverlay}>
+            <div className={styles.torrentWebNoticeBox}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🧲</div>
+              <h3
+                style={{
+                  margin: "0 0 8px 0",
+                  color: "#f8fafc",
+                  fontSize: 18,
+                  fontWeight: 700,
+                }}
+              >
+                P2P Swarm Stream Active
+              </h3>
+              <p
+                style={{
+                  margin: "0 0 16px 0",
+                  color: "#94a3b8",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: 380,
+                }}
+              >
+                High-speed torrent streaming runs directly on your device via P2P swarm.
+                Download the Dipkri Android APK or Desktop App for instant zero-buffer 4K playback.
+              </p>
+              <button
+                type="button"
+                onClick={() => this.setState({ isAppDownloadModalOpen: true })}
+                style={{
+                  background:
+                    "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "10px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 14px rgba(79, 70, 229, 0.4)",
+                }}
+              >
+                Get Dipkri App
+              </button>
+            </div>
+          </div>
+        )}
         {Boolean(
           this.state.total ||
           this.state.convertProgress !== undefined ||
@@ -3604,54 +3690,6 @@ export class App extends React.Component<AppProps, AppState> {
           isBehind={isBehind}
           onSync={onSyncAction}
         />
-        {this.state.isMobileView && this.state.roomId && (
-          <button
-            type="button"
-            onClick={() => {
-              const cleanId = this.state.roomId.replace(/^\//, "");
-              const ok = window.confirm(
-                "End this watch party for everyone? The room is removed from your active parties.",
-              );
-              if (!ok) return;
-              fetch("/terminateRoom", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  roomId: cleanId,
-                  hostToken: localStorage.getItem(`wp_host_${cleanId}`) || "",
-                }),
-              }).catch(() => {});
-              desktopRoomEnd(cleanId);
-              localStorage.removeItem("wp_last_room");
-              localStorage.removeItem("wp_active_party");
-              localStorage.removeItem(`wp_playback_${cleanId}`);
-              window.location.assign("/");
-            }}
-            style={{
-              position: "fixed",
-              left: 12,
-              bottom: 86,
-              zIndex: 60,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "12px 18px",
-              minHeight: 48,
-              borderRadius: 999,
-              background: "rgba(239, 68, 68, 0.16)",
-              border: "1px solid rgba(239, 68, 68, 0.45)",
-              color: "#fca5a5",
-              fontFamily: "inherit",
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: "pointer",
-              backdropFilter: "blur(8px)",
-            }}
-            aria-label="End this watch party"
-          >
-            End party
-          </button>
-        )}
       </div>
     );
     return (
@@ -3693,6 +3731,11 @@ export class App extends React.Component<AppProps, AppState> {
           onClose={this.closeMovieModal}
           onPlay={this.roomSetMedia}
           onQueue={this.roomPlaylistAdd}
+        />
+        <AppDownloadModal
+          isOpen={this.state.isAppDownloadModalOpen}
+          onClose={() => this.setState({ isAppDownloadModalOpen: false })}
+          mediaTitle={this.state.detectedMediaName || this.state.roomMedia}
         />
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>

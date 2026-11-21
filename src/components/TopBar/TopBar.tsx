@@ -293,7 +293,7 @@ export const TopBar = (props: {
             className={styles.terminateBtn}
             onClick={async () => {
               const confirmTerminate = window.confirm(
-                "Terminate this watch party? It will end the room session and remove it from your active parties on the home screen."
+                "End this watch party for everyone? The room will be closed and removed from your active parties."
               );
               if (confirmTerminate) {
                 const cleanId = props.roomId?.replace(/^\//, "");
@@ -315,9 +315,9 @@ export const TopBar = (props: {
                 window.location.assign("/");
               }
             }}
-            title="Terminate this watch party and clear from home screen"
+            title="End this watch party for everyone"
           >
-            <span>Terminate Room</span>
+            <span>End Party</span>
           </button>
         )}
         {!props.hideNewRoom && <JoinRoomButton size="sm" />}

@@ -26,6 +26,10 @@ jobs:
         run: npx secretlint "**/*"
       - name: eslint security rules
         run: npx eslint "server/**/*.ts" --max-warnings=100
+      - name: knip (dead code & bloat audit)
+        run: npx knip --no-exit-code
+      - name: semgrep (SAST security scan)
+        run: npx semgrep --config auto
 
   dependencies:
     name: dependency audit

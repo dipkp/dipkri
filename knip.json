@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@5/overview/configuration-schema.json",
+  "entry": [
+    "desktop/main.js",
+    "desktop/sidecar.mjs",
+    "server/cleanup.ts",
+    "server/syncSubs.ts",
+    "server/timeSeries.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "server/**/*.ts",
+    "desktop/**/*.{js,mjs}"
+  ],
+  "ignore": [
+    "**/*.d.ts",
+    "desktop/preload.js",
+    "desktop/popup-preload.js"
+  ],
+  "ignoreDependencies": [
+    "discord.js",
+    "electron",
+    "parse-torrent",
+    "@secretlint/secretlint-rule-preset-recommend"
+  ]
+}

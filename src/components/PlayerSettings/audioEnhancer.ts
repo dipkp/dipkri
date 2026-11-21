@@ -1,5 +1,6 @@
 import { DualAudioMode, getPlayerSettings } from "./playerSettings";
 import { serverPath } from "../../utils/utils";
+import { stripWebsiteWatermarks } from "../../utils/regex";
 
 const LANG_MAP: Record<string, string> = {
   hin: "Hindi",
@@ -68,10 +69,7 @@ export const formatAudioLanguageLabel = (
   rawLang?: string,
   index: number = 0,
 ): string => {
-  let cleanRaw = (rawLabel || "").trim();
-  cleanRaw = cleanRaw.replace(/^(?:\[[^\]]+\]|\([^\)]+\)|\b(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,8})+\b)\s*[-_–—:]*\s*/gi, "");
-  cleanRaw = cleanRaw.replace(/\b(?:1TamilMV|TamilMV|TamilBlasters|TamilRockers|TamilYogi|Movierulz|Bolly4u|KatmovieHD|Vegamovies|YTS|YIFY|PSA|GalaxyRG|TGx|ETRG|RARBG|Extratorrent|TorrentCounter|Cinemavilla|Kuttymovies|Pagalworld|PaglaMovies|Isaimini|MadrasRockers|MalluMv|JioRockers|BalaRockers|1TamilBlasters|capital|www)\b\s*[-_–—:]*\s*/gi, "");
-  cleanRaw = cleanRaw.replace(/^[-–—:\s]+|[-–—:\s]+$/g, "").trim();
+  let cleanRaw = stripWebsiteWatermarks(rawLabel || "").replace(/^[-–—:\s]+|[-–—:\s]+$/g, "").trim();
 
   const normLang = (rawLang || "").toLowerCase().trim();
   const normLabel = cleanRaw.toLowerCase();
