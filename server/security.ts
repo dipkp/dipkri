@@ -64,13 +64,42 @@ export function corsOrigin(
   callback(null, ORIGINS.has(origin.replace(/\/$/, "")));
 }
 
-/** Cheap, safe headers. No CSP: the SPA loads YouTube frames and TMDB images. */
+/** CSP and security headers for Firebase, YouTube, WebRTC, HLS/DASH/WebTorrent streaming. */
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
+  const isDev = process.env.NODE_ENV !== "production";
+
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  // Permissions-Policy: allow camera/mic on same origin for WebRTC
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
+  // COOP: "same-origin-allow-popups" allows Firebase/Google auth popups to communicate with opener
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
+  // CSP: allow Firebase/Google auth, YouTube, Stripe, WebRTC, HLS/DASH/WebTorrent streaming
+  const csp = [
+    "default-src 'self'",
+    // script-src: Firebase, Google, YouTube, Stripe, Mantine (unsafe-inline for dev/prod)
+    `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://apis.google.com https://accounts.google.com https://www.gstatic.com https://www.youtube.com https://s.ytimg.com https://js.stripe.com`,
+    // style-src: Mantine needs unsafe-inline, Google Fonts
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    // font-src: Google Fonts
+    "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
+    // img-src: data:, blob: for user uploads, https: for external images
+    "img-src 'self' data: blob: https:",
+    // media-src: HLS/DASH/WebTorrent streaming from blob:, data:, https:, http:
+    "media-src 'self' blob: data: https: http:",
+    // worker-src: WebCodecs/WebAssembly workers
+    "worker-src 'self' blob:",
+    // connect-src: Firebase, Google, Stripe, WebTorrent, WebSocket, blob: for media
+    "connect-src 'self' https: wss: ws: blob:",
+    // frame-src: YouTube, Firebase auth, Stripe
+    "frame-src 'self' https://accounts.google.com https://www.youtube.com https://www.youtube-nocookie.com https://*.firebaseapp.com https://js.stripe.com",
+    // manifest-src
+    "manifest-src 'self'",
+  ].join("; ");
+
+  res.setHeader("Content-Security-Policy", csp);
   res.removeHeader("X-Powered-By");
   next();
 }
