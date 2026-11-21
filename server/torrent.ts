@@ -24,6 +24,13 @@ if (!fs.existsSync(AUDIO_CACHE_DIR)) {
   } catch {}
 }
 
+const TORRENT_META_DIR = path.join(os.tmpdir(), "watchparty_torrent_meta");
+if (!fs.existsSync(TORRENT_META_DIR)) {
+  try {
+    fs.mkdirSync(TORRENT_META_DIR, { recursive: true });
+  } catch {}
+}
+
 interface AudioCacheState {
   filePath: string;
   complete: boolean;
@@ -88,7 +95,7 @@ function touchTorrent(t: any) {
 function destroyCachedTorrent(t: any, reason: string) {
   try {
     console.warn(`[Cache] evict ${t?.infoHash || t?.magnetURI || "torrent"} (${reason})`);
-    t.destroy({ destroyStore: true });
+    t.destroy({ destroyStore: reason.includes("low disk") });
   } catch {}
 }
 
@@ -396,9 +403,15 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
         return doubleCheck.once("ready", () => resolve(doubleCheck));
       }
 
-      const torrent = client.add(magnetUri, {
+      // Check if we have cached .torrent metadata on disk for instant 0ms reload
+      const metaPath = infoHash ? path.join(TORRENT_META_DIR, `${infoHash.toLowerCase()}.torrent`) : null;
+      const hasMetaOnDisk = Boolean(metaPath && fs.existsSync(metaPath));
+      const targetToAdd: any = hasMetaOnDisk ? fs.readFileSync(metaPath!) : magnetUri;
+
+      const torrent = client.add(targetToAdd, {
         announce: DEFAULT_TRACKERS,
-        destroyStoreOnDestroy: true,
+        path: path.join(os.tmpdir(), "webtorrent"),
+        destroyStoreOnDestroy: false,
       });
       touchTorrent(torrent);
 
@@ -407,13 +420,31 @@ export async function getOrAddTorrent(magnetUri: string): Promise<WebTorrent.Tor
         if (!torrent.ready) {
           reject(new Error("Torrent metadata lookup timed out. No active seeders responded."));
         }
-      }, 35000);
+      }, 60000);
 
-      torrent.once("ready", () => {
+      const onTorrentReady = () => {
         clearTimeout(timeout);
         pendingTorrents.delete(cacheKey);
+        touchTorrent(torrent);
+        // Persist .torrent metadata so next reload is instantaneous without DHT lookup
+        if (torrent.torrentFile && torrent.infoHash) {
+          try {
+            const savePath = path.join(TORRENT_META_DIR, `${torrent.infoHash.toLowerCase()}.torrent`);
+            if (!fs.existsSync(savePath)) {
+              fs.writeFile(savePath, torrent.torrentFile, (err) => {
+                if (!err) console.log(`[TorrentMeta] Cached metadata for ${torrent.infoHash}`);
+              });
+            }
+          } catch {}
+        }
         resolve(torrent);
-      });
+      };
+
+      if (torrent.ready) {
+        onTorrentReady();
+      } else {
+        torrent.once("ready", onTorrentReady);
+      }
 
       torrent.once("error", (err) => {
         clearTimeout(timeout);
