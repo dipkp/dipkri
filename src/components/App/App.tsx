@@ -1080,13 +1080,31 @@ export class App extends React.Component<AppProps, AppState> {
                 }
               } catch {}
             }
-            await this.Player().setSrcAndTime(await withStreamKey(streamUrl), time);
+            const leftVideo = this.HTMLInterface.getVideoEl();
+            const shouldTryTranscode =
+              isClientTranscodeSupported() &&
+              (src.toLowerCase().includes(".mkv") || this.state.convertEnabled);
 
-            // The player itself only knows "media error". Ask the API why, so a
-            // rate limit or a full disk is not shown as a silent stall.
-            const probe = this.HTMLInterface.getVideoEl();
-            if (probe) {
-              probe.addEventListener("error", () => void this.explainStreamFailure(streamUrl), { once: true });
+            if (shouldTryTranscode) {
+              await this.convertAndPlay(streamUrl, time);
+            } else {
+              await this.Player().setSrcAndTime(streamUrl, time);
+              if (leftVideo) {
+                leftVideo.addEventListener(
+                  "error",
+                  () => {
+                    if (isClientTranscodeSupported()) {
+                      console.log(
+                        "[Player] Direct stream error; falling back to client-side demuxer/transcoder...",
+                      );
+                      void this.convertAndPlay(streamUrl, time);
+                    } else {
+                      void this.explainStreamFailure(streamUrl);
+                    }
+                  },
+                  { once: true },
+                );
+              }
             }
           } else if (isDash(src)) {
             const Dash = await import("dashjs");
