@@ -835,9 +835,7 @@ export class App extends React.Component<AppProps, AppState> {
 
           if (!this.isLocalStreamAFile) {
             this.Player().clearState();
-            if (mediaChanged) {
-              this.HTMLInterface.clearState();
-            }
+            this.HTMLInterface.clearState();
           }
           if (data.subtitle) {
             this.setState({ roomSubtitle: data.subtitle });
@@ -1081,29 +1079,33 @@ export class App extends React.Component<AppProps, AppState> {
               } catch {}
             }
             const leftVideo = this.HTMLInterface.getVideoEl();
+            const isKnownMkv =
+              src.toLowerCase().includes(".mkv") ||
+              streamUrl.toLowerCase().includes(".mkv") ||
+              this.state.convertEnabled;
             const shouldTryTranscode =
-              isClientTranscodeSupported() &&
-              (src.toLowerCase().includes(".mkv") || this.state.convertEnabled);
+              isClientTranscodeSupported() && isKnownMkv;
 
             if (shouldTryTranscode) {
               await this.convertAndPlay(streamUrl, time);
             } else {
-              await this.Player().setSrcAndTime(streamUrl, time);
               if (leftVideo) {
-                leftVideo.addEventListener(
-                  "error",
-                  () => {
-                    if (isClientTranscodeSupported()) {
-                      console.log(
-                        "[Player] Direct stream error; falling back to client-side demuxer/transcoder...",
-                      );
-                      void this.convertAndPlay(streamUrl, time);
-                    } else {
-                      void this.explainStreamFailure(streamUrl);
-                    }
-                  },
-                  { once: true },
-                );
+                const onStreamError = () => {
+                  if (isClientTranscodeSupported()) {
+                    console.log(
+                      "[Player] Direct stream error; falling back to client-side demuxer/transcoder...",
+                    );
+                    void this.convertAndPlay(streamUrl, time);
+                  } else {
+                    void this.explainStreamFailure(streamUrl);
+                  }
+                };
+                leftVideo.addEventListener("error", onStreamError, { once: true });
+              }
+              await this.Player().setSrcAndTime(streamUrl, time);
+              if (leftVideo && leftVideo.error && isClientTranscodeSupported()) {
+                console.log("[Player] Error detected immediately; falling back to convertAndPlay...");
+                void this.convertAndPlay(streamUrl, time);
               }
             }
           } else if (isDash(src)) {

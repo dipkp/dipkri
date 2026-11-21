@@ -691,6 +691,7 @@ export function getMimeType(fileName: string): string {
 export async function handleTorrentData(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges");
   const magnetUri = extractMagnetFromRequest(req);
   if (!magnetUri) {
     return res.status(400).json({ error: "Missing torrent query parameter" });
@@ -720,6 +721,7 @@ export async function handleTorrentData(req: any, res: any) {
 export async function handleTorrentProgress(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges");
   const magnetUri = extractMagnetFromRequest(req);
   if (!magnetUri) {
     return res.status(400).json({ error: "Missing torrent query parameter" });
@@ -763,6 +765,7 @@ export async function handleTorrentProgress(req: any, res: any) {
 export async function handleTorrentStream(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges");
   const magnetUri = extractMagnetFromRequest(req);
   if (!magnetUri) {
     return res.status(400).send("Missing torrent parameter");
@@ -774,6 +777,48 @@ export async function handleTorrentStream(req: any, res: any) {
 
     if (!targetFile) {
       return res.status(404).send("No playable file found in torrent");
+    }
+
+    // Remux to fragmented MP4 container on the fly when format=mp4 is requested
+    if (req.query?.format === "mp4") {
+      res.writeHead(200, {
+        "Content-Type": "video/mp4",
+        "Cache-Control": "no-cache",
+        "Accept-Ranges": "none",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+      });
+      const ss = parseFloat(req.query?.ss || "0");
+      const diskPath = (targetFile as any).path ? path.join(torrent.path, (targetFile as any).path) : null;
+      const canReadDirect = diskPath && fs.existsSync(diskPath);
+
+      const args = [
+        "-nostdin",
+        "-v", "error",
+        "-probesize", "1000000",
+        "-analyzeduration", "1000000",
+        ...(ss > 0 ? ["-ss", String(ss)] : []),
+        "-i", canReadDirect ? diskPath : "pipe:0",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+        "-f", "mp4",
+        "pipe:1"
+      ];
+      const ff = spawn(getFfmpegPath(), args);
+      if (!canReadDirect) {
+        const inStream = targetFile.createReadStream();
+        inStream.pipe(ff.stdin);
+        inStream.on("error", () => {});
+      }
+      ff.stdout.pipe(res);
+      const cleanup = () => {
+        try { ff.kill("SIGKILL"); } catch {}
+      };
+      req.on("close", cleanup);
+      res.on("close", cleanup);
+      return;
     }
 
     const fileSize = targetFile.length;

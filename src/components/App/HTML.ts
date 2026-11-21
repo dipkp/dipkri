@@ -52,8 +52,11 @@ export class HTML implements Player {
           absoluteSrc = new URL(src, window.location.href).href;
         } catch {}
       }
-      if (leftVideo.src !== absoluteSrc && leftVideo.currentSrc !== absoluteSrc) {
-        leftVideo.src = src;
+      const hasError = Boolean(leftVideo.error);
+      if (hasError || (leftVideo.src !== absoluteSrc && leftVideo.currentSrc !== absoluteSrc)) {
+        leftVideo.removeAttribute("src");
+        leftVideo.src = src;
+        leftVideo.load();
       }
       if (typeof time === "number" && time > 0) {
         const applyTime = () => {
@@ -376,3 +379,4 @@ export class HTML implements Player {
     }
   };
 }
+

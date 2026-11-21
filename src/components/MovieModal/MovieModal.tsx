@@ -419,9 +419,11 @@ export const MovieModal: React.FC<MovieModalProps> = ({
               ) ||
               media.title;
 
+            const dnTitle = cleanTitle || `${media.title} ${quality}`;
             const magnetParams = new URLSearchParams({
               xt: `urn:btih:${s.infoHash}`,
-              dn: `${media.title} ${quality}`,
+              dn: dnTitle,
+              fileName: dnTitle,
               isMovie: "1",
             });
 
