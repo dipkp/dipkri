@@ -192,10 +192,19 @@ class LibtorrentEngine(
         val path = File(saveDir, info.files().filePath(index))
         val length = end - start + 1
 
+        // libtorrent creates the file lazily; opening it too early throws and the
+        // client gets a dropped socket instead of an HTTP response.
+        val appearBy = System.currentTimeMillis() + PIECE_TIMEOUT_MS
+        while (!path.exists() && System.currentTimeMillis() < appearBy) {
+            if (!waitForPiece(handle, pieceFor(info, index, start), 500)) continue
+            Thread.sleep(100)
+        }
+        if (!path.exists()) return httpError(out, 503, "file not ready yet")
+
         out.write(
             buildString {
                 append("HTTP/1.1 206 Partial Content\r\n")
-                append("Content-Type: video/mp4\r\n")
+                append("Content-Type: ${mimeFor(path.name)}\r\n")
                 append("Accept-Ranges: bytes\r\n")
                 append("Content-Length: $length\r\n")
                 append("Content-Range: bytes $start-$end/$size\r\n")
@@ -238,6 +247,16 @@ class LibtorrentEngine(
         val end = if (rawEnd.isEmpty()) size - 1 else minOf(rawEnd.toLongOrNull() ?: size - 1, size - 1)
         if (start < 0 || start >= size || end < start) return null
         return start to end
+    }
+
+    /** MKV served as video/mp4 is why some phones refused to play at all. */
+    private fun mimeFor(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "mp4", "m4v" -> "video/mp4"
+        "mkv" -> "video/x-matroska"
+        "webm" -> "video/webm"
+        "avi" -> "video/x-msvideo"
+        "mov" -> "video/quicktime"
+        else -> "application/octet-stream"
     }
 
     private fun httpError(out: OutputStream, status: Int, message: String) {

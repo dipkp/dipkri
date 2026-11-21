@@ -566,6 +566,19 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
   const genName = () => "/" + makeRoomName(config.SHARD);
   let name = genName();
   console.log("createRoom: ", name);
+
+  // Validate before allocating: a Room starts a 1 s interval and a socket.io
+  // namespace, so rejecting after construction leaked one per 401/503.
+  const decodedEarly = await validateUserToken(req.body?.uid, req.body?.token);
+  if (config.FIREBASE_ADMIN_SDK_CONFIG && !decodedEarly) {
+    res.status(401).json({ error: "Please sign in to start a party." });
+    return;
+  }
+  if (rooms.size >= MAX_ROOMS) {
+    res.status(503).json({ error: "Server is at capacity, please try again in a minute." });
+    return;
+  }
+
   const newRoom = new Room(io, name);
   if (postgres) {
     const now = new Date();
@@ -581,12 +594,7 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
       throw e;
     }
   }
-  const decoded = await validateUserToken(req.body?.uid, req.body?.token);
-  // With an identity provider configured, rooms are for signed-in users only.
-  if (config.FIREBASE_ADMIN_SDK_CONFIG && !decoded) {
-    res.status(401).json({ error: "Please sign in to start a party." });
-    return;
-  }
+  const decoded = decodedEarly;
   newRoom.creator = decoded?.email;
   newRoom.creatorUid = decoded?.uid;
   const preload = (req.body?.video || "").slice(0, 20000);
@@ -602,11 +610,6 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
       newRoom.playlistAdd(null, item);
     }
   }
-  if (rooms.size >= MAX_ROOMS) {
-    res.status(503).json({ error: "Server is at capacity, please try again in a minute." });
-    return;
-  }
-
   const hostToken = crypto.randomBytes(24).toString("hex");
   rooms.set(name, newRoom);
   roomHosts.set(name, hostToken);
@@ -799,7 +802,10 @@ app.post("/streamKey", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
   res.json({ key: mintStreamKey(decoded.uid), required: true, configured: true });
 });
 
-app.use(["/data", "/stream", "/streamAudio"], streamKeyGuard(STREAM_AUTH_ON));
+app.use(
+  ["/data", "/stream", "/streamAudio", "/streamInfo", "/streamSubtitle"],
+  streamKeyGuard(STREAM_AUTH_ON),
+);
 
 // Direct torrent streaming endpoints for BitTorrent magnet links.
 // A player issues many range requests, so these get their own, higher budget.

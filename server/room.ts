@@ -984,9 +984,11 @@ export class Room {
     if (this.preventTSUpdate) {
       return;
     }
-    // This is negative for live streams, so allow overwriting
-    // Otherwise, only increment this value to prevent a lagging viewer from holding up the room state
-    if (data < 0 || data > this.videoTS || this.roster.length <= 1) {
+    // Only the host may move the room's clock. A guest who scrubs locally still
+    // reports their own offset (tsMap below) but can no longer pull everyone to
+    // their position - that was the hole left by the first host-check pass.
+    const isHost = !this.creatorUid || socket.uid === this.creatorUid;
+    if (isHost && (data < 0 || data > this.videoTS || this.roster.length <= 1)) {
       this.videoTS = data;
     }
     // Normalize the received TS based on how long since the last tsMap emit
@@ -1447,9 +1449,10 @@ export class Room {
     if (this.isChatDisabled === undefined) {
       this.isChatDisabled = Boolean(first?.isChatDisabled);
     }
-    // TODO only send the password if this is current owner
     socket.emit("REC:getRoomState", {
-      password: first?.password,
+      // Only expose the plaintext password to the room owner
+      password: socket.uid && socket.uid === first?.owner ? first?.password : undefined,
+      hasPassword: Boolean(first?.password),
       vanity: first?.vanity,
       owner: first?.owner,
       isChatDisabled: first?.isChatDisabled,
