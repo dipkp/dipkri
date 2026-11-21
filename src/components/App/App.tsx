@@ -188,6 +188,11 @@ interface AppState {
   errorMessage: string;
   successMessage: string;
   warningMessage: string;
+  // Stream error fallback UI
+  streamError: { message: string; isYouTube?: boolean; originalUrl?: string } | null;
+  // Reconnection overlay state
+  isReconnecting: boolean;
+  reconnectReason?: string;
   isChatDisabled: boolean;
   showChatColumn: boolean;
   showPeopleColumn: boolean;
@@ -337,6 +342,8 @@ export class App extends React.Component<AppProps, AppState> {
     incomingReaction: null,
     audioBoost: getPlayerSettings().audioBoost || 100,
     copiedLink: false,
+    streamError: null,
+    isReconnecting: false,
   };
   socket: Socket = null!;
   videoChatRef = React.createRef<VideoChat>();
@@ -723,12 +730,36 @@ export class App extends React.Component<AppProps, AppState> {
     socket.on("disconnect", (reason) => {
       if (reason === "io server disconnect") {
         // the disconnection was initiated by the server, you need to reconnect manually
-        this.setState({ overlayMsg: "Disconnected from server." });
+        this.setState({
+          isReconnecting: true,
+          reconnectReason: "Disconnected from server",
+          overlayMsg: "Disconnected from server.",
+        });
       } else {
         // else the socket will automatically try to reconnect
-        // Use the alert pill since it's less disruptive
-        this.setState({ warningMessage: "Reconnecting..." });
+        // Show prominent reconnecting overlay instead of just a toast
+        this.setState({
+          isReconnecting: true,
+          reconnectReason: "Connection lost, attempting to reconnect...",
+        });
       }
+    });
+    socket.on("reconnect", () => {
+      this.setState({ isReconnecting: false, reconnectReason: undefined });
+      this.setState({ warningMessage: "Reconnected!" });
+      setTimeout(() => this.setState({ warningMessage: "" }), 2000);
+    });
+    socket.on("reconnect_attempt", (attemptNumber) => {
+      this.setState({
+        isReconnecting: true,
+        reconnectReason: `Reconnecting... (attempt ${attemptNumber})`,
+      });
+    });
+    socket.on("reconnect_failed", () => {
+      this.setState({
+        isReconnecting: true,
+        reconnectReason: "Reconnection failed. Please refresh the page.",
+      });
     });
     socket.on("errorMessage", (err: string) => {
       this.setState({ errorMessage: err });
@@ -1663,12 +1694,20 @@ export class App extends React.Component<AppProps, AppState> {
           },
           onError: (e: any) => {
             const code = e?.data;
-            if (code === 101 || code === 150) {
-              this.setState({
-                overlayMsg:
-                  "This YouTube video blocks embedding. Open it on YouTube, or paste a different link.",
-              });
-            }
+            // YouTube Player API error codes:
+            // 2: Invalid parameter, 5: HTML5 player error, 100: Video not found,
+            // 101: Video doesn't allow embedding, 150: Same as 101
+            const errorMessages: Record<number, string> = {
+              2: "Invalid YouTube URL or parameters.",
+              5: "YouTube HTML5 player error. Try a different browser or video.",
+              100: "Video not found or has been removed.",
+              101: "This video blocks embedding. Open on YouTube or pick another.",
+              150: "This video blocks embedding. Open on YouTube or pick another.",
+            };
+            const message = errorMessages[code] || `YouTube error (${code}). Please try a different video.`;
+            this.setState({
+              streamError: { message, isYouTube: true, originalUrl: this.state.roomMedia },
+            });
           },
           onStateChange: (e) => {
             if (
@@ -1831,7 +1870,9 @@ export class App extends React.Component<AppProps, AppState> {
               : res.status === 400
                 ? "This stream link is not valid."
                 : "";
-      if (message) this.setState({ overlayMsg: message });
+      if (message) {
+        this.setState({ streamError: { message, isYouTube: false, originalUrl: streamUrl } });
+      }
     } catch {
       // offline / aborted: the player already shows its own error state
     }
@@ -3948,6 +3989,156 @@ export class App extends React.Component<AppProps, AppState> {
           >
             {this.state.warningMessage}
           </Alert>
+        )}
+
+        {/* Stream Error Fallback UI */}
+        {this.state.streamError && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(9, 10, 15, 0.94)",
+              backdropFilter: "blur(24px)",
+              zIndex: 1000,
+              padding: "24px",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "520px",
+                width: "100%",
+                background: "rgba(15, 17, 24, 0.96)",
+                backdropFilter: "blur(24px)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                borderRadius: "16px",
+                padding: "32px",
+                boxShadow: "0 24px 48px rgba(0, 0, 0, 0.8)",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: "48px", marginBottom: "16px" }}>
+                {this.state.streamError.isYouTube ? "📺" : "🎬"}
+              </div>
+              <h2 style={{ color: "#F0F0F5", margin: "0 0 12px", fontSize: "22px", fontWeight: 700 }}>
+                {this.state.streamError.isYouTube ? "YouTube Playback Error" : "Stream Playback Error"}
+              </h2>
+              <p style={{ color: "rgba(240,240,245,0.8)", margin: "0 0 24px", fontSize: "15px", lineHeight: 1.5 }}>
+                {this.state.streamError.message}
+              </p>
+              <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => {
+                    this.setState({ streamError: null });
+                    if (this.state.streamError?.originalUrl) {
+                      this.socket?.emit("CMD:host", this.state.streamError.originalUrl);
+                    }
+                  }}
+                  style={{
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "10px",
+                    padding: "12px 24px",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.02)"}
+                  onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+                >
+                  Retry Stream
+                </button>
+                {this.state.streamError.isYouTube && (
+                  <a
+                    href={this.state.streamError.originalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      background: "rgba(255,255,255,0.1)",
+                      color: "#fff",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: "10px",
+                      padding: "12px 24px",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      transition: "all 0.2s ease",
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
+                    onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.178 3.178 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505a3.178 3.178 0 0 0-2.122 2.136C1.046 5.083.335 8.002.335 12s.712 6.917 1.87 9.813a3.178 3.178 0 0 0 2.122 2.136c1.872.505 9.376.505 9.376.505s7.504 0 9.377-.505a3.178 3.178 0 0 0 2.122-2.136c1.158-2.896.447-5.815-.44-9.838zM12 6.865a4.97 4.97 0 0 1 1.307 3.26c-.23.614-.27 1.29-.27 2.045 0 1.823 1.384 3.432 3.088 3.6V21l5.302-3.204a.917.917 0 0 0 .697-1.406V7.158A3.66 3.66 0 0 0 12 6.865z"/></svg>
+                    Open on YouTube
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reconnection Overlay */}
+        {this.state.isReconnecting && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(9, 10, 15, 0.92)",
+              backdropFilter: "blur(24px)",
+              zIndex: 2000,
+              padding: "24px",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "400px",
+                width: "100%",
+                background: "rgba(15, 17, 24, 0.96)",
+                backdropFilter: "blur(24px)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                borderRadius: "16px",
+                padding: "32px",
+                boxShadow: "0 24px 48px rgba(0, 0, 0, 0.8)",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ marginBottom: "16px" }}>
+                <div
+                  style={{
+                    width: "48px",
+                    height: "48px",
+                    border: "3px solid rgba(99, 102, 241, 0.3)",
+                    borderTopColor: "#6366f1",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                    margin: "0 auto 16px",
+                  }}
+                />
+              </div>
+              <h2 style={{ color: "#F0F0F5", margin: "0 0 8px", fontSize: "20px", fontWeight: 700 }}>
+                Reconnecting to Party
+              </h2>
+              <p style={{ color: "rgba(240,240,245,0.7)", margin: "0", fontSize: "14px", lineHeight: 1.5 }}>
+                {this.state.reconnectReason || "Connection lost. Attempting to reconnect..."}
+              </p>
+            </div>
+          </div>
         )}
         {this.state.state === "connected" && (
           <>

@@ -598,6 +598,12 @@ a:hover {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .animate-fadeIn {
   animation: fadeIn var(--transition-smooth) ease forwards;
 }
