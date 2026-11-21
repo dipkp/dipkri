@@ -18,6 +18,7 @@ import {
   isBlockedHost,
   hasPathTraversal,
 } from "./security.ts";
+import { destroyTorrentClient } from "./torrent.ts";
 import https from "node:https";
 import http from "node:http";
 import { Server } from "socket.io";
@@ -183,6 +184,9 @@ function readSubtitle(hash: string): Buffer | undefined {
     memorySubtitleCache.delete(hash);
     return undefined;
   }
+  // True LRU: move to end on read
+  memorySubtitleCache.delete(hash);
+  memorySubtitleCache.set(hash, cached);
   return cached.buffer;
 }
 
@@ -219,6 +223,12 @@ app.post("/subtitle", async (req, res) => {
     .digest()
     .toString("hex");
   let gzipData = gzipSync(data);
+  // Enforce 1MB compressed size limit to prevent OOM
+  const MAX_SUBTITLE_SIZE = 1024 * 1024; // 1MB
+  if (gzipData.length > MAX_SUBTITLE_SIZE) {
+    res.status(413).json({ error: "Subtitle too large (max 1MB compressed)" });
+    return;
+  }
   if (redis) {
     await redis.setex("subtitle:" + hash, 24 * 60 * 60, gzipData);
   } else {
@@ -1489,6 +1499,9 @@ async function gracefulShutdown(signal: string): Promise<void> {
   }
   rooms.clear();
   roomHosts.clear();
+
+  // Clean up WebTorrent client and cache sweepers
+  destroyTorrentClient();
 
   setTimeout(() => process.exit(0), 900);
 }

@@ -139,6 +139,19 @@ async function sweepTorrentCache() {
     await new Promise((r) => setTimeout(r, 600));
     free = freeDiskGB();
   }
+
+  // Clean up unused .torrent metadata files
+  try {
+    const metaFiles = fs.readdirSync(TORRENT_META_DIR);
+    for (const file of metaFiles) {
+      if (!file.endsWith(".torrent")) continue;
+      const hash = file.replace(".torrent", "");
+      const inClient = client?.torrents.some(t => t.infoHash?.toLowerCase() === hash);
+      if (!inClient) {
+        try { fs.unlinkSync(path.join(TORRENT_META_DIR, file)); } catch {}
+      }
+    }
+  } catch {}
 }
 
 if (!(globalThis as any).__wpCacheSweeper) {
@@ -146,6 +159,69 @@ if (!(globalThis as any).__wpCacheSweeper) {
     void sweepTorrentCache();
   }, 5 * 60_000);
   (globalThis as any).__wpCacheSweeper.unref?.();
+}
+
+// --- audio cache sweeper ------------------------------------------------------
+const AUDIO_CACHE_MAX_ENTRIES = 50;
+const AUDIO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+
+if (!(globalThis as any).__audioCacheSweeper) {
+  (globalThis as any).__audioCacheSweeper = setInterval(() => {
+    const now = Date.now();
+    for (const [key, state] of audioTranscodeMap) {
+      if (state.complete) {
+        try {
+          const stat = fs.statSync(state.filePath);
+          if (now - stat.mtimeMs > AUDIO_CACHE_MAX_AGE_MS) {
+            fs.unlinkSync(state.filePath);
+            audioTranscodeMap.delete(key);
+          }
+        } catch {
+          audioTranscodeMap.delete(key);
+        }
+      } else if (state.process && !state.process.killed) {
+        // Incomplete transcode abandoned > 10 min ago
+        const startTime = (state.process as any).startTime;
+        if (startTime && now - startTime > 10 * 60 * 1000) {
+          state.process.kill("SIGKILL");
+          try { fs.unlinkSync(state.filePath); } catch {}
+          audioTranscodeMap.delete(key);
+        }
+      }
+    }
+    // Hard cap: delete oldest complete entries
+    if (audioTranscodeMap.size > AUDIO_CACHE_MAX_ENTRIES) {
+      const entries = [...audioTranscodeMap.entries()].filter(([, s]) => s.complete);
+      entries.sort((a, b) => {
+        try {
+          return fs.statSync(a[1].filePath).mtimeMs - fs.statSync(b[1].filePath).mtimeMs;
+        } catch {
+          return 0;
+        }
+      });
+      for (const [key, state] of entries.slice(0, entries.length - AUDIO_CACHE_MAX_ENTRIES)) {
+        try { fs.unlinkSync(state.filePath); } catch {}
+        audioTranscodeMap.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000).unref();
+}
+
+
+// Export destroyTorrentClient for graceful shutdown
+export function destroyTorrentClient() {
+  if (torrentClient) {
+    torrentClient.destroy();
+    torrentClient = null;
+  }
+  if ((globalThis as any).__wpCacheSweeper) {
+    clearInterval((globalThis as any).__wpCacheSweeper);
+    (globalThis as any).__wpCacheSweeper = null;
+  }
+  if ((globalThis as any).__audioCacheSweeper) {
+    clearInterval((globalThis as any).__audioCacheSweeper);
+    (globalThis as any).__audioCacheSweeper = null;
+  }
 }
 
 /**
@@ -684,6 +760,36 @@ export function getMimeType(fileName: string): string {
   return "video/mp4";
 }
 
+// RFC 7233 compliant Range header parser
+function parseRangeHeader(range: string, fileSize: number): { start: number; end: number } | null {
+  // Only handle single byte-range-spec (multi-range not supported)
+  const match = range.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) return null;
+
+  const [, startStr, endStr] = match;
+
+  // Reject empty range: bytes=-
+  if (!startStr && !endStr) return null;
+
+  let start = startStr ? parseInt(startStr, 10) : 0;
+  let end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+
+  // Suffix-byte-range-spec: bytes=-N
+  if (!startStr && endStr) {
+    const suffixLength = parseInt(endStr, 10);
+    if (suffixLength <= 0) return null;
+    start = Math.max(0, fileSize - suffixLength);
+    end = fileSize - 1;
+  }
+
+  // Validate
+  if (isNaN(start) || isNaN(end) || start < 0 || end >= fileSize || start > end) {
+    return null;
+  }
+
+  return { start, end };
+}
+
 /**
  * GET /data?torrent=...
  * Returns torrent name, infoHash, and list of files with lengths and indexes.
@@ -820,14 +926,17 @@ export async function handleTorrentStream(req: any, res: any) {
         "pipe:1"
       ];
       const ff = spawn(getFfmpegPath(), args);
+      let inStream: any = null;
       if (!canReadDirect) {
-        const inStream = targetFile.createReadStream();
+        inStream = targetFile.createReadStream();
         inStream.pipe(ff.stdin);
         inStream.on("error", () => {});
       }
       ff.stdout.pipe(res);
       const cleanup = () => {
+        try { inStream?.destroy?.(); } catch {}
         try { ff.kill("SIGKILL"); } catch {}
+        try { (targetFile as any).deselect?.(); } catch {}
       };
       req.on("close", cleanup);
       res.on("close", cleanup);
@@ -839,33 +948,12 @@ export async function handleTorrentStream(req: any, res: any) {
     const contentType = getMimeType(targetFile.name);
 
     if (range) {
-      let start: number;
-      let end: number;
-
-      const bytesRange = range.replace(/bytes=/, "").trim();
-      const [startStr, endStr] = bytesRange.split("-");
-
-      if (!startStr && endStr) {
-        // Suffix byte range: bytes=-500000 (last 500KB of file e.g. for MP4 moov atom)
-        const suffixLength = parseInt(endStr, 10);
-        start = Math.max(0, fileSize - suffixLength);
-        end = fileSize - 1;
-      } else {
-        start = parseInt(startStr, 10) || 0;
-        if (endStr) {
-          end = parseInt(endStr, 10);
-        } else {
-          end = fileSize - 1;
-        }
-      }
-
-      // Check range validity according to RFC 7233
-      if (isNaN(start) || isNaN(end) || start >= fileSize || start < 0) {
+      const parsed = parseRangeHeader(range, fileSize);
+      if (!parsed) {
         res.setHeader("Content-Range", `bytes */${fileSize}`);
         return res.status(416).end();
       }
-
-      end = Math.min(end, fileSize - 1);
+      const { start, end } = parsed;
       const chunkSize = end - start + 1;
 
 
@@ -1172,13 +1260,22 @@ export async function handleTorrentAudio(req: any, res: any) {
     }
 
     ff.stdout.pipe(res);
+    // Drain stderr to prevent buffer deadlock
+    ff.stderr?.on("data", () => {});
 
     const cleanup = () => {
+      // Only clean up on actual client abort (not normal stream completion)
+      if (res.writableEnded) return;
       ff.stdout.unpipe(res);
-      // If we are actively saving the full file in background, do NOT kill ff! Let it finish saving!
-      if (!fileStream) {
-        try { ff.kill("SIGKILL"); } catch {}
+      if (fileStream) {
+        ff.stdout.unpipe(fileStream);
+        fileStream.destroy();
+        // Delete partial cache file on abort
+        try { fs.unlinkSync(cacheState!.filePath); } catch {}
+        // Remove from map so it doesn't stay stuck as incomplete
+        audioTranscodeMap.delete(cacheKey);
       }
+      try { ff.kill("SIGKILL"); } catch {}
     };
     req.on("close", cleanup);
     res.on("close", cleanup);
@@ -1186,10 +1283,6 @@ export async function handleTorrentAudio(req: any, res: any) {
     ff.on("error", (err) => {
       console.warn("[TorrentAudio ffmpeg error]:", err?.message);
       if (!res.headersSent) res.status(500).end();
-    });
-
-    ff.stderr?.on("data", (chunk) => {
-      console.warn("[TorrentAudio ffmpeg stderr]:", chunk.toString());
     });
 
   } catch (err: any) {
@@ -1245,10 +1338,11 @@ export async function handleTorrentSubtitle(req: any, res: any) {
     ];
 
     const ff = spawn(getFfmpegPath(), args);
+    // Drain stderr to prevent buffer deadlock
+    ff.stderr?.on("data", () => {});
+
     const cleanup = () => {
-      try {
-        ff.kill("SIGKILL");
-      } catch {}
+      try { ff.kill("SIGKILL"); } catch {}
     };
     req.on("close", cleanup);
     res.on("close", cleanup);
