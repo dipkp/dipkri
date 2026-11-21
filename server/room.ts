@@ -523,7 +523,7 @@ export class Room {
       playbackRate: this.playbackRate,
       paused: this.paused,
       isVBrowserLarge: Boolean(this.vBrowser && this.vBrowser.large),
-      controller: this.vBrowser?.controllerClient,
+      controller: this.vBrowser?.controllerClient ?? "",
       loop: this.loop,
     };
   };
@@ -944,13 +944,21 @@ export class Room {
     this.addChatMessage(socket, chatMsg);
   };
 
-  private seekVideo = (socket: Socket, data: number) => {
-    if (String(data).length > 100) {
+  private seekVideo = (socket: Socket, data: { time: number; seekId?: string } | number) => {
+    if (typeof data === "number") {
+      if (String(data).length > 100) return;
+      this.videoTS = data;
+      socket.broadcast.emit("REC:seek", { time: data, seekId: `seek-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+      const chatMsg = { id: socket.clientId, cmd: "seek", msg: data?.toString() };
+      this.addChatMessage(socket, chatMsg);
       return;
     }
-    this.videoTS = data;
-    socket.broadcast.emit("REC:seek", data);
-    const chatMsg = { id: socket.clientId, cmd: "seek", msg: data?.toString() };
+    const { time, seekId } = data;
+    if (String(time).length > 100) return;
+    this.videoTS = time;
+    const newSeekId = seekId || `seek-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    socket.broadcast.emit("REC:seek", { time, seekId: newSeekId });
+    const chatMsg = { id: socket.clientId, cmd: "seek", msg: time?.toString() };
     this.addChatMessage(socket, chatMsg);
   };
 
@@ -1602,6 +1610,22 @@ export class Room {
       }
       delete this.tsMap[clientId];
       delete this.socketIdMap[clientId];
+
+      // Host transfer: if the disconnected user was the host, promote next available user
+      if (this.creatorUid === clientId && this.roster.length > 0) {
+        const newHost = this.roster[0];
+        this.creatorUid = newHost.id;
+        // If the new host has a uid (logged in), use it; otherwise keep as clientId
+        this.io.of(this.roomId).emit("REC:host", this.getHostState());
+        this.io.of(this.roomId).emit("roster", this.getRosterForApp());
+        // Persist new host to Postgres
+        if (postgres) {
+          postgres.query(
+            `UPDATE room SET owner = $1 WHERE "roomId" = $2`,
+            [this.creatorUid, this.roomId]
+          ).catch((e: any) => console.warn("Failed to update room owner:", e?.message));
+        }
+      }
     }
     // Keep namemap/picturemap so old chat messages still render correctly after disconnect
     // When serializing we only write values with messages in chat

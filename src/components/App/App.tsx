@@ -360,6 +360,8 @@ export class App extends React.Component<AppProps, AppState> {
   // True while a remote seek is being applied; the iframe's echo must not be
   // sent back as CMD:seek or the room ping-pongs forever.
   isRemoteSyncing = false;
+  // Track the last seekId we sent to the server to ignore the echo
+  lastSentSeekId: string | null = null;
   movieStartAt = 0;
   movieSyncKey = 0;
   YouTubeInterface: YouTube = new YouTube(null);
@@ -741,9 +743,16 @@ export class App extends React.Component<AppProps, AppState> {
     socket.on("REC:pause", () => {
       this.localPause();
     });
-    socket.on("REC:seek", (data: number) => {
+    socket.on("REC:seek", (data: { time: number; seekId?: string } | number) => {
+      const time = typeof data === "number" ? data : data.time;
+      const seekId = typeof data === "object" ? data.seekId : undefined;
+      // Ignore the echo of our own seek
+      if (seekId && seekId === this.lastSentSeekId) {
+        this.lastSentSeekId = null;
+        return;
+      }
       this.isRemoteSyncing = true;
-      this.localSeek(data);
+      this.localSeek(time);
       window.setTimeout(() => {
         this.isRemoteSyncing = false;
       }, 600);
@@ -1399,23 +1408,29 @@ export class App extends React.Component<AppProps, AppState> {
           this.hasDuration() &&
           this.state.roomPlaybackRate === 0
         ) {
-          const leader = this.getLeaderTime();
-          const delta = leader - data[clientId];
-          let pbr = 1;
-          // Symmetric drift correction with gentle nudging
-          if (delta > 0.5) {
-            // Client is behind leader: gently speed up (max 1.1x)
-            pbr += Number((delta / 10).toFixed(2));
-            pbr = Math.min(pbr, 1.1);
-          } else if (delta < -0.5) {
-            // Client is ahead of leader: gently slow down (min 0.9x)
-            pbr += Number((delta / 10).toFixed(2));
-            pbr = Math.max(pbr, 0.9);
-          }
-          // Debounce rate changes to avoid audio pitch flutter (warble)
-          const currentPbr = this.Player().getPlaybackRate();
-          if (Math.abs(currentPbr - pbr) >= 0.02) {
-            this.Player().setPlaybackRate(pbr);
+          // Guard: only adjust when video is playing, not seeking, and has sufficient buffer
+          const videoEl = this.Player().getVideoEl?.();
+          const isPlaying = videoEl && !videoEl.paused && !videoEl.seeking;
+          const hasBuffer = videoEl && videoEl.readyState >= 3; // HAVE_FUTURE_DATA
+          if (isPlaying && hasBuffer) {
+            const leader = this.getLeaderTime();
+            const delta = leader - data[clientId];
+            let pbr = 1;
+            // Symmetric drift correction with gentle nudging
+            if (delta > 0.5) {
+              // Client is behind leader: gently speed up (max 1.1x)
+              pbr += Number((delta / 10).toFixed(2));
+              pbr = Math.min(pbr, 1.1);
+            } else if (delta < -0.5) {
+              // Client is ahead of leader: gently slow down (min 0.9x)
+              pbr += Number((delta / 10).toFixed(2));
+              pbr = Math.max(pbr, 0.9);
+            }
+            // Debounce rate changes to avoid audio pitch flutter (warble)
+            const currentPbr = this.Player().getPlaybackRate();
+            if (Math.abs(currentPbr - pbr) >= 0.02) {
+              this.Player().setPlaybackRate(pbr);
+            }
           }
         }
         if (this.state.roomSubtitle) {
@@ -2822,7 +2837,9 @@ export class App extends React.Component<AppProps, AppState> {
     let target = time;
     target = Math.max(target, 0);
     this.Player().seekVideo(target);
-    const toSend = this.getRoomTSToSet(target);
+    const seekId = this.generateSeekId();
+    this.lastSentSeekId = seekId;
+    const toSend = { time: this.getRoomTSToSet(target), seekId };
     this.socket.emit("CMD:seek", toSend);
     if (this.state.roomMedia && this.state.roomId) {
       this.savePlaybackTime(
@@ -2845,6 +2862,9 @@ export class App extends React.Component<AppProps, AppState> {
     // Otherwise just return the time
     return target;
   };
+
+  // Generate a unique seekId for tracking seek requests
+  private generateSeekId = () => `seek-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   onFullScreenChange = () => {
     // Check both standard and webkit-prefixed (Android Chrome/WebView)

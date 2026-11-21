@@ -673,6 +673,11 @@ app.post("/terminateRoom", async (req, res) => {
       rooms.delete(key);
       roomHosts.delete(key);
       dropNamespace(key);
+      // Clean up Redis keys for this room
+      if (redis) {
+        redis.del(`roomCounts:${key}`).catch(() => {});
+        redis.del(`roomRosters:${key}`).catch(() => {});
+      }
       if (postgres) {
         await postgres.query(`DELETE FROM room WHERE "roomId" = $1`, [key]).catch(() => {});
       }
@@ -1336,6 +1341,11 @@ async function saveRooms() {
         saveCount += 1;
         // Unregister the namespace to avoid dupes on reload
         dropNamespace(key);
+        // Clean up Redis keys for this room
+        if (redis) {
+          redis.del(`roomCounts:${key}`).catch(() => {});
+          redis.del(`roomRosters:${key}`).catch(() => {});
+        }
       } else if (room.roster.length) {
         room.lastUpdateTime = new Date();
         await room.saveRoom();
