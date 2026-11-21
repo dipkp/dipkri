@@ -126,15 +126,17 @@ export class Room {
           next(new Error("password"));
           return;
         }
-        // Check if room is at capacity
-        const isSubRoom = result.rows[0]?.isSubRoom;
-        const roomCapacity = isSubRoom
-          ? config.ROOM_CAPACITY_SUB
-          : config.ROOM_CAPACITY;
-        if (roomCapacity && this.roster.length >= roomCapacity) {
-          next(new Error("This room is full"));
-          return;
-        }
+      }
+
+      // Capacity is enforced in memory too: without a database the check above
+      // never ran, so a single room could take unlimited viewers on a 1 GB box.
+      const envCapacity = process.env.ROOM_CAPACITY;
+      const capacity = envCapacity !== undefined
+        ? Number(envCapacity)
+        : config.ROOM_CAPACITY || 12;
+      if (capacity > 0 && this.roster.length >= capacity) {
+        next(new Error("This room is full"));
+        return;
       }
       // clientId is meant for things that shouldn't require login
       // Anything sensitive (e.g. subscriber features, room lock) should be validated with uid and require login
