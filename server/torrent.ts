@@ -779,14 +779,27 @@ export async function handleTorrentStream(req: any, res: any) {
       return res.status(404).send("No playable file found in torrent");
     }
 
-    // Remux to fragmented MP4 container on the fly when format=mp4 is requested
-    if (req.query?.format === "mp4") {
+    // Automatically remux unsupported containers (.mkv, .avi, .ts, etc.) to fragmented MP4
+    // so any browser (Chrome Android, Safari iOS, Desktop Chrome) plays with full hardware acceleration!
+    const fileName = (targetFile.name || "").toLowerCase();
+    const isUnsupportedContainer =
+      fileName.endsWith(".mkv") ||
+      fileName.endsWith(".avi") ||
+      fileName.endsWith(".ts") ||
+      fileName.endsWith(".flv") ||
+      fileName.endsWith(".mov");
+    const shouldRemuxToMp4 =
+      req.query?.format === "mp4" ||
+      (isUnsupportedContainer && req.query?.raw !== "1");
+
+    if (shouldRemuxToMp4) {
       res.writeHead(200, {
         "Content-Type": "video/mp4",
         "Cache-Control": "no-cache",
         "Accept-Ranges": "none",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
       });
       const ss = parseFloat(req.query?.ss || "0");
       const diskPath = (targetFile as any).path ? path.join(torrent.path, (targetFile as any).path) : null;
