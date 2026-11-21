@@ -588,6 +588,7 @@ app.post("/createRoom", rateLimit(RATE_LIMITS.rooms), async (req, res) => {
     return;
   }
   newRoom.creator = decoded?.email;
+  newRoom.creatorUid = decoded?.uid;
   const preload = (req.body?.video || "").slice(0, 20000);
   if (preload) {
     redisCount("createRoomPreload");

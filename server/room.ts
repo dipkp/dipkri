@@ -54,6 +54,7 @@ export class Room {
   private pictureMap: StringDict = {};
   public vBrowser: AssignedVM | undefined = undefined;
   public creator: string | undefined = undefined; // email of the user who created the room (just used for stats)
+  public creatorUid: string | undefined = undefined; // uid of the creator - the only one who may control playback
   public lock: string | undefined = undefined; // uid of the user who locked the room
   public playlist: PlaylistVideo[] = [];
 
@@ -231,6 +232,16 @@ export class Room {
         return !this.lock || socket.uid === this.lock;
       };
 
+      // Playback belongs to the host. Rooms created before this field existed
+      // (they die on restart anyway) stay open so nobody loses control mid-film.
+      const validateHost = () => {
+        if (!this.creatorUid || socket.uid === this.creatorUid) {
+          return true;
+        }
+        socket.emit("errorMessage", "Only the host can control playback.");
+        return false;
+      };
+
       // Check if this socket matches the room owner UID
       const validateOwner = async () => {
         const result = await postgres?.query(
@@ -265,25 +276,26 @@ export class Room {
       });
       socket.on("CMD:host", (data: unknown) => {
         validateLock() &&
+          validateHost() &&
           this.startHosting(socket, String(data)).catch((e: any) => {
             console.warn("startHosting failed:", e?.message ?? e);
             socket.emit("errorMessage", "Couldn't load that video.");
           });
       });
       socket.on("CMD:play", () => {
-        validateLock() && this.playVideo(socket);
+        validateLock() && validateHost() && this.playVideo(socket);
       });
       socket.on("CMD:pause", () => {
-        validateLock() && this.pauseVideo(socket);
+        validateLock() && validateHost() && this.pauseVideo(socket);
       });
       socket.on("CMD:seek", (data: unknown) => {
-        validateLock() && this.seekVideo(socket, Number(data));
+        validateLock() && validateHost() && this.seekVideo(socket, Number(data));
       });
       socket.on("CMD:playbackRate", (data: unknown) => {
-        validateLock() && this.setPlaybackRate(socket, Number(data));
+        validateLock() && validateHost() && this.setPlaybackRate(socket, Number(data));
       });
       socket.on("CMD:loop", (data: unknown) => {
-        validateLock() && this.setLoop(Boolean(data));
+        validateLock() && validateHost() && this.setLoop(Boolean(data));
       });
       socket.on("CMD:ts", (data: unknown) =>
         this.setTimestamp(socket, Number(data)),
@@ -400,6 +412,7 @@ export class Room {
       vBrowser: this.vBrowser,
       lock: this.lock,
       creator: this.creator,
+      creatorUid: this.creatorUid,
       playlist: this.playlist,
       loop: this.loop,
     });
@@ -432,6 +445,9 @@ export class Room {
     }
     if (roomObj.creator) {
       this.creator = roomObj.creator;
+    }
+    if (roomObj.creatorUid) {
+      this.creatorUid = roomObj.creatorUid;
     }
     if (roomObj.playlist) {
       this.playlist = roomObj.playlist;

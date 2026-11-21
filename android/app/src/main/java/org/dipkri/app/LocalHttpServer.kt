@@ -24,6 +24,7 @@ class LocalHttpServer(
     private val onRoomEnd: () -> Unit,
 ) {
     private val running = AtomicBoolean(false)
+    private val active = java.util.concurrent.atomic.AtomicInteger(0)
     private var socket: ServerSocket? = null
 
     fun start() {
@@ -32,10 +33,26 @@ class LocalHttpServer(
         server.reuseAddress = true
         server.bind(InetSocketAddress("127.0.0.1", port))
         socket = server
+        // One thread per connection: a long stream must never block the accept
+        // loop, or the first seek (ExoPlayer opens a second connection) hangs
+        // the whole app. Capped so a broken player cannot fork-bomb us.
         thread(name = "dipkri-http", isDaemon = true) {
             while (running.get()) {
                 try {
-                    handle(server.accept())
+                    val client = server.accept()
+                    if (active.incrementAndGet() > MAX_CONNECTIONS) {
+                        active.decrementAndGet()
+                        client.close()
+                        continue
+                    }
+                    thread(name = "dipkri-conn", isDaemon = true) {
+                        try {
+                            handle(client)
+                        } catch (_: Throwable) {
+                        } finally {
+                            active.decrementAndGet()
+                        }
+                    }
                 } catch (e: Exception) {
                     if (running.get()) Thread.sleep(50)
                 }
@@ -156,6 +173,7 @@ class LocalHttpServer(
 
     companion object {
         const val DEFAULT_PORT = 17891
+        private const val MAX_CONNECTIONS = 8
     }
 }
 
