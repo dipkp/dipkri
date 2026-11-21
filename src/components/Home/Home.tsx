@@ -165,12 +165,8 @@ export const Home = () => {
   };
 
   const handleStartInstantRoom = async () => {
-    if (!context.user) {
-      setError("Please sign in with Google to start a party.");
-      await handleGoogleSignIn();
-      return;
-    }
     setIsCreating(true);
+    setError("");
     try {
       await createRoom(context.user, false);
     } catch (e: any) {
@@ -184,16 +180,14 @@ export const Home = () => {
 
   const handleInlineJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!context.user) {
-      setError("Please sign in with Google to join a party.");
-      void handleGoogleSignIn();
-      return;
-    }
     let code = roomInput.trim();
     if (!code && lastRoom) {
       code = lastRoom;
     }
-    if (!code) return;
+    if (!code) {
+      setError("Please enter a room code or link.");
+      return;
+    }
     if (code.includes("/watch/")) {
       code = code.split("/watch/")[1];
     } else if (code.includes("/r/")) {
