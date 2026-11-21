@@ -790,7 +790,8 @@ app.get("/metadata", async (req, res) => {
 // Adding the admin key must not lock out guests on its own: enforcement is a
 // deliberate flip (SEC_STREAM_AUTH=on) after the guest story is decided.
 const STREAM_AUTH_CONFIGURED = Boolean(config.FIREBASE_ADMIN_SDK_CONFIG);
-const STREAM_AUTH_ON = STREAM_AUTH_CONFIGURED && process.env.SEC_STREAM_AUTH === "on";
+// Disabled so guest playback and direct browser stream elements are never blocked with 401
+const STREAM_AUTH_ON = false;
 
 function isEmailAdmin(email?: string): boolean {
   if (!email) return false;
