@@ -535,6 +535,8 @@ export class App extends React.Component<AppProps, AppState> {
 
   async componentDidMount() {
     document.onfullscreenchange = this.onFullScreenChange;
+    // Android Chrome / WebView uses webkit-prefixed fullscreen events
+    (document as any).onwebkitfullscreenchange = this.onFullScreenChange;
     document.onkeydown = this.onKeydown;
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("orientationchange", this.handleResize);
@@ -588,6 +590,7 @@ export class App extends React.Component<AppProps, AppState> {
     // Assigned as document properties in componentDidMount, so
     // removeEventListener() never removed them (they kept firing after unmount).
     document.onfullscreenchange = null;
+    (document as any).onwebkitfullscreenchange = null;
     document.onkeydown = null;
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("orientationchange", this.handleResize);
@@ -2819,7 +2822,9 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   onFullScreenChange = () => {
-    this.setState({ fullScreen: Boolean(document.fullscreenElement) });
+    // Check both standard and webkit-prefixed (Android Chrome/WebView)
+    const fs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    this.setState({ fullScreen: fs });
     setTimeout(() => this.chatRef.current?.scrollToBottom(), 100);
   };
 
@@ -2842,7 +2847,7 @@ export class App extends React.Component<AppProps, AppState> {
     }
   };
 
-  localFullScreen = async (bVideoOnly: boolean) => {
+  localFullScreen = (bVideoOnly: boolean) => {
     try {
       // If bVideoOnly is true, target leftVideoParent so custom controls, drawer, ripples, and overlays stay in fullscreen
       let container: HTMLElement | null = document.body;
@@ -2855,9 +2860,63 @@ export class App extends React.Component<AppProps, AppState> {
       }
       if (!container) return;
 
-      const videoEl = this.Player().getVideoEl();
+      const videoEl = this.Player().getVideoEl() as HTMLVideoElement | null;
+      const isAndroid = /Android/i.test(navigator.userAgent);
+
+      // Currently in fullscreen — exit
+      const currentlyFullscreen =
+        Boolean(document.fullscreenElement) ||
+        Boolean((document as any).webkitFullscreenElement);
+
+      if (currentlyFullscreen) {
+        const bChangeElements =
+          document.fullscreenElement !== container &&
+          (document as any).webkitFullscreenElement !== container;
+        const exit =
+          document.exitFullscreen?.bind(document) ||
+          (document as any).webkitExitFullscreen?.bind(document);
+        if (exit) {
+          exit().then(() => {
+            if (bChangeElements && container) {
+              const req =
+                (container as any).requestFullscreen?.bind(container) ||
+                (container as any).webkitRequestFullscreen?.bind(container);
+              req?.()?.catch((err: any) => {
+                console.warn("Change fullscreen error handled:", err);
+              });
+            }
+          }).catch((err: any) => {
+            console.warn("Exit fullscreen error handled:", err);
+          });
+        }
+        return;
+      }
+
+      // On Android, prefer requesting fullscreen on the video element directly —
+      // it avoids the gesture-chain break that happens when calling requestFullscreen
+      // on a div inside an async context in Android Chrome / WebView.
+      if (isAndroid && videoEl) {
+        const videoReq =
+          videoEl.requestFullscreen?.bind(videoEl) ||
+          (videoEl as any).webkitRequestFullscreen?.bind(videoEl) ||
+          (videoEl as any).webkitEnterFullscreen?.bind(videoEl) ||
+          (videoEl as any).mozRequestFullScreen?.bind(videoEl);
+        if (videoReq) {
+          videoReq()?.catch((err: any) => {
+            console.warn("Android video fullscreen error handled:", err);
+            // Fallback to container fullscreen
+            const req =
+              (container as any).requestFullscreen?.bind(container) ||
+              (container as any).webkitRequestFullscreen?.bind(container);
+            req?.()?.catch((e: any) => console.warn("Fallback fullscreen error:", e));
+          });
+          return;
+        }
+      }
+
+      // Desktop / iOS / other — use the container element
       if (
-        !container.requestFullscreen &&
+        !(container as any).requestFullscreen &&
         //@ts-expect-error
         container.webkitEnterFullScreen
       ) {
@@ -2865,28 +2924,17 @@ export class App extends React.Component<AppProps, AppState> {
         //@ts-expect-error
         container.webkitEnterFullscreen();
         return;
-      } else if (!container.requestFullscreen && videoEl && (videoEl as any).webkitEnterFullscreen) {
+      } else if (!(container as any).requestFullscreen && videoEl && (videoEl as any).webkitEnterFullscreen) {
         (videoEl as any).webkitEnterFullscreen();
         return;
       }
 
-      if (!document.fullscreenElement) {
-        // not currently in fullscreen
-        await container.requestFullscreen().catch((err) => {
-          console.warn("Fullscreen request error handled:", err);
-        });
-      } else {
-        // e.g. switching from video fullscreen to theater mode or vice versa
-        const bChangeElements = document.fullscreenElement !== container;
-        await document.exitFullscreen().catch((err) => {
-          console.warn("Exit fullscreen error handled:", err);
-        });
-        if (bChangeElements && container) {
-          await container.requestFullscreen().catch((err) => {
-            console.warn("Change fullscreen error handled:", err);
-          });
-        }
-      }
+      const req =
+        (container as any).requestFullscreen?.bind(container) ||
+        (container as any).webkitRequestFullscreen?.bind(container);
+      req?.()?.catch((err: any) => {
+        console.warn("Fullscreen request error handled:", err);
+      });
     } catch (err) {
       console.warn("localFullScreen error handled:", err);
     }

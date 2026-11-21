@@ -575,7 +575,10 @@ export const Controls = (props: ControlsProps) => {
   // Fullscreen and PiP state listeners
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const fs = Boolean(document.fullscreenElement);
+      // Check standard and webkit-prefixed fullscreen element (Android Chrome/WebView)
+      const fs = Boolean(
+        document.fullscreenElement || (document as any).webkitFullscreenElement
+      );
       setIsFullscreen(fs);
       if (!fs) {
         setIsChatDrawerOpen(false);
@@ -590,11 +593,13 @@ export const Controls = (props: ControlsProps) => {
     }
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
     document.addEventListener("enterpictureinpicture", handlePipChange);
     document.addEventListener("leavepictureinpicture", handlePipChange);
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
       document.removeEventListener("enterpictureinpicture", handlePipChange);
       document.removeEventListener("leavepictureinpicture", handlePipChange);
     };
