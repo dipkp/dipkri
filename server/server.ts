@@ -804,11 +804,15 @@ app.post("/api/user-role", async (req, res) => {
 });
 
 app.get("/download/android", (req, res) => {
+  const baseDir =
+    typeof import.meta.dirname === "string"
+      ? path.resolve(import.meta.dirname, "..")
+      : process.cwd();
   const candidates = [
-    path.resolve(__dirname, "../android/app/build/outputs/apk/debug/app-debug.apk"),
     path.resolve(process.cwd(), "android/app/build/outputs/apk/debug/app-debug.apk"),
-    path.resolve(__dirname, "../public/downloads/dipkri.apk"),
     path.resolve(process.cwd(), "public/downloads/dipkri.apk"),
+    path.resolve(baseDir, "android/app/build/outputs/apk/debug/app-debug.apk"),
+    path.resolve(baseDir, "public/downloads/dipkri.apk"),
   ];
 
   for (const candidate of candidates) {
@@ -827,11 +831,15 @@ app.get("/download/android", (req, res) => {
 });
 
 app.get("/download/desktop", (req, res) => {
+  const baseDir =
+    typeof import.meta.dirname === "string"
+      ? path.resolve(import.meta.dirname, "..")
+      : process.cwd();
   const candidates = [
-    path.resolve(__dirname, "../desktop/dist/Dipkri-Setup.exe"),
     path.resolve(process.cwd(), "desktop/dist/Dipkri-Setup.exe"),
-    path.resolve(__dirname, "../public/downloads/dipkri-desktop.exe"),
     path.resolve(process.cwd(), "public/downloads/dipkri-desktop.exe"),
+    path.resolve(baseDir, "desktop/dist/Dipkri-Setup.exe"),
+    path.resolve(baseDir, "public/downloads/dipkri-desktop.exe"),
   ];
 
   for (const candidate of candidates) {
