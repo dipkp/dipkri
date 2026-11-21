@@ -540,6 +540,7 @@ export class App extends React.Component<AppProps, AppState> {
     document.onkeydown = this.onKeydown;
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("orientationchange", this.handleResize);
+    window.addEventListener("popstate", this.handlePopState);
 
     this.updateViewportMetrics();
     if (typeof window !== "undefined") {
@@ -594,6 +595,7 @@ export class App extends React.Component<AppProps, AppState> {
     document.onkeydown = null;
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("orientationchange", this.handleResize);
+    window.removeEventListener("popstate", this.handlePopState);
     if (typeof window !== "undefined") {
       if (window.visualViewport) {
         window.visualViewport.removeEventListener("resize", this.updateViewportMetrics);
@@ -2827,6 +2829,14 @@ export class App extends React.Component<AppProps, AppState> {
   onFullScreenChange = () => {
     // Check both standard and webkit-prefixed (Android Chrome/WebView)
     const fs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    if (!fs) {
+      try {
+        (window.screen.orientation as any)?.unlock?.();
+      } catch (_) {}
+      if (window.history.state?.wp_fullscreen) {
+        window.history.back();
+      }
+    }
     this.setState({ fullScreen: fs });
     setTimeout(() => this.chatRef.current?.scrollToBottom(), 100);
   };
@@ -2850,96 +2860,69 @@ export class App extends React.Component<AppProps, AppState> {
     }
   };
 
-  localFullScreen = (bVideoOnly: boolean) => {
+  handlePopState = () => {
+    if (this.state.fullScreen) {
+      this.exitFullScreen(false);
+    }
+  };
+
+  exitFullScreen = (handleHistory: boolean = true) => {
     try {
-      // If bVideoOnly is true, target leftVideoParent so custom controls, drawer, ripples, and overlays stay in fullscreen
-      let container: HTMLElement | null = document.body;
-      const videoParent = document.getElementById("leftVideoParent");
-      if (bVideoOnly) {
-        container = videoParent || document.body;
-      }
-      if (!container) {
-        container = (document.getElementById("leftVideo") as HTMLElement) || document.body;
-      }
-      if (!container) return;
-
-      const videoEl = this.Player().getVideoEl() as HTMLVideoElement | null;
-      const isAndroid = /Android/i.test(navigator.userAgent);
-
-      // Currently in fullscreen — exit
-      const currentlyFullscreen =
-        Boolean(document.fullscreenElement) ||
-        Boolean((document as any).webkitFullscreenElement);
-
-      if (currentlyFullscreen) {
-        const bChangeElements =
-          document.fullscreenElement !== container &&
-          (document as any).webkitFullscreenElement !== container;
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
         const exit =
           document.exitFullscreen?.bind(document) ||
           (document as any).webkitExitFullscreen?.bind(document);
-        if (exit) {
-          exit().then(() => {
-            if (bChangeElements && container) {
-              const req =
-                (container as any).requestFullscreen?.bind(container) ||
-                (container as any).webkitRequestFullscreen?.bind(container);
-              req?.()?.catch((err: any) => {
-                console.warn("Change fullscreen error handled:", err);
-              });
-            }
-          }).catch((err: any) => {
-            console.warn("Exit fullscreen error handled:", err);
-          });
-        }
-        return;
+        exit?.()?.catch(() => {});
       }
+    } catch (_) {}
+    try {
+      (window.screen.orientation as any)?.unlock?.();
+    } catch (_) {}
+    if (handleHistory && window.history.state?.wp_fullscreen) {
+      window.history.back();
+    }
+    this.setState({ fullScreen: false });
+  };
 
-      // On Android, prefer requesting fullscreen on the video element directly —
-      // it avoids the gesture-chain break that happens when calling requestFullscreen
-      // on a div inside an async context in Android Chrome / WebView.
-      if (isAndroid && videoEl) {
-        const videoReq =
-          videoEl.requestFullscreen?.bind(videoEl) ||
-          (videoEl as any).webkitRequestFullscreen?.bind(videoEl) ||
-          (videoEl as any).webkitEnterFullscreen?.bind(videoEl) ||
-          (videoEl as any).mozRequestFullScreen?.bind(videoEl);
-        if (videoReq) {
-          videoReq()?.catch((err: any) => {
-            console.warn("Android video fullscreen error handled:", err);
-            // Fallback to container fullscreen
-            const req =
-              (container as any).requestFullscreen?.bind(container) ||
-              (container as any).webkitRequestFullscreen?.bind(container);
-            req?.()?.catch((e: any) => console.warn("Fallback fullscreen error:", e));
-          });
-          return;
-        }
-      }
+  enterFullScreen = (bVideoOnly: boolean = true) => {
+    const videoParent = document.getElementById("leftVideoParent");
+    const container = bVideoOnly ? (videoParent || document.body) : document.body;
 
-      // Desktop / iOS / other — use the container element
-      if (
-        !(container as any).requestFullscreen &&
-        //@ts-expect-error
-        container.webkitEnterFullScreen
-      ) {
-        // e.g. iPhone doesn't allow requestFullscreen on div
-        //@ts-expect-error
-        container.webkitEnterFullscreen();
-        return;
-      } else if (!(container as any).requestFullscreen && videoEl && (videoEl as any).webkitEnterFullscreen) {
-        (videoEl as any).webkitEnterFullscreen();
-        return;
-      }
+    this.setState({ fullScreen: true });
 
+    if (this.state.isMobileView) {
+      try {
+        window.history.pushState({ wp_fullscreen: true }, "");
+      } catch (_) {}
+      try {
+        (window.screen.orientation as any)?.lock?.("landscape").catch(() => {});
+      } catch (_) {}
+    }
+
+    try {
       const req =
         (container as any).requestFullscreen?.bind(container) ||
         (container as any).webkitRequestFullscreen?.bind(container);
       req?.()?.catch((err: any) => {
-        console.warn("Fullscreen request error handled:", err);
+        console.warn("Fullscreen request handled with CSS fallback:", err);
       });
     } catch (err) {
-      console.warn("localFullScreen error handled:", err);
+      console.warn("enterFullScreen threw:", err);
+    }
+  };
+
+  localFullScreen = (bVideoOnlyOrFs?: boolean) => {
+    const isCurrentlyFs = Boolean(
+      this.state.fullScreen ||
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement
+    );
+
+    if (isCurrentlyFs) {
+      this.exitFullScreen();
+    } else {
+      const bVideoOnly = bVideoOnlyOrFs !== false;
+      this.enterFullScreen(bVideoOnly);
     }
   };
 
@@ -3244,6 +3227,7 @@ export class App extends React.Component<AppProps, AppState> {
         roomTogglePlay={this.roomTogglePlay}
         roomSeek={this.roomSeek}
         roomSetPlaybackRate={this.roomSetPlaybackRate}
+        isFullScreen={this.state.fullScreen}
         localFullScreen={this.localFullScreen}
         localToggleMute={this.localToggleMute}
         localSubtitleModal={this.localSubtitleModal}
@@ -3298,10 +3282,14 @@ export class App extends React.Component<AppProps, AppState> {
     );
     const renderPlayerBox = (isMobileLayout: boolean) => (
       <div
-        className={styles.playerContainer}
+        className={`${styles.playerContainer} ${
+          this.state.fullScreen ? styles.playerContainerFullscreen : ""
+        }`}
         id="leftVideoParent"
         style={
-          isMobileLayout
+          this.state.fullScreen
+            ? { width: "100vw", height: "100dvh", minHeight: "100dvh", maxHeight: "100dvh", borderRadius: 0 }
+            : isMobileLayout
             ? { minHeight: "100%", height: "100%", borderRadius: 0 }
             : undefined
         }
@@ -3916,13 +3904,14 @@ export class App extends React.Component<AppProps, AppState> {
         {this.state.isMobileView ? (
           <div className={styles.mobileAppContainer}>
             {/* Slim 38px Compact Mobile Header with Room Code & Sync Status */}
-            <header
-              className={`${styles.mobileHeader} ${
-                this.state.isKeyboardOpen || this.state.isTyping
-                  ? styles.mobileHeaderKeyboardOpen
-                  : ""
-              }`}
-            >
+            {!this.state.fullScreen && (
+              <header
+                className={`${styles.mobileHeader} ${
+                  this.state.isKeyboardOpen || this.state.isTyping
+                    ? styles.mobileHeaderKeyboardOpen
+                    : ""
+                }`}
+              >
               <div className={styles.mobileBrand} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <a
                   href="/"
@@ -3986,10 +3975,13 @@ export class App extends React.Component<AppProps, AppState> {
                 )}
               </div>
             </header>
+            )}
 
             {/* Fixed 16:9 Video Player (Top pinned, zero scroll with on-video controls) */}
             <div
               className={`${styles.mobileVideoWrapper} ${
+                this.state.fullScreen ? styles.mobileVideoWrapperFullscreen : ""
+              } ${
                 this.state.isKeyboardOpen || this.state.isTyping
                   ? styles.mobileVideoWrapperKeyboardOpen
                   : ""
@@ -3999,7 +3991,8 @@ export class App extends React.Component<AppProps, AppState> {
             </div>
 
             {/* Content Area for Active Tab */}
-            <div className={styles.mobileContentArea}>
+            {!this.state.fullScreen && (
+              <div className={styles.mobileContentArea}>
               {/* TAB 1: CHAT */}
               <div
                 style={{
@@ -4275,9 +4268,10 @@ export class App extends React.Component<AppProps, AppState> {
                 </div>
               )}
             </div>
+            )}
 
             {/* Smartphone Native Bottom Navigation Bar - completely hidden while typing */}
-            {!this.state.isKeyboardOpen && !this.state.isTyping && (
+            {!this.state.fullScreen && !this.state.isKeyboardOpen && !this.state.isTyping && (
               <nav className={styles.mobileBottomNav}>
               {/* 1. Chat */}
               <button

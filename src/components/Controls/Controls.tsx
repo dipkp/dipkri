@@ -132,6 +132,7 @@ interface ControlsProps {
   roomSeek: (time: number) => void;
   roomSetPlaybackRate: (rate: number) => void;
   roomSetLoop: (loop: boolean) => void;
+  isFullScreen?: boolean;
   localFullScreen: (fs: boolean) => void;
   localToggleMute: () => void;
   localSubtitleModal: () => void;
@@ -185,7 +186,10 @@ export const Controls = (props: ControlsProps) => {
   });
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [isFullscreenInternal, setIsFullscreenInternal] = useState(
+    Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement)
+  );
+  const isFullscreen = Boolean(props.isFullScreen || isFullscreenInternal);
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [isPipActive, setIsPipActive] = useState(Boolean(document.pictureInPictureElement));
@@ -579,7 +583,7 @@ export const Controls = (props: ControlsProps) => {
       const fs = Boolean(
         document.fullscreenElement || (document as any).webkitFullscreenElement
       );
-      setIsFullscreen(fs);
+      setIsFullscreenInternal(fs);
       if (!fs) {
         setIsChatDrawerOpen(false);
       }
