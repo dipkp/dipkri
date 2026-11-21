@@ -86,6 +86,6 @@ export function isUserAdmin(email?: string | null): boolean {
 
 /** Determines if the current client is allowed to stream torrents */
 export function canStreamTorrents(email?: string | null): boolean {
-  return isNativeApp() || isUserAdmin(email);
+  return true;
 }
 
