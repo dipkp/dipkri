@@ -2,8 +2,8 @@
 
 .floatingContainer {
   position: fixed;
-  /* Below Mantine modals (~z 200) so dialogs stay usable, above app chrome (~100) */
-  z-index: 120;
+  /* Below controls (z-40) so dragged bubbles never block seekbar/volume */
+  z-index: var(--z-bubbles);
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;

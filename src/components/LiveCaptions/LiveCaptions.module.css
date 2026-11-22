@@ -3,7 +3,7 @@
   bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 45;
+  z-index: var(--z-captions);
   pointer-events: none;
   user-select: none;
   width: max-content;
@@ -15,7 +15,7 @@
 }
 
 .controlsVisible {
-  bottom: 68px !important;
+  bottom: 78px !important;
 }
 
 .controlsHidden {
@@ -33,7 +33,7 @@
     max-width: 94%;
   }
   .controlsVisible {
-    bottom: 46px !important;
+    bottom: 68px !important;
   }
   .controlsHidden {
     bottom: 8px !important;

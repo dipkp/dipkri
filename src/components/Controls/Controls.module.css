@@ -527,7 +527,7 @@
 }
 
 /* ==========================================================================
-   Bottom Controls Bar - Netflix/Prime Cinema Scrim
+   Bottom Controls Bar - Netflix/Prime Cinema Scrim (Ultra-Slim)
    ========================================================================== */
 
 .controlsContainer {
@@ -537,32 +537,31 @@
   right: 0;
   width: 100%;
   box-sizing: border-box;
-  /* Rich Netflix-style gradient scrim stretching ~140px up */
+  /* Tight Netflix-style gradient scrim - stretches ~80px up (desktop), ~72px (mobile) */
   background: linear-gradient(
     180deg,
     rgba(9, 10, 15, 0) 0%,
-    rgba(9, 10, 15, 0.15) 12%,
-    rgba(9, 10, 15, 0.45) 30%,
-    rgba(9, 10, 15, 0.75) 55%,
-    rgba(9, 10, 15, 0.95) 75%,
+    rgba(9, 10, 15, 0.2) 18%,
+    rgba(9, 10, 15, 0.6) 50%,
+    rgba(9, 10, 15, 0.92) 75%,
     rgba(9, 10, 15, 0.98) 100%
   );
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  padding: 10px 20px 14px 20px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 4px 12px 6px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  z-index: 34;
+  gap: 4px;
+  z-index: var(--z-controls);
   pointer-events: auto;
   transition:
-    opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .controlsContainer.hidden {
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(8px);
   pointer-events: none;
 }
 
@@ -572,29 +571,13 @@
   pointer-events: auto;
 }
 
-/* Row 1: Full-Width Cinema Seekbar */
+/* Row 1: Full-Width Cinema Seekbar (no side timestamp labels) */
 .timelineRow {
   display: flex;
   align-items: center;
-  gap: 12px;
   width: 100%;
   box-sizing: border-box;
-  padding: 0 4px;
-}
-
-.timeText {
-  font-family: 'JetBrains Mono', 'Inter', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(240, 240, 245, 0.9);
-  user-select: none;
-  white-space: nowrap;
-  min-width: 52px;
-  text-align: center;
-}
-
-.timeText.endTime {
-  text-align: right;
+  padding: 0 2px;
 }
 
 .progressWrapper {
@@ -773,7 +756,7 @@
 }
 
 /* ==========================================================================
-   Row 2: Streamlined Action Buttons
+   Row 2: Ultra-Compact Action Buttons
    ========================================================================== */
 
 .actionsRow {
@@ -782,48 +765,41 @@
   justify-content: space-between;
   width: 100%;
   box-sizing: border-box;
-  gap: 8px;
-  padding: 0 4px;
+  gap: 6px;
+  padding: 0 2px;
+  overflow: hidden; /* Prevent overflow on narrow viewports */
 }
 
 .actionsLeft {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.actionsCenter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.actionsCenter > * {
-  pointer-events: auto;
+  gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .actionsRight {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
-/* Base Action Button */
+/* Base Action Button - Ultra Compact */
 .action {
   cursor: pointer;
-  border-radius: 10px;
-  padding: 7px;
-  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
-  min-width: 40px;
-  min-height: 40px;
+  border-radius: 8px;
+  padding: 5px;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 32px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  color: rgba(240, 240, 245, 0.85);
+  color: rgba(240, 240, 245, 0.88);
   background: transparent !important;
   border: 1px solid transparent !important;
   outline: none !important;
@@ -848,56 +824,43 @@
 }
 
 .action:active {
-  transform: scale(0.94);
+  transform: scale(0.92);
   background: rgba(99, 102, 241, 0.2) !important;
   color: #6366f1 !important;
 }
 
 .action svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
-/* Play/Pause Button - Prominent in bottom bar */
-.actionPlayPause {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px;
-  background: rgba(99, 102, 241, 0.18) !important;
-  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+/* Play/Pause Button - Compact borderless icon button */
+.actionPlayPauseCompact {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 5px;
+  background: transparent !important;
+  border: none !important;
   color: #ffffff !important;
 }
 
-.actionPlayPause:hover {
-  background: rgba(99, 102, 241, 0.3) !important;
-  border-color: rgba(99, 102, 241, 0.5) !important;
-  transform: scale(1.06);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.35);
-}
-
-.actionPlayPause svg {
-  width: 24px;
-  height: 24px;
-}
-
-/* Skip Buttons in bottom bar */
-.actionSkip {
-  min-width: 40px;
-  min-height: 40px;
+.actionPlayPauseCompact:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  transform: scale(1.08);
 }
 
 /* Volume Container */
 .volumeContainer {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   position: relative;
 }
 
 .volumeBtn {
-  min-width: 40px;
-  min-height: 40px;
-  padding: 7px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 5px;
 }
 
 .volumeSliderWrapper {
@@ -908,7 +871,7 @@
 
 .volumeSlider {
   width: 0;
-  height: 4px;
+  height: 3px;
   -webkit-appearance: none;
   appearance: none;
   background: rgba(255, 255, 255, 0.18);
@@ -916,7 +879,7 @@
   outline: none;
   cursor: pointer;
   accent-color: #38bdf8;
-  transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms ease, height 180ms ease;
+  transition: width 180ms cubic-bezier(0.16, 1, 0.3, 1), background 150ms ease, height 150ms ease;
   opacity: 0;
   pointer-events: none;
 }
@@ -924,38 +887,38 @@
 .volumeContainer:hover .volumeSlider,
 .volumeContainer:focus-within .volumeSlider,
 .volumeSlider:focus {
-  width: 90px;
+  width: 80px;
   opacity: 1;
   pointer-events: auto;
   background: rgba(255, 255, 255, 0.28);
-  height: 6px;
+  height: 5px;
 }
 
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #38bdf8;
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.7), 0 2px 4px rgba(0, 0, 0, 0.4);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.7), 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 100ms ease, box-shadow 100ms ease;
 }
 
 .volumeSlider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 1), 0 2px 6px rgba(0, 0, 0, 0.5);
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 1), 0 2px 5px rgba(0, 0, 0, 0.5);
 }
 
 .volumeSlider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #38bdf8;
   cursor: pointer;
   border: none;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.7), 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.7), 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 .volumeTooltip {
@@ -963,22 +926,22 @@
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   background: rgba(12, 14, 20, 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: #ffffff;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 150ms ease, visibility 150ms ease;
+  transition: opacity 120ms ease, visibility 120ms ease;
   z-index: 20;
 }
 
@@ -988,24 +951,25 @@
   visibility: visible;
 }
 
-/* Timestamp Pill */
+/* Timestamp Pill - Ultra Compact */
 .timestampPill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  background: rgba(14, 16, 23, 0.7);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 4px;
+  background: rgba(14, 16, 23, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 9999px;
-  padding: 6px 14px;
+  padding: 3px 10px;
   font-family: 'JetBrains Mono', 'Inter', monospace;
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 600;
   color: #f0f0f5;
   letter-spacing: 0.2px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
 }
 
 .timestampCurrent {
@@ -1014,15 +978,15 @@
 }
 
 .timestampSeparator {
-  color: rgba(240, 240, 245, 0.45);
+  color: rgba(240, 240, 245, 0.4);
 }
 
 .timestampDuration {
-  color: rgba(240, 240, 245, 0.85);
+  color: rgba(240, 240, 245, 0.8);
   font-variant-numeric: tabular-nums;
 }
 
-/* Video Title Badge (Center) */
+/* Video Title Badge (Center) - only shown in center overlay, not bottom bar */
 .videoTitleBadge {
   display: inline-flex;
   align-items: center;
@@ -1308,33 +1272,167 @@
   }
 }
 
+/* Mobile Portrait (< 600px) - Ultra Compact Bottom Bar */
+@media only screen and (max-width: 600px) {
+  .controlsContainer {
+    padding: 2px 8px 4px 8px !important;
+    gap: 2px !important;
+    background: linear-gradient(
+      180deg,
+      rgba(7, 8, 12, 0) 0%,
+      rgba(7, 8, 12, 0.3) 20%,
+      rgba(7, 8, 12, 0.7) 50%,
+      rgba(7, 8, 12, 0.95) 100%
+    ) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+  }
+
+  .timelineRow {
+    padding: 0 1px !important;
+  }
+
+  .progressWrapper {
+    padding: 8px 0 !important;
+  }
+
+  .progressBar {
+    height: 3px !important;
+  }
+
+  .progressWrapper:hover .progressBar {
+    height: 6px !important;
+  }
+
+  .progressWrapper :global(.mantine-Progress-root) {
+    height: 3px !important;
+  }
+
+  .scrubberThumb {
+    opacity: 1 !important;
+    width: 14px !important;
+    height: 14px !important;
+    background: #ffffff !important;
+    border: 2px solid #38bdf8 !important;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.95), 0 2px 6px rgba(0, 0, 0, 0.6) !important;
+    transform: translate(-50%, -50%) scale(1) !important;
+  }
+
+  .actionsRow {
+    gap: 4px !important;
+    padding: 0 1px !important;
+  }
+
+  .actionsLeft {
+    gap: 4px !important;
+  }
+
+  .actionsRight {
+    gap: 4px !important;
+  }
+
+  .action {
+    min-width: 28px !important;
+    min-height: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    color: #eef2f7 !important;
+    box-shadow: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.12s ease !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .action:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+  }
+
+  .action:focus {
+    background: transparent !important;
+    outline: none !important;
+  }
+
+  .action:focus-visible {
+    background: rgba(255, 255, 255, 0.1) !important;
+    outline: none !important;
+  }
+
+  .action:active {
+    transform: scale(0.9) !important;
+    background: rgba(99, 102, 241, 0.25) !important;
+    color: #6366f1 !important;
+  }
+
+  .action svg {
+    width: 18px !important;
+    height: 18px !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .actionPlayPauseCompact {
+    min-width: 28px !important;
+    min-height: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 4px !important;
+  }
+
+  .volumeContainer:hover .volumeSlider,
+  .volumeContainer:focus-within .volumeSlider {
+    width: 60px !important;
+  }
+
+  .timestampPill {
+    padding: 2px 8px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+  }
+
+  .videoTitleBadge {
+    display: none !important;
+  }
+
+  .desktopOnlyBtn {
+    display: none !important;
+  }
+}
+
 /* Very narrow phones */
 @media only screen and (max-width: 380px) {
   .actionsRow {
-    gap: 4px;
-    padding: 0 1px;
+    gap: 3px !important;
+    padding: 0 1px !important;
   }
-  .actionsLeft, .actionsCenter, .actionsRight {
-    gap: 4px;
+  .actionsLeft, .actionsRight {
+    gap: 3px !important;
   }
   .action {
-    min-width: 38px !important;
-    min-height: 38px !important;
-    width: 38px !important;
-    height: 38px !important;
-    padding: 6px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    width: 26px !important;
+    height: 26px !important;
+    padding: 3px !important;
   }
-  .actionPlayPause {
-    min-width: 40px !important;
-    min-height: 40px !important;
-    width: 40px !important;
-    height: 40px !important;
+  .actionPlayPauseCompact {
+    min-width: 26px !important;
+    min-height: 26px !important;
+    width: 26px !important;
+    height: 26px !important;
   }
-  .centerControlsRow { gap: 18px; }
-  .centerPlayBtn { width: 56px; height: 56px; }
-  .centerSkipBtn { width: 38px; height: 38px; }
-  .timestampPill { padding: 4px 8px; font-size: 10.5px; }
-  .videoTitleBadge { display: none; }
+  .centerControlsRow { gap: 16px; }
+  .centerPlayBtn { width: 52px; height: 52px; }
+  .centerSkipBtn { width: 34px; height: 34px; }
+  .timestampPill { padding: 2px 6px !important; font-size: 9.5px !important; }
 }
 
 /* ==========================================================================

@@ -45,6 +45,15 @@
   --glass-blur: 16px;
   --glass-blur-sm: 8px;
 
+  /* Z-Index Hierarchy — Clean layers, no collisions */
+  --z-bubbles: 30;           /* Floating webcam bubbles — below controls */
+  --z-captions: 32;          /* LiveCaptions — above bubbles, below controls */
+  --z-controls: 40;          /* Bottom controls bar — main player UI */
+  --z-top-overlays: 42;      /* Top-left title/magnet, top-right emoji bar */
+  --z-topbar: 150;           /* TopBar — always above in-player overlays */
+  --z-drawers: 50;           /* Chat/Video drawers */
+  --z-modals: 2000;          /* Modals, menus, dropdowns */
+
   /* Minimalist Mantine Theme Variable Overrides */
   --mantine-color-body: var(--bg-primary);
   --mantine-color-text: var(--text-primary);

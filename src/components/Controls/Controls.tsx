@@ -1320,14 +1320,8 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
         }}
         onTouchEnd={(e) => e.stopPropagation()}
       >
-        {/* Row 1: Full-Width Cinema Seekbar */}
+        {/* Row 1: Full-Width Cinema Seekbar (no side timestamp labels) */}
         <div className={styles.timelineRow}>
-          <span className={styles.timeText}>
-            {hasDuration
-              ? formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined) || "00:00"
-              : "--:--"}
-          </span>
-
           <div
             className={styles.progressWrapper}
             onMouseOver={onMouseOver}
@@ -1449,15 +1443,6 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
             )}
           </div>
 
-          {!isLiveStream && (
-            <span
-              className={`${styles.timeText} ${styles.endTime}`}
-              title={hasDuration ? undefined : "Waiting for media metadata"}
-            >
-              {hasDuration ? formatTimestamp(getEnd()) || "00:00" : "--:--"}
-            </span>
-          )}
-
           {isLiveStream && (
             <Badge size="xs" color="red" className={styles.liveBadge}>
               LIVE
@@ -1465,14 +1450,14 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
           )}
         </div>
 
-        {/* Row 2: Streamlined Action Buttons */}
+        {/* Row 2: Ultra-Compact Action Row - Single timestamp, no duplicate elements */}
         <div className={styles.actionsRow}>
-          {/* Left Actions: Play/Pause, -10s, +10s, Volume */}
+          {/* Left Group: Play, Volume, Timestamp */}
           <div className={styles.actionsLeft}>
-            {/* Play/Pause Button - Prominent */}
+            {/* Play/Pause Button - Compact borderless icon */}
             <button
               type="button"
-              className={`${styles.action} ${styles.actionPlayPause}`}
+              className={`${styles.action} ${styles.actionPlayPauseCompact}`}
               onClick={(e) => {
                 e.stopPropagation();
                 roomTogglePlay();
@@ -1480,35 +1465,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               }}
               title={paused ? "Play" : "Pause"}
             >
-              {paused ? <WPIconPlay size={24} /> : <WPIconPause size={24} />}
-            </button>
-
-            {/* Rewind -10s */}
-            <button
-              type="button"
-              className={`${styles.action} ${styles.actionSkip}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSeekDelta(-10);
-                resetHideTimer();
-              }}
-              title="Rewind 10s"
-            >
-              <WPIconRewind10 size={20} />
-            </button>
-
-            {/* Fast Forward +10s */}
-            <button
-              type="button"
-              className={`${styles.action} ${styles.actionSkip}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSeekDelta(10);
-                resetHideTimer();
-              }}
-              title="Forward 10s"
-            >
-              <WPIconForward10 size={20} />
+              {paused ? <WPIconPlay size={20} /> : <WPIconPause size={20} />}
             </button>
 
             {/* Volume & Mute Control with expanding slider */}
@@ -1555,7 +1512,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               </div>
             </div>
 
-            {/* Timestamp Pill */}
+            {/* Single Timestamp Pill (only place showing current/total) */}
             <div className={styles.timestampPill}>
               <span className={styles.timestampCurrent}>
                 {hasDuration
@@ -1569,19 +1526,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
             </div>
           </div>
 
-          {/* Center: Video Title Badge (if present) */}
-          <div className={styles.actionsCenter}>
-            {currentMediaTitle && (
-              <div className={styles.videoTitleBadge}>
-                <WPIconVideo size={14} />
-                <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Right Actions */}
+          {/* Right Group: CC, Sync, Settings, PiP, Theater, Chat, Webcams, Fullscreen */}
           <div className={styles.actionsRight}>
             {/* Subtitles / CC Button */}
             <button
