@@ -627,6 +627,16 @@ export const Controls = (props: ControlsProps) => {
   (props.isMobileView && !props.isFullScreen && props.currentTab !== "chat")
 );
 
+// Chat message overlay (activeStripMsg) visibility - only show when chat is NOT visible on screen
+const shouldShowChatOverlay = Boolean(props.chat) && (
+  // Show in fullscreen
+  props.isFullScreen ||
+  // Show on desktop when chat column is collapsed
+  (!props.isMobileView && !props.showChatColumn) ||
+  // Show on mobile when NOT on chat tab (and not fullscreen)
+  (props.isMobileView && !props.isFullScreen && props.currentTab !== "chat")
+);
+
   // Direct socket listener for instant 0-latency simultaneous display on video alongside chat box
   useEffect(() => {
     if (!props.socket) return;
@@ -1005,7 +1015,7 @@ export const Controls = (props: ControlsProps) => {
       )}
 
       {/* Live In-Video Message Overlay (Simultaneous with Chat Box, Instant, Transparent Background, Crisp White Font with Shadow) */}
-      {activeStripMsg && (
+      {activeStripMsg && shouldShowChatOverlay && (
         <div
           className={`${styles.fullscreenMsgStrip} ${isControlsVisible ? styles.msgStripControlsVisible : styles.msgStripControlsHidden} ${(isChatDrawerOpen || isVideoDrawerOpen) ? styles.drawerOpen : ""}`}
         >
