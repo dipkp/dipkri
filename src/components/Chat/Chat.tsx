@@ -376,10 +376,11 @@ export class Chat extends React.Component<ChatProps> {
         </React.Fragment>
       );
     } else if (cmd === "seek") {
+      const seekTime = formatTimestamp(msg);
       return (
         <React.Fragment>
           <span className={styles.systemAuthor}>{author}</span>
-          {` jumped to ${formatTimestamp(msg)}`}
+          {seekTime ? ` jumped to ${seekTime}` : " seeked the video"}
         </React.Fragment>
       );
     } else if (cmd === "play") {
