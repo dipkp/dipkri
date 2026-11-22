@@ -1265,7 +1265,52 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
         </div>
       )}
 
-      {/* Bottom Controls Bar (Streamlined: Scrubber + Play/Pause + Speed + Captions + PiP + Theater + Chat + Fullscreen) */}
+      {/* Center Playback Controls Overlay (Cinematic Netflix-style) */}
+      <div className={styles.centerControlsRow}>
+        {/* -10s Rewind */}
+        <button
+          type="button"
+          className={styles.centerSkipBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSeekDelta(-10);
+            resetHideTimer();
+          }}
+          title="Rewind 10 seconds"
+        >
+          <WPIconRewind10 size={22} />
+        </button>
+
+        {/* Center Play/Pause */}
+        <button
+          type="button"
+          className={styles.centerPlayBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            roomTogglePlay();
+            resetHideTimer();
+          }}
+          title={paused ? "Play" : "Pause"}
+        >
+          {paused ? <WPIconPlay size={28} /> : <WPIconPause size={28} />}
+        </button>
+
+        {/* +10s Forward */}
+        <button
+          type="button"
+          className={styles.centerSkipBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSeekDelta(10);
+            resetHideTimer();
+          }}
+          title="Forward 10 seconds"
+        >
+          <WPIconForward10 size={22} />
+        </button>
+      </div>
+
+      {/* Bottom Controls Bar - Netflix/Prime Cinema Style */}
       <div
         className={`${styles.controlsContainer} ${(isControlsVisible && !isScreenLocked) ? styles.visible : styles.hidden}`}
         onClick={(e) => e.stopPropagation()}
@@ -1275,7 +1320,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
         }}
         onTouchEnd={(e) => e.stopPropagation()}
       >
-        {/* Row 1: Interactive Scrubber Timeline */}
+        {/* Row 1: Full-Width Cinema Seekbar */}
         <div className={styles.timelineRow}>
           <span className={styles.timeText}>
             {hasDuration
@@ -1359,6 +1404,18 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               resetHideTimer();
             }}
           >
+            {/* Buffer ranges */}
+            {buffers}
+
+            {/* Leader/sync time marker */}
+            {leaderTime !== undefined && Number.isFinite(leaderTime) && leaderTime > 0 && (
+              <div
+                className={styles.leaderMarker}
+                style={{ left: `${Math.min(100, Math.max(0, (leaderTime / getLength()) * 100))}%` }}
+                title={`Room leader at ${formatTimestamp(leaderTime)}`}
+              />
+            )}
+
             <Progress.Root
               radius="xl"
               className={styles.progressBar}
@@ -1368,7 +1425,6 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
                 style={{ pointerEvents: "none", zIndex: 1 }}
                 value={getPercent() * 100}
               />
-              {buffers}
             </Progress.Root>
 
             {/* Progress glowing scrubber thumb (placed on progressWrapper to prevent Mantine overflow:hidden clipping) */}
@@ -1395,7 +1451,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
 
           {!isLiveStream && (
             <span
-              className={styles.timeText}
+              className={`${styles.timeText} ${styles.endTime}`}
               title={hasDuration ? undefined : "Waiting for media metadata"}
             >
               {hasDuration ? formatTimestamp(getEnd()) || "00:00" : "--:--"}
@@ -1411,12 +1467,12 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
 
         {/* Row 2: Streamlined Action Buttons */}
         <div className={styles.actionsRow}>
-          {/* Left Actions: Play/Pause, Next Video in Queue, and Volume */}
+          {/* Left Actions: Play/Pause, -10s, +10s, Volume */}
           <div className={styles.actionsLeft}>
-            {/* Play/Pause Button */}
+            {/* Play/Pause Button - Prominent */}
             <button
               type="button"
-              className={styles.action}
+              className={`${styles.action} ${styles.actionPlayPause}`}
               onClick={(e) => {
                 e.stopPropagation();
                 roomTogglePlay();
@@ -1424,30 +1480,42 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               }}
               title={paused ? "Play" : "Pause"}
             >
-              {paused ? <WPIconPlay size={22} /> : <WPIconPause size={22} />}
+              {paused ? <WPIconPlay size={24} /> : <WPIconPause size={24} />}
             </button>
 
-            {/* Skip to next queue item (if queue active) */}
-            {playlist.length > 0 && (
-              <button
-                type="button"
-                className={styles.action}
-                title="Next video in queue"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  roomPlaylistPlay(0);
-                  resetHideTimer();
-                }}
-              >
-                <WPIconSkipForward size={20} />
-              </button>
-            )}
+            {/* Rewind -10s */}
+            <button
+              type="button"
+              className={`${styles.action} ${styles.actionSkip}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSeekDelta(-10);
+                resetHideTimer();
+              }}
+              title="Rewind 10s"
+            >
+              <WPIconRewind10 size={20} />
+            </button>
 
-            {/* Volume & Mute Control */}
+            {/* Fast Forward +10s */}
+            <button
+              type="button"
+              className={`${styles.action} ${styles.actionSkip}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSeekDelta(10);
+                resetHideTimer();
+              }}
+              title="Forward 10s"
+            >
+              <WPIconForward10 size={20} />
+            </button>
+
+            {/* Volume & Mute Control with expanding slider */}
             <div className={styles.volumeContainer}>
               <button
                 type="button"
-                className={styles.action}
+                className={`${styles.action} ${styles.volumeBtn}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   props.localToggleMute();
@@ -1463,28 +1531,74 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
                   <WPIconVolumeOn size={20} />
                 )}
               </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={props.muted ? 0 : props.volume}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  props.localSetVolume(val);
-                  if (props.muted && val > 0) {
-                    props.localToggleMute();
-                  }
-                  resetHideTimer();
-                }}
-                className={styles.volumeSlider}
-                title={`Volume: ${Math.round((props.muted ? 0 : props.volume) * 100)}%`}
-              />
+              <div className={styles.volumeSliderWrapper}>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={props.muted ? 0 : props.volume}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    props.localSetVolume(val);
+                    if (props.muted && val > 0) {
+                      props.localToggleMute();
+                    }
+                    resetHideTimer();
+                  }}
+                  className={styles.volumeSlider}
+                  aria-label={`Volume: ${Math.round((props.muted ? 0 : props.volume) * 100)}%`}
+                />
+                <span className={styles.volumeTooltip}>
+                  {Math.round((props.muted ? 0 : props.volume) * 100)}%
+                </span>
+              </div>
             </div>
+
+            {/* Timestamp Pill */}
+            <div className={styles.timestampPill}>
+              <span className={styles.timestampCurrent}>
+                {hasDuration
+                  ? formatTimestamp(getCurrent(), isLiveStream ? zeroTime : undefined) || "00:00"
+                  : "--:--"}
+              </span>
+              <span className={styles.timestampSeparator}>/</span>
+              <span className={styles.timestampDuration}>
+                {hasDuration ? formatTimestamp(getEnd()) || "00:00" : "--:--"}
+              </span>
+            </div>
+          </div>
+
+          {/* Center: Video Title Badge (if present) */}
+          <div className={styles.actionsCenter}>
+            {currentMediaTitle && (
+              <div className={styles.videoTitleBadge}>
+                <WPIconVideo size={14} />
+                <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {cleanMovieTitle(currentMediaTitle).title || currentMediaTitle}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Right Actions */}
           <div className={styles.actionsRight}>
+            {/* Subtitles / CC Button */}
+            <button
+              type="button"
+              className={`${styles.action} ${styles.actionSubtitles} ${subtitled ? styles.activeFeature : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                localSubtitleModal();
+                resetHideTimer();
+              }}
+              title={subtitled ? "Hide Subtitles" : "Show Subtitles"}
+              style={{ position: "relative" }}
+            >
+              <WPIconCaptions size={20} />
+              {subtitled && <span className={styles.subActiveDot} />}
+            </button>
+
             {/* Quick In-Bar Sync Button */}
             <button
               type="button"
@@ -1503,7 +1617,21 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               <WPIconSync size={18} />
             </button>
 
-            {/* Picture-in-Picture (Hidden on Mobile to preserve uncluttered touch targets) */}
+            {/* Playback Speed / Settings Gear */}
+            <button
+              type="button"
+              className={`${styles.action} ${isPlayerSettingsOpen ? styles.activeFeature : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPlayerSettingsOpen((prev) => !prev);
+                resetHideTimer();
+              }}
+              title="Player Settings"
+            >
+              <WPIconSettings size={20} />
+            </button>
+
+            {/* Picture-in-Picture (Desktop only) */}
             {isPipSupported && !isFullscreen && !isLandscapeMobile && !props.isMobileView && (
               <button
                 type="button"
@@ -1563,7 +1691,7 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
               </button>
             )}
 
-            {/* In-Video Voice & Webcams Button (Available in Full-Bleed / Landscape / Fullscreen, or Desktop) */}
+            {/* In-Video Voice & Webcams Button */}
             {Boolean(isFullBleedVideo || (!props.isMobileView && props.participants)) && (
               <button
                 type="button"
@@ -1587,20 +1715,6 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
                 )}
               </button>
             )}
-
-            {/* Player Settings Menu Trigger */}
-            <button
-              type="button"
-              className={`${styles.action} ${isPlayerSettingsOpen ? styles.activeFeature : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsPlayerSettingsOpen((prev) => !prev);
-                resetHideTimer();
-              }}
-              title="Player Settings"
-            >
-              <WPIconSettings size={20} />
-            </button>
 
             {/* Fullscreen Toggle */}
             <button
