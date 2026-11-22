@@ -157,6 +157,7 @@ interface ControlsProps {
   onOpenSettings?: () => void;
   showChatColumn?: boolean;
   isMobileView?: boolean;
+  currentTab?: string;
   clientId?: string;
   myName?: string;
   roomSubtitle?: string;
@@ -617,7 +618,14 @@ export const Controls = (props: ControlsProps) => {
   );
 
   // In-video floating chat button: available in full-bleed video OR on desktop when page chat column is collapsed
-  const canShowInVideoChat = Boolean(props.chat) && (isFullBleedVideo || (!props.isMobileView && !props.showChatColumn));
+  const canShowInVideoChat = Boolean(props.chat) && (
+  // Show in fullscreen
+  props.isFullScreen ||
+  // Show on desktop when chat column is collapsed
+  (!props.isMobileView && !props.showChatColumn) ||
+  // Show on mobile when NOT on chat tab (and not fullscreen)
+  (props.isMobileView && !props.isFullScreen && props.currentTab !== "chat")
+);
 
   // Direct socket listener for instant 0-latency simultaneous display on video alongside chat box
   useEffect(() => {

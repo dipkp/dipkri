@@ -3369,6 +3369,7 @@ export class App extends React.Component<AppProps, AppState> {
         onOpenSettings={() => this.setState({ settingsModalOpen: true })}
         showChatColumn={this.state.showChatColumn}
         isMobileView={this.state.isMobileView}
+        currentTab={this.state.currentTab}
         clientId={clientId}
         myName={this.state.myName}
         roomSubtitle={this.state.roomSubtitle}
@@ -3860,11 +3861,7 @@ export class App extends React.Component<AppProps, AppState> {
           socket={this.socket}
         />
         <MobileFloatingReactions
-          hide={
-            Boolean(this.state.settingsModalOpen) ||
-            this.state.isMobileView && this.state.currentTab === "chat" ||
-            this.state.showChatColumn
-          }
+          hide={Boolean(this.state.settingsModalOpen)}
           onSendReaction={(emoji: string) => {
             this.socket?.emit("CMD:reaction", emoji);
             this.socket?.emit("CMD:chat", emoji);
