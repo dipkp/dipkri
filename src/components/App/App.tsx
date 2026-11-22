@@ -3782,19 +3782,14 @@ export class App extends React.Component<AppProps, AppState> {
           (this.state.roomMedia && (isMagnet(this.state.roomMedia) || this.state.roomMedia.includes("torrent=")))
         ) &&
           getPlayerSettings().showStatsOverlay !== false && (
-          <div className={styles.torrentStatsBadge}>
-            <span style={{ fontSize: 13 }}>🧲</span>
+          <div className={styles.magnetStatusPill}>
+            <span style={{ fontSize: 12 }}>🧲</span>
             {[
               this.state.total || this.state.fileProgress > 0
-                ? `${this.getDownloadPercent().toFixed(1)}%`
+                ? `${this.getDownloadPercent().toFixed(0)}%`
                 : isMobileLayout
                   ? "Connecting..."
-                  : "Connecting to peers...",
-              Boolean(this.state.total) && formatSpeed(this.state.speed),
-              Boolean(this.state.total) &&
-                (isMobileLayout ? `${this.state.connections}p` : `${this.state.connections} peers`),
-              this.state.convertProgress !== undefined &&
-                (this.state.convertProgress * 100).toFixed(1) + "% conv",
+                  : "Connecting...",
             ]
               .filter(Boolean)
               .join(" • ")}
@@ -3802,6 +3797,13 @@ export class App extends React.Component<AppProps, AppState> {
               const audioStatus = audioEnhancer.getAudioDecodingStatus(this.HTMLInterface.getVideoEl());
               if (!audioStatus.hasAudio) return null;
               const isEAC = audioStatus.isTranscoding || ['eac3', 'ac3', 'dts'].includes(audioStatus.codec || '');
+              const isDecoded = audioStatus.isDecoded;
+              const codecLabel = isEAC ? 'AAC' : (audioStatus.codec ? audioStatus.codec.toUpperCase() : 'AUDIO');
+              const shortStatus = isDecoded
+                ? audioStatus.isTranscoding
+                  ? `AAC ${audioStatus.decodePercent}%`
+                  : 'AAC ✓'
+                : `AAC ${audioStatus.decodePercent || 0}%`;
               return (
                 <span
                   style={{
@@ -3811,13 +3813,13 @@ export class App extends React.Component<AppProps, AppState> {
                     marginLeft: 6,
                     padding: '1px 6px',
                     borderRadius: 9999,
-                    background: audioStatus.isDecoded
+                    background: isDecoded
                       ? isEAC
                         ? 'rgba(16, 185, 129, 0.16)'
                         : 'rgba(56, 189, 248, 0.16)'
                       : 'rgba(234, 179, 8, 0.18)',
-                    border: `1px solid ${audioStatus.isDecoded ? (isEAC ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)') : 'rgba(234, 179, 8, 0.4)'}`,
-                    color: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
+                    border: `1px solid ${isDecoded ? (isEAC ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)') : 'rgba(234, 179, 8, 0.4)'}`,
+                    color: isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
                     fontSize: isMobileLayout ? 10 : 11,
                     fontWeight: 600,
                   }}
@@ -3828,22 +3830,13 @@ export class App extends React.Component<AppProps, AppState> {
                       width: 5,
                       height: 5,
                       borderRadius: '50%',
-                      background: audioStatus.isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
-                      boxShadow: audioStatus.isDecoded
+                      background: isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
+                      boxShadow: isDecoded
                         ? `0 0 6px ${isEAC ? '#34d399' : '#38bdf8'}`
                         : '0 0 6px #facc15',
                     }}
                   />
-                  <span>
-                    {audioStatus.codec ? audioStatus.codec.toUpperCase() : 'AUDIO'}:{' '}
-                    {audioStatus.isDecoded
-                      ? audioStatus.isTranscoding
-                        ? isMobileLayout
-                          ? `Decoded ${audioStatus.decodePercent}% (+${Math.round(audioStatus.bufferedSeconds)}s)`
-                          : `Decoded MP3 ${audioStatus.decodePercent}% (+${audioStatus.bufferedSeconds.toFixed(1)}s)`
-                        : 'Decoded 100%'
-                      : `Decoding ${audioStatus.decodePercent || 0}%...`}
-                  </span>
+                  <span>{shortStatus}</span>
                 </span>
               );
             })()}
