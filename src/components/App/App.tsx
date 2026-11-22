@@ -3756,12 +3756,12 @@ export class App extends React.Component<AppProps, AppState> {
             </div>
           </div>
         )}
-        {Boolean(
-          this.state.total ||
-          this.state.convertProgress !== undefined ||
-          (this.state.roomMedia && (isMagnet(this.state.roomMedia) || this.state.roomMedia.includes("torrent=")))
-        ) &&
-          getPlayerSettings().showStatsOverlay !== false && (
+        {(Boolean(this.state.detectedMediaName) ||
+          (Boolean(
+            this.state.total ||
+            this.state.convertProgress !== undefined ||
+            (this.state.roomMedia && (isMagnet(this.state.roomMedia) || this.state.roomMedia.includes("torrent=")))
+          ) && getPlayerSettings().showStatsOverlay !== false)) && (
             <div className={styles.topLeftOverlayStack}>
               {/* Video Title Overlay */}
               {this.state.detectedMediaName && (
