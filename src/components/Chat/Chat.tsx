@@ -16,6 +16,7 @@ import {
   WPIconClose,
   WPIconPlay,
   WPIconPlus,
+  WPIconChat,
 } from "../Icons/CustomIcons";
 
 import {
@@ -596,7 +597,9 @@ export class Chat extends React.Component<ChatProps> {
         {/* Empty State */}
         {this.props.chat.length === 0 && (
           <div className={styles.emptyState}>
-            <div className={styles.emptyStateIcon}>💬</div>
+            <div className={styles.emptyStateIcon}>
+              <WPIconChat size={42} color="var(--accent-primary, #6366f1)" />
+            </div>
             <div className={styles.emptyStateText}>No messages yet — say hi to the room</div>
             <div className={styles.emptyStateSubtext}>Start the conversation</div>
           </div>

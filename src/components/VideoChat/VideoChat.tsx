@@ -537,13 +537,13 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 position: "relative",
                 width: "100%",
                 aspectRatio: "1 / 1",
-                borderRadius: "14px",
+                borderRadius: "var(--radius-lg, 14px)",
                 overflow: "hidden",
-                background: "#090a0f",
+                background: "var(--bg-primary, #090a0f)",
                 border: isSelf
-                  ? "2px solid rgba(99, 102, 241, 0.45)"
-                  : "1px solid rgba(255, 255, 255, 0.1)",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+                  ? "2px solid var(--accent-primary, #6366f1)"
+                  : "1px solid var(--border-glass, rgba(255, 255, 255, 0.08))",
+                boxShadow: "var(--shadow-glass, 0 4px 16px rgba(0, 0, 0, 0.4))",
               }}
             >
               {/* Top-Right User Admin Menu */}
@@ -659,7 +659,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                   background:
                     "linear-gradient(to top, rgba(9, 10, 15, 0.95), transparent)",
                   padding: "8px 6px 4px",
-                  color: softWhite,
+                  color: "var(--text-primary, #F0F0F5)",
                   fontSize: "11px",
                   fontWeight: 600,
                   display: "flex",
@@ -681,7 +681,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 </div>
                 <div
                   style={{
-                    color: "rgba(255, 255, 255, 0.6)",
+                    color: "var(--text-secondary, #9CA3AF)",
                     fontSize: "10px",
                   }}
                 >

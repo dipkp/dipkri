@@ -196,12 +196,12 @@
 
 @keyframes syncPulse {
   0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    opacity: 0.92;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
   }
   50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 22px rgba(249, 115, 22, 0.8);
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.75);
   }
 }
 

@@ -53,7 +53,10 @@ export const MobileFloatingReactions = ({
       newBatch.push({
         id: baseTime + Math.random() + i,
         emoji,
-        right: 15 + Math.random() * 95,
+        right: Math.min(
+          15 + Math.random() * 95,
+          typeof window !== "undefined" ? Math.max(10, window.innerWidth - 48) : 260,
+        ),
         size: 24 + Math.random() * 26,
         delayMs: Math.round(i * 26 + Math.random() * 22),
         duration: +(1.9 + Math.random() * 0.7).toFixed(2),

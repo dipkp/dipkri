@@ -20,7 +20,9 @@ import { DEFAULT_STATE, MetadataContext } from "./MetadataContext";
 import { createTheme, MantineProvider } from "@mantine/core";
 
 const theme = createTheme({
-  /** Your theme override here */
+  primaryColor: 'indigo',
+  defaultRadius: 'md',
+  fontFamily: 'Inter, sans-serif',
   white: softWhite,
 });
 

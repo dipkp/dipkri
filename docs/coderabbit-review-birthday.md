@@ -14,7 +14,7 @@ These rows insert raw values into innerHTML and into onclick attribute strings: 
 ### Fix the letter password check. Any visitor can bypass it by setting a cookie.
 `api-stub/server.js:86-95`
 
-isLetterUnlockedForRequest accepts the request if the Cookie header contains 2luv_unlocked_<link>=1. The client chooses that value, and nothing signs or binds it to the server. Example: curl -H 'Cookie: 2luv_unlocked_test-pw-gift-2026=1' /api/letter/test-pw-gift-2026 returns the protected letter. cookieHeader.includes(...) also matches substrings of other cookie names. Issue a random token when the password is verified. Store the token on the server, mapped to the letter, or sign it with an HMAC over the link and an expiry. Validate the token in this function.
+isLetterUnlockedForRequest accepts the request if the Cookie header contains 2luv_unlocked_<link>=1. The client chooses that value, and nothing signs or binds it to the server. Example: curl -H 'Cookie: 2luv_unlocked_test-pw-gift-2026=1' /api/letter/test-pw-gift-2026 returns the protected letter. cookieHeader.includes(...) also matches substrings of other cookie names. Issue a random token when the password is verified. Store the token on the server,  mapped to the letter, or sign it with an HMAC over the link and an expiry. Validate the token in this function.
 
 ### Remove the plaintext admin password and the hard-coded hash.
 `api-stub/server.js:133-134`

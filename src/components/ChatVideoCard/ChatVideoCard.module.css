@@ -1,6 +1,7 @@
 .Card {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  background: var(--bg-glass, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-glass, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 10px);
   padding: 8px;
 }
 
@@ -18,7 +19,8 @@
   height: auto;
   overflow: hidden;
   position: relative;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--bg-glass, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-sm, 6px);
 }
 
 .Thumbnail {
@@ -46,7 +48,7 @@
   word-break: break-word;
   font-size: 13.5px;
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-primary, #F0F0F5);
 }
 
 .ChannelName {
