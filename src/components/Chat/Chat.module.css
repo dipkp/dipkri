@@ -318,7 +318,6 @@
   box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.18);
   transition: background 0.15s ease;
   border: 1px solid var(--border-glass, rgba(255, 255, 255, 0.08));
-  border-radius: var(--radius-md, 12px);
 }
 
 @media (max-width: 600px) {
@@ -332,7 +331,7 @@
   background: var(--accent-primary, #6366f1);
   background: linear-gradient(135deg, var(--accent-primary, #6366f1), #8b5cf6);
   color: #ffffff;
-  border-radius: var(--radius-md, 12px) var(--radius-md, 12px) var(--radius-sm, 8px) var(--radius-md, 12px);
+  border-radius: 18px 18px 4px 18px;
   border-color: rgba(255, 255, 255, 0.15);
 }
 
@@ -342,31 +341,8 @@
   backdrop-filter: blur(var(--glass-blur, 16px));
   -webkit-backdrop-filter: blur(var(--glass-blur, 16px));
   color: var(--text-primary, #F0F0F5);
-  border-radius: var(--radius-md, 12px) var(--radius-md, 12px) var(--radius-md, 12px) var(--radius-sm, 8px);
+  border-radius: 18px 18px 18px 4px;
   border-color: var(--border-glass, rgba(255, 255, 255, 0.08));
-}
-
-/* Bubble tail indicator */
-.bubble.outgoing::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  right: -5px;
-  width: 0;
-  height: 0;
-  border-left: 6px solid var(--accent-primary, #6366f1);
-  border-bottom: 6px solid transparent;
-}
-
-.bubble.incoming::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: -5px;
-  width: 0;
-  height: 0;
-  border-right: 6px solid var(--bg-glass, rgba(255, 255, 255, 0.06));
-  border-bottom: 6px solid transparent;
 }
 
 /* Sender Name - Glassmorphism */

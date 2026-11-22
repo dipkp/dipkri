@@ -7,26 +7,33 @@ import { cyrb53 } from "./hash";
 import React from "react";
 
 export function formatTimestamp(input: any, zeroTime?: number): string {
+  // Handle null, undefined, false, NaN, Infinity, -Infinity, and non-numeric strings
   if (
     input === null ||
     input === undefined ||
     input === false ||
+    input === "" ||
     Number.isNaN(input) ||
-    input === Infinity
+    input === Infinity ||
+    input === -Infinity
   ) {
     return "";
   }
-  if (zeroTime) {
-    return new Date((zeroTime + input) * 1000).toLocaleTimeString();
+  const num = Number(input);
+  if (Number.isNaN(num) || !Number.isFinite(num)) {
+    return "";
   }
-  let hours = Math.abs(Math.trunc(Number(input) / 3600));
-  let minutes = Math.abs(Math.trunc(Number(input) / 60) % 60)
+  if (zeroTime) {
+    return new Date((zeroTime + num) * 1000).toLocaleTimeString();
+  }
+  let hours = Math.abs(Math.trunc(num / 3600));
+  let minutes = Math.abs(Math.trunc(num / 60) % 60)
     .toString()
     .padStart(2, "0");
-  let seconds = Math.abs(Math.trunc(Number(input) % 60))
+  let seconds = Math.abs(Math.trunc(num % 60))
     .toString()
     .padStart(2, "0");
-  return `${Number(input) < 0 ? "-" : ""}${hours ? `${hours}:` : ""}${minutes}:${seconds}`;
+  return `${num < 0 ? "-" : ""}${hours ? `${hours}:` : ""}${minutes}:${seconds}`;
 }
 
 export function formatSpeed(input: number) {
