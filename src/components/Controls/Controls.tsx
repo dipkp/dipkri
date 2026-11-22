@@ -909,16 +909,10 @@ const shouldShowChatOverlay = Boolean(props.chat) && (
     return (
       <div
         key={start}
+        className={styles.bufferRange}
         style={{
-          position: "absolute",
-          height: "100%",
-          backgroundColor: "rgba(255, 255, 255, 0.22)",
-          borderRadius: "9999px",
           left: buffStartPct + "%",
           width: buffLengthPct + "%",
-          bottom: 0,
-          zIndex: 0,
-          pointerEvents: "none",
         }}
       />
     );

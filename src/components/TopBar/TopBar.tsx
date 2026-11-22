@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useState } from "react";
 import { serverPath, getUserImage } from "../../utils/utils";
 import { desktopRoomEnd } from "../../utils/desktopStream";
-import { Avatar, Tooltip } from "@mantine/core";
+import { Avatar, Tooltip, Modal } from "@mantine/core";
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import { LoginModal } from "../Modal/LoginModal";
@@ -200,6 +200,7 @@ export const TopBar = (props: {
   onSync?: () => void;
 }) => {
   const [copied, setCopied] = useState(false);
+  const [isEndModalOpen, setIsEndModalOpen] = useState(false);
 
   const copyRoomLink = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -208,6 +209,26 @@ export const TopBar = (props: {
       setTimeout(() => setCopied(false), 2000);
     }
   }, []);
+
+  const handleConfirmEndParty = () => {
+    setIsEndModalOpen(false);
+    const cleanId = props.roomId?.replace(/^\//, "");
+    try {
+      fetch("/terminateRoom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: cleanId,
+          hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
+        }),
+      }).catch(() => {});
+      desktopRoomEnd(cleanId);
+      localStorage.removeItem("wp_last_room");
+      localStorage.removeItem("wp_active_party");
+      if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
+    } catch {}
+    window.location.assign("/");
+  };
 
   const displayRoomCode = props.roomId ? `#${props.roomId.replace(/^\//, "")}` : "";
 
@@ -291,30 +312,7 @@ export const TopBar = (props: {
           <button
             type="button"
             className={styles.terminateBtn}
-            onClick={async () => {
-              const confirmTerminate = window.confirm(
-                "End this watch party for everyone? The room will be closed and removed from your active parties."
-              );
-              if (confirmTerminate) {
-                const cleanId = props.roomId?.replace(/^\//, "");
-                try {
-                  fetch("/terminateRoom", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      roomId: cleanId,
-                      hostToken: cleanId ? localStorage.getItem(`wp_host_${cleanId}`) || "" : "",
-                    }),
-                  }).catch(() => {});
-                  // Desktop: the video lives on this device, wipe it now.
-                  desktopRoomEnd(cleanId);
-                  localStorage.removeItem("wp_last_room");
-                  localStorage.removeItem("wp_active_party");
-                  if (cleanId) localStorage.removeItem(`wp_playback_${cleanId}`);
-                } catch {}
-                window.location.assign("/");
-              }
-            }}
+            onClick={() => setIsEndModalOpen(true)}
             title="End this watch party for everyone"
           >
             <span>End Party</span>
@@ -324,6 +322,75 @@ export const TopBar = (props: {
         {!props.hideNewRoom && <NewRoomButton size="sm" />}
         {!props.hideSignin && <SignInButton />}
       </div>
+
+      <Modal
+        opened={isEndModalOpen}
+        onClose={() => setIsEndModalOpen(false)}
+        title={<span style={{ fontWeight: 700, fontSize: 16, color: "#f87171" }}>End Watch Party</span>}
+        centered
+        styles={{
+          content: {
+            backgroundColor: "#12141f",
+            color: "#f8fafc",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: 16,
+            backdropFilter: "blur(16px)",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
+          },
+          header: {
+            backgroundColor: "#12141f",
+            color: "#f8fafc",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          },
+          close: {
+            color: "#94a3b8",
+            "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.08)" },
+          },
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
+          <p style={{ margin: 0, fontSize: 14, color: "#cbd5e1", lineHeight: 1.5 }}>
+            End this watch party for everyone? The room will be closed and removed from your active parties.
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => setIsEndModalOpen(false)}
+              style={{
+                background: "rgba(255, 255, 255, 0.08)",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                color: "#cbd5e1",
+                padding: "8px 16px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmEndParty}
+              style={{
+                background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                border: "none",
+                color: "#ffffff",
+                padding: "8px 18px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 2px 10px rgba(239, 68, 68, 0.35)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              End Party
+            </button>
+          </div>
+        </div>
+      </Modal>
     </header>
   );
 };

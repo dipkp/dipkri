@@ -1144,7 +1144,7 @@ export const MovieModal: React.FC<MovieModalProps> = ({
                       )}
 
                       {/* Primary Action Row for Selected Direct Stream */}
-                      <div className={styles.actionRow} style={{ marginTop: 12 }}>
+                      <div className={styles.stickyBottomActionRow}>
                         <button
                           type="button"
                           className={styles.playRoomBtn}

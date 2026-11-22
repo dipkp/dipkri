@@ -34,6 +34,74 @@ interface VideoChatProps {
   getLeaderTime: () => number;
 }
 
+const ParticipantAvatar = ({
+  src,
+  name,
+}: {
+  src?: string;
+  name?: string;
+}) => {
+  const [failed, setFailed] = React.useState(!src);
+  const initials = (name || "U")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "U";
+
+  if (failed || !src) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.35) 0%, rgba(139, 92, 246, 0.25) 100%)",
+          color: "#ffffff",
+          fontFamily: "'Space Grotesk', 'Plus Jakarta Sans', sans-serif",
+          fontWeight: 700,
+          fontSize: "clamp(20px, 5vw, 32px)",
+          letterSpacing: "0.5px",
+          userSelect: "none",
+        }}
+      >
+        <div
+          style={{
+            width: "56%",
+            height: "56%",
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(255, 255, 255, 0.08)",
+            border: "1.5px solid rgba(255, 255, 255, 0.16)",
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+          }}
+        >
+          {initials}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        display: "block",
+      }}
+      src={src}
+      alt={name || "User"}
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
 export class VideoChat extends React.Component<VideoChatProps> {
   static contextType = MetadataContext;
   declare context: React.ContextType<typeof MetadataContext>;
@@ -725,13 +793,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 />
               ) : (
                 <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                  <img
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
+                  <ParticipantAvatar
                     src={
                       pictureMap[p.id] ||
                       getDefaultPicture(
@@ -739,7 +801,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                         getColorForStringHex(p.id),
                       )
                     }
-                    alt={nameMap[p.id] || "User"}
+                    name={nameMap[p.id]}
                   />
                   {((isSelf && ourStream && !this.getVideoWebRTC()) ||
                     (!isSelf && isUserInVideo)) && (

@@ -600,7 +600,7 @@
 }
 
 .playRoomBtn {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #6366f1, #06b6d4);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -611,13 +611,29 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
   transition: all 0.2s;
 }
 
 .playRoomBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+}
+
+.stickyBottomActionRow {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 0 6px 0;
+  background: linear-gradient(to top, rgba(15, 17, 26, 0.98) 70%, rgba(15, 17, 26, 0) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10;
+  margin-top: 8px;
 }
 
 .queueBtn {
@@ -893,7 +909,8 @@
   max-height: 260px;
   overflow-y: auto;
   padding-right: 4px;
-  margin-bottom: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .streamCard {
@@ -998,6 +1015,46 @@
 .cardPlayBtn:hover {
   transform: scale(1.05);
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+@media (max-width: 600px) {
+  .episodeCard {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .episodeLeft {
+    width: 100%;
+  }
+
+  .episodeActions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .episodePlayBtn,
+  .episodeQueueBtn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 12px;
+    text-align: center;
+  }
+
+  .stickyBottomActionRow {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0 2px 0;
+  }
+
+  .stickyBottomActionRow .playRoomBtn,
+  .stickyBottomActionRow .queueBtn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 

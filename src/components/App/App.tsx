@@ -1,6 +1,6 @@
 import type MediasoupClient from "mediasoup-client";
 import React from "react";
-import { Alert, Loader, Menu, Overlay, Select, Title } from "@mantine/core";
+import { Alert, Loader, Menu, Overlay, Select, Title, Modal } from "@mantine/core";
 import io, { Socket } from "socket.io-client";
 import {
   formatSpeed,
@@ -219,6 +219,7 @@ interface AppState {
   quickQueueUrl: string;
   isMovieModalOpen: boolean;
   isAppDownloadModalOpen: boolean;
+  isEndPartyModalOpen: boolean;
   nonPlayableTorrentWeb: boolean;
 }
 
@@ -304,6 +305,7 @@ export class App extends React.Component<AppProps, AppState> {
     isMultiSelectModalOpen: false,
     isMovieModalOpen: false,
     isAppDownloadModalOpen: false,
+    isEndPartyModalOpen: false,
     nonPlayableTorrentWeb: false,
     roomLock: "",
     controller: "",
@@ -3042,10 +3044,11 @@ export class App extends React.Component<AppProps, AppState> {
   };
 
   terminateRoom = () => {
-    const confirmTerminate = window.confirm(
-      "End this watch party for everyone? The room will be closed and removed from your active parties."
-    );
-    if (!confirmTerminate) return;
+    this.setState({ isEndPartyModalOpen: true });
+  };
+
+  executeTerminateRoom = () => {
+    this.setState({ isEndPartyModalOpen: false });
     const cleanId = this.state.roomId?.replace(/^\//, "");
     try {
       fetch("/terminateRoom", {
@@ -3417,32 +3420,15 @@ export class App extends React.Component<AppProps, AppState> {
               className={`${styles.videoContent} ${styles.flexCenter}`}
             >
               {this.state.loading && (
-                <div
-                  className={styles.flexCenter}
-                  style={{
-                    flexDirection: "column",
-                    gap: 12,
-                    background: "rgba(9, 10, 15, 0.75)",
-                    padding: "24px 32px",
-                    borderRadius: 16,
-                    border: "1px solid rgba(99, 102, 241, 0.25)",
-                    backdropFilter: "blur(12px)",
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-                  }}
-                >
-                  <Loader size="lg" color="indigo" />
-                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, textAlign: "center" }}>
+                <div className={styles.bufferingOverlay}>
+                  <Loader size={14} color="gray" />
+                  <span className={styles.bufferingTitle}>
                     {isMovieStream(this.state.roomMedia)
-                      ? "🎬 Connecting to High-Speed Stream..."
+                      ? "Connecting to stream..."
                       : this.playingVBrowser()
-                      ? "Launching virtual browser. This can take up to a minute."
+                      ? "Launching virtual browser..."
                       : "Loading stream..."}
-                  </div>
-                  {isMovieStream(this.state.roomMedia) && (
-                    <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>
-                      Buffering HD video chunks & synchronizing room audio...
-                    </div>
-                  )}
+                  </span>
                 </div>
               )}
               {!this.state.loading &&
@@ -3779,52 +3765,19 @@ export class App extends React.Component<AppProps, AppState> {
               ) &&
                 getPlayerSettings().showStatsOverlay !== false && (
                 <div className={styles.magnetStatusPill}>
-                  <span style={{ fontSize: 12 }}>🧲</span>
-                  <span>{this.state.total || this.state.fileProgress > 0 ? `${this.getDownloadPercent().toFixed(0)}%` : "Connecting..."}</span>
+                  <span>🧲 {this.state.total || this.state.fileProgress > 0 ? `${this.getDownloadPercent().toFixed(0)}%` : "Connecting..."}</span>
                   {(() => {
                     const audioStatus = audioEnhancer.getAudioDecodingStatus(this.HTMLInterface.getVideoEl());
                     if (!audioStatus.hasAudio) return null;
-                    const isEAC = audioStatus.isTranscoding || ['eac3', 'ac3', 'dts'].includes(audioStatus.codec || '');
                     const isDecoded = audioStatus.isDecoded;
                     const shortStatus = isDecoded
-                      ? audioStatus.isTranscoding
-                        ? `AAC ${audioStatus.decodePercent}%`
-                        : 'AAC ✓'
+                      ? (audioStatus.isTranscoding ? `AAC ${audioStatus.decodePercent}%` : 'AAC ✓')
                       : `AAC ${audioStatus.decodePercent || 0}%`;
                     return (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginLeft: 6,
-                          padding: '1px 6px',
-                          borderRadius: 9999,
-                          background: isDecoded
-                            ? isEAC
-                              ? 'rgba(16, 185, 129, 0.16)'
-                              : 'rgba(56, 189, 248, 0.16)'
-                            : 'rgba(234, 179, 8, 0.18)',
-                          border: `1px solid ${isDecoded ? (isEAC ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)') : 'rgba(234, 179, 8, 0.4)'}`,
-                          color: isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
-                          fontSize: isMobileLayout ? 10 : 11,
-                          fontWeight: 600,
-                        }}
-                        title={audioStatus.statusText}
-                      >
-                        <span
-                          style={{
-                            width: 5,
-                            height: 5,
-                            borderRadius: '50%',
-                            background: isDecoded ? (isEAC ? '#34d399' : '#38bdf8') : '#facc15',
-                            boxShadow: isDecoded
-                              ? `0 0 6px ${isEAC ? '#34d399' : '#38bdf8'}`
-                              : '0 0 6px #facc15',
-                          }}
-                        />
+                      <>
+                        <span>•</span>
                         <span>{shortStatus}</span>
-                      </span>
+                      </>
                     );
                   })()}
                 </div>
@@ -3899,6 +3852,74 @@ export class App extends React.Component<AppProps, AppState> {
           onClose={() => this.setState({ isAppDownloadModalOpen: false })}
           mediaTitle={this.state.detectedMediaName || this.state.roomMedia}
         />
+        <Modal
+          opened={this.state.isEndPartyModalOpen}
+          onClose={() => this.setState({ isEndPartyModalOpen: false })}
+          title={<span style={{ fontWeight: 700, fontSize: 16, color: "#f87171" }}>End Watch Party</span>}
+          centered
+          styles={{
+            content: {
+              backgroundColor: "#12141f",
+              color: "#f8fafc",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: 16,
+              backdropFilter: "blur(16px)",
+              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
+            },
+            header: {
+              backgroundColor: "#12141f",
+              color: "#f8fafc",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            },
+            close: {
+              color: "#94a3b8",
+              "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.08)" },
+            },
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
+            <p style={{ margin: 0, fontSize: 14, color: "#cbd5e1", lineHeight: 1.5 }}>
+              End this watch party for everyone? The room will be closed and removed from active parties.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => this.setState({ isEndPartyModalOpen: false })}
+                style={{
+                  background: "rgba(255, 255, 255, 0.08)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  color: "#cbd5e1",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={this.executeTerminateRoom}
+                style={{
+                  background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                  border: "none",
+                  color: "#ffffff",
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 10px rgba(239, 68, 68, 0.35)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                End Party
+              </button>
+            </div>
+          </div>
+        </Modal>
         {this.state.state === "starting" && (
           <Overlay className={styles.flexCenter}>
             <Title order={2}>Loading...</Title>
@@ -4398,7 +4419,7 @@ export class App extends React.Component<AppProps, AppState> {
                     <div className={styles.queueAddBox} style={{ marginTop: 8 }}>
                       <input
                         type="text"
-                        placeholder="Paste YouTube, magnet, or video URL..."
+                        placeholder="Paste link or magnet..."
                         className={styles.queueAddInput}
                         value={this.state.quickQueueUrl}
                         onChange={(e) => this.setState({ quickQueueUrl: e.target.value })}
@@ -5034,7 +5055,7 @@ export class App extends React.Component<AppProps, AppState> {
                     <div className={styles.queueAddBox}>
                       <input
                         type="text"
-                        placeholder="Paste YouTube, magnet, or video URL..."
+                        placeholder="Paste link or magnet..."
                         className={styles.queueAddInput}
                         value={this.state.quickQueueUrl}
                         onChange={(e) => this.setState({ quickQueueUrl: e.target.value })}

@@ -826,4 +826,19 @@
     width: 100% !important;
     justify-content: center;
   }
+
+  .hubActions {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .hubPrimaryBtn,
+  .hubSecondaryBtn {
+    width: 100% !important;
+    min-height: 44px;
+    padding: 11px 18px;
+    box-sizing: border-box;
+    justify-content: center;
+  }
 }
