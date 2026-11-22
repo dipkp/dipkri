@@ -21,10 +21,10 @@
 }
 
 .modalContent {
-  background: linear-gradient(135deg, rgba(20, 24, 38, 0.95), rgba(10, 12, 20, 0.97));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(99, 102, 241, 0.15);
-  border-radius: 20px;
+  background: #09090B;
+  border: 1px solid #202026;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+  border-radius: 12px;
   width: 100%;
   max-width: 960px;
   height: 90vh;
@@ -53,8 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 18, 30, 0.6);
+  border-bottom: 1px solid #202026;
+  background: #121217;
   flex-shrink: 0;
 }
 
@@ -189,11 +189,11 @@
 }
 
 .filterChip {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
-  padding: 6px 14px;
-  border-radius: 20px;
+  background: #121217;
+  border: 1px solid #202026;
+  color: #a1a1aa;
+  padding: 5px 12px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -202,16 +202,17 @@
 }
 
 .filterChip:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #1a1a22;
+  border-color: #2e2e38;
   color: #fff;
 }
 
 .filterChipActive {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3));
-  border-color: rgba(99, 102, 241, 0.6);
-  color: #a5b4fc;
+  background: #525df1;
+  border-color: #525df1;
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+  box-shadow: none;
 }
 
 .modalBody {
@@ -280,21 +281,22 @@
 }
 
 .mediaCard {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
+  background: #121217;
+  border: 1px solid #202026;
+  border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
   position: relative;
+  box-shadow: none;
 }
 
 .mediaCard:hover {
-  transform: translateY(-4px) scale(1.02);
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5), 0 0 16px rgba(99, 102, 241, 0.2);
+  transform: translateY(-2px);
+  border-color: #3f3f46;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
 .posterWrapper {
@@ -600,24 +602,27 @@
 }
 
 .playRoomBtn {
-  background: linear-gradient(135deg, #6366f1, #06b6d4);
+  background: #525df1;
   color: #fff;
   border: none;
-  border-radius: 12px;
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 700;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
-  transition: all 0.2s;
+  box-shadow: none;
+  transition: all 0.18s ease;
+  width: 100%;
 }
 
 .playRoomBtn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  background: #434cd6;
+  box-shadow: none;
+  transform: none;
 }
 
 .stickyBottomActionRow {
@@ -629,7 +634,7 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 0 6px 0;
-  background: linear-gradient(to top, rgba(15, 17, 26, 0.98) 70%, rgba(15, 17, 26, 0) 100%);
+  background: linear-gradient(to top, rgba(9, 9, 11, 0.98) 70%, rgba(9, 9, 11, 0) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 10;
@@ -637,23 +642,25 @@
 }
 
 .queueBtn {
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-  border-radius: 12px;
-  padding: 12px 20px;
-  font-size: 14px;
-  font-weight: 600;
+  background: #121217;
+  border: 1px solid #202026;
+  color: #f4f4f5;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s ease;
 }
 
 .queueBtn:hover {
-  background: rgba(56, 189, 248, 0.25);
-  color: #fff;
+  background: #1a1a22;
+  border-color: #2e2e38;
+  color: #ffffff;
 }
 
 .previewBtn {

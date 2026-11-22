@@ -59,11 +59,11 @@ const ParticipantAvatar = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.35) 0%, rgba(139, 92, 246, 0.25) 100%)",
-          color: "#ffffff",
-          fontFamily: "'Space Grotesk', 'Plus Jakarta Sans', sans-serif",
-          fontWeight: 700,
-          fontSize: "clamp(20px, 5vw, 32px)",
+          background: "#121217",
+          color: "#f4f4f5",
+          fontFamily: "'Inter', -apple-system, sans-serif",
+          fontWeight: 600,
+          fontSize: "clamp(18px, 4.5vw, 28px)",
           letterSpacing: "0.5px",
           userSelect: "none",
         }}
@@ -76,9 +76,9 @@ const ParticipantAvatar = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(255, 255, 255, 0.08)",
-            border: "1.5px solid rgba(255, 255, 255, 0.16)",
-            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+            background: "#1e1e26",
+            border: "1px solid #202026",
+            boxShadow: "none",
           }}
         >
           {initials}
@@ -605,13 +605,13 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 position: "relative",
                 width: "100%",
                 aspectRatio: "1 / 1",
-                borderRadius: "var(--radius-lg, 14px)",
+                borderRadius: "12px",
                 overflow: "hidden",
-                background: "var(--bg-primary, #090a0f)",
+                background: "#121217",
                 border: isSelf
-                  ? "2px solid var(--accent-primary, #6366f1)"
-                  : "1px solid var(--border-glass, rgba(255, 255, 255, 0.08))",
-                boxShadow: "var(--shadow-glass, 0 4px 16px rgba(0, 0, 0, 0.4))",
+                  ? "2px solid #525df1"
+                  : "1px solid #202026",
+                boxShadow: "none",
               }}
             >
               {/* Top-Right User Admin Menu */}

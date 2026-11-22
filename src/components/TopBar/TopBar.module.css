@@ -12,10 +12,8 @@
   min-height: 46px;
   max-height: 46px;
   padding: 0 16px;
-  background: rgba(8, 9, 13, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #09090B;
+  border-bottom: 1px solid #202026;
   width: 100%;
   box-sizing: border-box;
 }
@@ -71,11 +69,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  background: #121217;
+  border: 1px solid #202026;
+  border-radius: 6px;
   padding: 3px 8px;
-  color: #cbd5e1;
+  color: #a1a1aa;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 11.5px;
   font-weight: 600;
@@ -89,8 +87,8 @@
 }
 
 .roomPill:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: #1a1a22;
+  border-color: #2e2e38;
   color: #ffffff;
 }
 
@@ -118,14 +116,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 9999px;
+  background: #121217;
+  border: 1px solid #202026;
+  border-radius: 6px;
   padding: 3px 9px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #a1a1aa;
   letter-spacing: -0.01em;
   user-select: none;
 }
@@ -175,22 +173,21 @@
   align-items: center;
   gap: 5px;
   padding: 5px 11px;
-  border-radius: 8px;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  color: #a5b4fc;
+  border-radius: 6px;
+  background: #525df1;
+  border: none;
+  color: #ffffff;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .shareBtn:hover {
-  background: rgba(99, 102, 241, 0.22);
-  border-color: rgba(99, 102, 241, 0.5);
+  background: #434cd6;
   color: #ffffff;
-  transform: translateY(-0.5px);
+  transform: none;
 }
 
 .shareBtn:active {
@@ -202,22 +199,22 @@
   align-items: center;
   gap: 5px;
   padding: 5px 12px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  border-radius: 6px;
+  background: #525df1;
   border: none;
   color: #ffffff;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+  box-shadow: none;
   transition: all 0.18s ease;
 }
 
 .newRoomBtn:hover {
-  transform: translateY(-0.5px);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.5);
-  filter: brightness(1.06);
+  background: #434cd6;
+  transform: none;
+  box-shadow: none;
 }
 
 .joinBtn {
@@ -225,20 +222,20 @@
   align-items: center;
   gap: 5px;
   padding: 5px 11px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
+  border-radius: 6px;
+  background: #121217;
+  border: 1px solid #202026;
+  color: #a1a1aa;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .joinBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #1a1a22;
+  border-color: #2e2e38;
   color: #ffffff;
 }
 
@@ -267,23 +264,23 @@
   align-items: center;
   gap: 5px;
   padding: 5px 11px;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .terminateBtn:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.6);
-  color: #ffffff;
-  transform: translateY(-0.5px);
+  color: #fca5a5;
+  transform: none;
 }
 
 .terminateBtn:active {

@@ -354,7 +354,7 @@ export class ComboBox extends React.Component<ComboBoxProps, ComboBoxState> {
             }
           }
         }}
-        placeholder="Paste video URL, YouTube, magnet, stream..."
+        placeholder="Paste link or magnet..."
         value={
           this.state.inputMedia !== undefined
             ? this.state.inputMedia

@@ -326,30 +326,29 @@ export const TopBar = (props: {
       <Modal
         opened={isEndModalOpen}
         onClose={() => setIsEndModalOpen(false)}
-        title={<span style={{ fontWeight: 700, fontSize: 16, color: "#f87171" }}>End Watch Party</span>}
+        title={<span style={{ fontWeight: 600, fontSize: 15, color: "#f87171" }}>End Watch Party</span>}
         centered
         styles={{
           content: {
-            backgroundColor: "#12141f",
+            backgroundColor: "#121217",
             color: "#f8fafc",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            borderRadius: 16,
-            backdropFilter: "blur(16px)",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
+            border: "1px solid #202026",
+            borderRadius: 12,
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.8)",
           },
           header: {
-            backgroundColor: "#12141f",
+            backgroundColor: "#121217",
             color: "#f8fafc",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            borderBottom: "1px solid #202026",
           },
           close: {
-            color: "#94a3b8",
-            "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.08)" },
+            color: "#a1a1aa",
+            "&:hover": { backgroundColor: "#1e1e26" },
           },
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
-          <p style={{ margin: 0, fontSize: 14, color: "#cbd5e1", lineHeight: 1.5 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: "#a1a1aa", lineHeight: 1.5 }}>
             End this watch party for everyone? The room will be closed and removed from your active parties.
           </p>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
@@ -357,13 +356,13 @@ export const TopBar = (props: {
               type="button"
               onClick={() => setIsEndModalOpen(false)}
               style={{
-                background: "rgba(255, 255, 255, 0.08)",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                color: "#cbd5e1",
-                padding: "8px 16px",
+                background: "#121217",
+                border: "1px solid #202026",
+                color: "#a1a1aa",
+                padding: "7px 16px",
                 borderRadius: 8,
                 fontSize: 13,
-                fontWeight: 600,
+                fontWeight: 500,
                 cursor: "pointer",
                 transition: "all 0.15s ease",
               }}
@@ -374,15 +373,15 @@ export const TopBar = (props: {
               type="button"
               onClick={handleConfirmEndParty}
               style={{
-                background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                background: "#ef4444",
                 border: "none",
                 color: "#ffffff",
-                padding: "8px 18px",
+                padding: "7px 18px",
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                boxShadow: "0 2px 10px rgba(239, 68, 68, 0.35)",
+                boxShadow: "none",
                 transition: "all 0.15s ease",
               }}
             >
