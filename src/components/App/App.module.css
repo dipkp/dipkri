@@ -38,39 +38,61 @@
   }
 }
 
+/* Ultra-Compact Horizontal Loading Pill - centered, never overlaps seekbar or top pills */
 .bufferingOverlay {
   position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 24px;
-  text-align: center;
-  background: rgba(9, 10, 15, 0.6);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(9, 10, 15, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   z-index: 5;
   pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+.bufferingOverlay .mantine-Loader-root {
+  width: 16px !important;
+  height: 16px !important;
 }
 
 .bufferingTitle {
   color: #f0f0f5;
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .bufferingMeta {
   color: #38bdf8;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .bufferingHint {
-  color: #94a3b8;
-  font-size: 12px;
-  max-width: 320px;
+  display: none; /* Hide verbose hint in compact pill */
+}
+
+@media (max-width: 600px) {
+  .bufferingOverlay {
+    padding: 5px 12px;
+    gap: 6px;
+  }
+  .bufferingTitle {
+    font-size: 11px;
+  }
+  .bufferingMeta {
+    font-size: 11px;
+  }
 }
 
 /* Ultra-Compact Magnet + AAC Status Pill - Top Left (under video title) */

@@ -3454,38 +3454,18 @@ export class App extends React.Component<AppProps, AppState> {
                 !this.state.roomPaused &&
                 this.Player().getDuration() === 0 && (
                   <div className={styles.bufferingOverlay}>
-                    <Loader size="md" color="indigo" />
-                    <div className={styles.bufferingTitle}>Buffering pieces…</div>
-                    <div className={styles.bufferingMeta}>
+                    <Loader size="xs" color="indigo" />
+                    <span className={styles.bufferingTitle}>
                       {this.state.total
-                        ? `${this.getDownloadPercent().toFixed(1)}% • ${formatSpeed(this.state.speed)} • ${this.state.connections} peers`
-                        : "Connecting to peers…"}
-                    </div>
-                    <div className={styles.bufferingHint}>
-                      Slow torrent? Pick a stream with more seeders.
-                    </div>
-                    {this.state.total > 0 &&
-                      this.state.downloaded === 0 &&
-                      this.state.connections === 0 && (
-                        <div
-                          className={styles.bufferingHint}
-                          style={{ color: "#f87171", fontWeight: 700 }}
-                        >
-                          No seeders responding — pick another stream.
-                        </div>
-                      )}
+                        ? `Loading stream ${this.getDownloadPercent().toFixed(0)}%`
+                        : "Loading stream…"}
+                    </span>
                   </div>
                 )}
               {this.state.videoDecodeIssue && !this.state.roomPaused && (
-                <div className={styles.bufferingOverlay}>
-                  <div className={styles.bufferingTitle}>Video can't be decoded</div>
-                  <div className={styles.bufferingMeta}>
-                    Audio and subtitles work, but this codec (likely HEVC/x265 or
-                    10-bit) has no browser decoder.
-                  </div>
-                  <div className={styles.bufferingHint} style={{ color: "#f87171" }}>
-                    Pick a stream whose badge says x264 — those play everywhere.
-                  </div>
+                <div className={styles.bufferingOverlay} style={{ maxWidth: "90%", textAlign: "center" }}>
+                  <Loader size="xs" color="red" />
+                  <span className={styles.bufferingTitle}>Video can't be decoded</span>
                 </div>
               )}
               {!this.state.loading && !this.state.roomMedia && (
