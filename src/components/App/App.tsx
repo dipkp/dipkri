@@ -692,6 +692,10 @@ export class App extends React.Component<AppProps, AppState> {
         errorMessage: "",
         successMessage: "",
         warningMessage: "",
+        // Socket.IO v4: reconnect events fire on socket.io, not socket;
+        // so ensure we clear reconnect state on successful connect
+        isReconnecting: false,
+        reconnectReason: undefined,
       });
       // Use the Google user name, custom name, or generated name
       const googleName =
@@ -744,18 +748,19 @@ export class App extends React.Component<AppProps, AppState> {
         });
       }
     });
-    socket.on("reconnect", () => {
+    // Socket.IO v4: reconnect events fire on the Manager (socket.io), not the socket
+    socket.io.on("reconnect", () => {
       this.setState({ isReconnecting: false, reconnectReason: undefined });
       this.setState({ warningMessage: "Reconnected!" });
       setTimeout(() => this.setState({ warningMessage: "" }), 2000);
     });
-    socket.on("reconnect_attempt", (attemptNumber) => {
+    socket.io.on("reconnect_attempt", (attemptNumber) => {
       this.setState({
         isReconnecting: true,
         reconnectReason: `Reconnecting... (attempt ${attemptNumber})`,
       });
     });
-    socket.on("reconnect_failed", () => {
+    socket.io.on("reconnect_failed", () => {
       this.setState({
         isReconnecting: true,
         reconnectReason: "Reconnection failed. Please refresh the page.",
@@ -4082,6 +4087,24 @@ export class App extends React.Component<AppProps, AppState> {
                     Open on YouTube
                   </a>
                 )}
+                <button
+                  onClick={() => this.setState({ streamError: null })}
+                  style={{
+                    background: "rgba(255,255,255,0.1)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    borderRadius: "10px",
+                    padding: "12px 24px",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
+                  onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                >
+                  Dismiss
+                </button>
               </div>
             </div>
           </div>

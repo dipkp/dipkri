@@ -37,10 +37,12 @@ const BubbleVideoElement = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasLiveVideo, setHasLiveVideo] = useState(false);
+  const [isAudioOnly, setIsAudioOnly] = useState(false);
 
   useEffect(() => {
     if (!videoRef.current || !stream) {
       setHasLiveVideo(false);
+      setIsAudioOnly(false);
       return;
     }
 
@@ -51,6 +53,14 @@ const BubbleVideoElement = ({
 
     const checkTrack = () => {
       const videoTrack = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
+      const hasVideoTrack = Boolean(videoTrack);
+      const hasAudioTrack = Boolean(audioTrack);
+
+      // Detect audio-only: has audio track but no video track
+      const isAudioOnly = hasAudioTrack && !hasVideoTrack;
+      setIsAudioOnly(isAudioOnly);
+
       const isLive = Boolean(
         videoTrack &&
         videoTrack.enabled &&
@@ -83,6 +93,7 @@ const BubbleVideoElement = ({
   }, [stream, isVideoOff]);
 
   const showVideo = hasLiveVideo && !isVideoOff;
+  const showAudioOnlyBadge = isAudioOnly && !isVideoOff;
 
   return (
     <>
@@ -99,12 +110,23 @@ const BubbleVideoElement = ({
           transition: "opacity 180ms ease",
         }}
       />
-      {!showVideo && (
+      {!showVideo && !showAudioOnlyBadge && (
         <img
           src={avatarUrl}
           alt={name || "User"}
           className={styles.avatarFallback}
         />
+      )}
+      {showAudioOnlyBadge && (
+        <div className={styles.audioOnlyBadge}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 24, height: 24, color: "currentColor" }}>
+            <path d="M11 5v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1z"></path>
+            <path d="M19 5v6a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1z"></path>
+            <path d="M12 19v-6a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1z"></path>
+            <path d="M15 5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V5z"></path>
+          </svg>
+          <span>Audio Only</span>
+        </div>
       )}
     </>
   );
