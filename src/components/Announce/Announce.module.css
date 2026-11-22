@@ -6,11 +6,11 @@
   width: 500px;
   max-width: 100%;
   position: fixed;
-  top: 0px;
+  top: 48px;
   left: 50%;
   transform: translate(-50%, 0);
   border-radius: 4px;
-  z-index: 900;
+  z-index: 140;
   height: 48px;
   color: white;
   overflow: hidden;
@@ -20,6 +20,9 @@
   .announce {
     bottom: 0px;
     top: initial;
+    z-index: 140;
+    width: 100%;
+    border-radius: 0;
   }
 }
 

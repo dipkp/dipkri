@@ -5,7 +5,7 @@
    ========================================================================== */
 
 .menuContainer {
-  width: 320px;
+  width: min(310px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   max-height: min(480px, calc(100vh - 120px));
   display: flex;

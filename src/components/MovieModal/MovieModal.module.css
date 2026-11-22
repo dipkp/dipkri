@@ -7,7 +7,7 @@
   background-color: rgba(4, 6, 12, 0.82);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  z-index: 10000;
+  z-index: var(--z-modals, 2000);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -179,6 +179,9 @@
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
 }
 
 .filterTabs::-webkit-scrollbar {
@@ -259,6 +262,20 @@
     font-size: 8px;
     padding: 1px 4px;
     border-radius: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .gridContainer {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 340px) {
+  .gridContainer {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 

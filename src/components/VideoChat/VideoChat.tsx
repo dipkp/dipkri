@@ -576,39 +576,39 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: "4px",
                   position: "absolute",
-                  top: 8,
-                  left: 8,
+                  top: 6,
+                  left: 6,
                   zIndex: 3,
                 }}
               >
                 {!ourStream && isSelf && (
-                  <Button
-                    size="compact-xs"
+                  <ActionIcon
+                    size={24}
                     color="indigo"
                     radius="xl"
                     onClick={this.setupWebRTC}
-                    leftSection={<WPIconVideo size={13} />}
+                    title="Join Video Call"
                   >
-                    Join
-                  </Button>
+                    <WPIconVideo size={13} />
+                  </ActionIcon>
                 )}
                 {ourStream && isSelf && (
-                  <Button
-                    size="compact-xs"
+                  <ActionIcon
+                    size={24}
                     color="red"
                     radius="xl"
                     onClick={this.stopWebRTC}
-                    leftSection={<WPIconClose size={13} />}
+                    title="Leave Video Call"
                   >
-                    Leave
-                  </Button>
+                    <WPIconClose size={13} />
+                  </ActionIcon>
                 )}
                 {ourStream && isSelf && (
                   <>
                     <ActionIcon
-                      size="sm"
+                      size={24}
                       radius="xl"
                       color={this.getVideoWebRTC() ? "green" : "red"}
                       variant="filled"
@@ -622,7 +622,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                       <WPIconVideo size={13} />
                     </ActionIcon>
                     <ActionIcon
-                      size="sm"
+                      size={24}
                       radius="xl"
                       color={this.getAudioWebRTC() ? "green" : "red"}
                       variant="filled"
@@ -635,17 +635,17 @@ export class VideoChat extends React.Component<VideoChatProps> {
                 )}
                 {!isSelf && (
                   <>
-                    {isUserInVideo && <WPIconVideo size={15} color={softWhite} />}
+                    {isUserInVideo && <WPIconVideo size={14} color={softWhite} />}
                     {isUserInVideo && (
                       <WPIconMicrophone
-                        size={15}
+                        size={14}
                         color={p.isMuted ? "#ef4444" : "#10b981"}
                       />
                     )}
                   </>
                 )}
                 {p.isScreenShare && (
-                  <WPIconScreenshare size={15} color="#06b6d4" />
+                  <WPIconScreenshare size={14} color="#06b6d4" />
                 )}
               </div>
 
@@ -658,7 +658,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                   width: "100%",
                   background:
                     "linear-gradient(to top, rgba(9, 10, 15, 0.95), transparent)",
-                  padding: "16px 8px 6px",
+                  padding: "8px 6px 4px",
                   color: softWhite,
                   fontSize: "11px",
                   fontWeight: 600,
@@ -685,7 +685,7 @@ export class VideoChat extends React.Component<VideoChatProps> {
                     fontSize: "10px",
                   }}
                 >
-                  {formatTimestamp(tsMap[p.id] || 0)}
+                  {tsMap[p.id] && tsMap[p.id] > 0 ? formatTimestamp(tsMap[p.id]) : "—"}
                 </div>
               </div>
 

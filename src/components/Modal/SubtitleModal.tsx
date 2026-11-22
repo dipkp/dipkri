@@ -300,11 +300,15 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
               this.state.selectedLanguage,
           );
 
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 600;
+
     return (
       <Modal
         opened
         onClose={closeModal}
         centered
+        fullScreen={isMobile}
+        size={isMobile ? "100%" : "lg"}
         zIndex={2001}
         portalProps={{
           target:
@@ -339,7 +343,6 @@ export class SubtitleModal extends React.Component<SubtitleModalProps> {
             </span>
           </div>
         }
-        size="lg"
       >
         <div className={styles.modalContainer}>
           {/* Top Compact Toolbar: Display Toggle & Upload File */}

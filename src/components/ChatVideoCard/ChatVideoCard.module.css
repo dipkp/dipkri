@@ -13,8 +13,9 @@
 
 .ThumbnailWrapper {
   flex: 0 0 auto;
-  width: 100px;
-  height: 56px;
+  width: clamp(72px, 24%, 100px);
+  aspect-ratio: 16/9;
+  height: auto;
   overflow: hidden;
   position: relative;
   background: rgba(0, 0, 0, 0.1);
