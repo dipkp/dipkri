@@ -18,6 +18,7 @@ import {
   IconCheck,
 } from "@tabler/icons-react";
 import config from "../../config";
+import { performGoogleSignIn } from "../../utils/googleAuth";
 
 function getFriendlyErrorMessage(err: any, isRegistering: boolean): string {
   if (!err) return "";
@@ -43,7 +44,9 @@ function getFriendlyErrorMessage(err: any, isRegistering: boolean): string {
     case "auth/too-many-requests":
       return "Too many failed attempts. Please try again in a few minutes or reset your password.";
     case "auth/popup-closed-by-user":
-      return "";
+      return "Google sign-in window was closed. Please try again.";
+    case "auth/popup-blocked":
+      return "Sign-in popup was blocked by your browser. Please allow popups or try again.";
     case "auth/unauthorized-domain":
       return "This domain/IP is not authorized for Google OAuth. Please open the app using http://localhost:8080 or add this domain in Firebase Console (Authentication > Settings > Authorized domains).";
     case "auth/operation-not-allowed":
@@ -69,13 +72,12 @@ export class LoginModal extends React.Component<{
   handleGoogleSignIn = async () => {
     this.setState({ loading: true, error: "", successMsg: "" });
     try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      await firebase.auth().signInWithPopup(provider);
-      this.props.closeModal();
-    } catch (e: any) {
-      if (e?.code !== "auth/popup-closed-by-user") {
-        this.setState({ error: getFriendlyErrorMessage(e, false) });
+      const user = await performGoogleSignIn();
+      if (user) {
+        this.props.closeModal();
       }
+    } catch (e: any) {
+      this.setState({ error: getFriendlyErrorMessage(e, false) });
     } finally {
       this.setState({ loading: false });
     }

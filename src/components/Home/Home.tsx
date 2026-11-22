@@ -5,6 +5,7 @@ import "firebase/compat/auth";
 import { MetadataContext } from "../../MetadataContext";
 import { createRoom } from "../TopBar/TopBar";
 import { getUserImage } from "../../utils/utils";
+import { performGoogleSignIn } from "../../utils/googleAuth";
 import {
   WPIconPlus,
   WPIconLogin,
@@ -138,18 +139,19 @@ export const Home = () => {
     setIsLoggingIn(true);
     setError("");
     try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      await firebase.auth().signInWithPopup(provider);
+      await performGoogleSignIn();
     } catch (err: any) {
-      if (err?.code !== "auth/popup-closed-by-user") {
-        console.error("Google sign-in error:", err);
-        if (err?.code === "auth/unauthorized-domain") {
-          setError(
-            "This domain is not authorized in Firebase Console. Add it in Firebase Console > Authentication > Settings > Authorized domains.",
-          );
-        } else {
-          setError(err?.message || "Failed to sign in with Google. Please try again.");
-        }
+      console.error("Google sign-in error:", err);
+      if (err?.code === "auth/unauthorized-domain") {
+        setError(
+          "This domain is not authorized in Firebase Console. Add it in Firebase Console > Authentication > Settings > Authorized domains.",
+        );
+      } else if (err?.code === "auth/popup-blocked") {
+        setError("Sign-in popup was blocked by your browser. Please allow popups or try again.");
+      } else if (err?.code === "auth/popup-closed-by-user") {
+        setError("Google sign-in window was closed. Please try again.");
+      } else {
+        setError(err?.message || "Failed to sign in with Google. Please try again.");
       }
     } finally {
       setIsLoggingIn(false);

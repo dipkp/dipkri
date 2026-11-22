@@ -68,7 +68,12 @@ class MainActivity : AppCompatActivity() {
                 popup.settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
+                    databaseEnabled = true
                     setSupportMultipleWindows(true)
+                    javaScriptCanOpenWindowsAutomatically = true
+                    userAgentString = userAgentString
+                        .replace("; wv", "")
+                        .replace(Regex("Version/\\d+\\.\\d+ "), "")
                 }
                 CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true)
 
@@ -82,7 +87,7 @@ class MainActivity : AppCompatActivity() {
                     setPadding(16, 12, 16, 12)
                 }
                 val title = android.widget.TextView(this@MainActivity).apply {
-                    text = "Sign in"
+                    text = "Sign in with Google"
                     setTextColor(0xFFE5E7EB.toInt())
                     textSize = 15f
                 }
@@ -97,8 +102,9 @@ class MainActivity : AppCompatActivity() {
                 root.addView(bar)
                 root.addView(popup, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-                val dialog = Dialog(this@MainActivity).apply {
+                val dialog = Dialog(this@MainActivity, android.R.style.Theme_Black_NoTitleBar_Fullscreen).apply {
                     setContentView(root)
+                    window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     setOnDismissListener {
                         popup.destroy()
                         authDialog = null
@@ -146,8 +152,17 @@ class MainActivity : AppCompatActivity() {
                 val internal = url.startsWith(APP_ORIGIN) ||
                     url.contains("accounts.google.com") ||
                     url.contains("firebaseapp.com") ||
-                    url.contains("google.com")
-                return !internal
+                    url.contains("google.com") ||
+                    url.contains("googleapis.com") ||
+                    url.contains("gstatic.com")
+                if (!internal) {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                        view?.context?.startActivity(intent)
+                    } catch (_: Throwable) {}
+                    return true
+                }
+                return false
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
